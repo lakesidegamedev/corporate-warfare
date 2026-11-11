@@ -98,6 +98,28 @@ pub enum CampaignRole {
     BetweenRivals,
 }
 
+/// What selling a plant would bring (2.0), for the player to read before confirming
+/// `DisposeFacility`. `bids` is best first; the first one buys. With no bids the plant is written
+/// off for nothing. `book_cents` is what the plant stands at on the books, so the gain or loss on
+/// the sale is the best bid less it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlantSaleView {
+    pub facility: u64,
+    pub book_cents: i64,
+    pub bids: Vec<PlantBidView>,
+}
+
+/// One company's offer for a plant: its price, and the weekly contribution and blocks it reads
+/// the plant as worth to it at public prices.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlantBidView {
+    pub bidder: u64,
+    pub bidder_name: String,
+    pub price_cents: i64,
+    pub weekly_cents: i64,
+    pub blocks_used: i64,
+}
+
 /// A raid campaign announced and not yet decided (2.0), with today's figures. The chance and
 /// stake are what the raid would be if it were decided now; the defence measured at resolution
 /// decides it.

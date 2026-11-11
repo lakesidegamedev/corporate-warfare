@@ -1754,10 +1754,24 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
     );
     // Capacity rules: close a plant that loses money, and pay out cash the firm has no use for.
     // Both sit outside the four-move cut so neither crowds out a build.
+    // 2.0: a losing plant some other company will pay for is sold to it; one nobody wants is
+    // mothballed as before. A plant left mothballed for half a year is sold once a bid appears.
     if let Some(plant) = losing_plant(world, dataset, firm) {
+        let intent = if cw_sim::economy::disposal::plant_bids(world, dataset, plant).is_empty() {
+            CommandIntent::MothballFacility { facility: plant }
+        } else {
+            CommandIntent::DisposeFacility { facility: plant }
+        };
         proposals.push(Proposal {
             actor: firm.0,
-            intent: CommandIntent::MothballFacility { facility: plant },
+            intent,
+        });
+    } else if let Some(plant) = idle_plant(world, firm)
+        && !cw_sim::economy::disposal::plant_bids(world, dataset, plant).is_empty()
+    {
+        proposals.push(Proposal {
+            actor: firm.0,
+            intent: CommandIntent::DisposeFacility { facility: plant },
         });
     }
     let building = proposals[start..].iter().any(|p| {
@@ -1856,6 +1870,25 @@ fn losing_plant(world: &World, dataset: &Dataset, firm: Handle) -> Option<Handle
             )
         })
         .filter(|(weekly, _)| *weekly < 0)
+        .min()
+        .map(|(_, h)| h)
+}
+
+/// The plant a rival has kept mothballed longest, once that is at least half a year.
+fn idle_plant(world: &World, firm: Handle) -> Option<Handle> {
+    let now = world.tick.0;
+    world
+        .firms
+        .get(firm)?
+        .facilities
+        .iter()
+        .filter_map(|h| world.facilities.get(*h).map(|p| (*h, p)))
+        .filter_map(|(h, p)| {
+            let since = p.mothballed_since?;
+            (p.status == FacilityStatus::Mothballed
+                && now.saturating_sub(since.0) >= IDLE_WIND_DOWN_WEEKS)
+                .then_some((since.0, h))
+        })
         .min()
         .map(|(_, h)| h)
 }

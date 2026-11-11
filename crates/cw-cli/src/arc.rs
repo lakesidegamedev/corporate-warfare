@@ -268,6 +268,19 @@ pub struct CapacityStats {
     pub raids_won: u32,
     #[serde(default)]
     pub raids_emptied_company: u32,
+    /// Plants sold to another company, by the player's group and by everyone, the cash they
+    /// fetched, plants written off with no buyer, and what the pre-2.0 rule (40 percent of book
+    /// from no payer) would have paid for the same disposals, in cents.
+    #[serde(default)]
+    pub plants_sold: u32,
+    #[serde(default)]
+    pub plants_sold_by_player: u32,
+    #[serde(default)]
+    pub plant_sale_cents: i64,
+    #[serde(default)]
+    pub plants_written_off: u32,
+    #[serde(default)]
+    pub old_rule_payout_cents: i64,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -468,6 +481,13 @@ pub struct Aggregate {
     pub raids_won_per_decade_median: Option<f64>,
     #[serde(default)]
     pub raids_emptied_company_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub plants_sold_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub plants_written_off_per_decade_median: Option<f64>,
+    /// Dollars a decade the pre-2.0 disposal rule would have paid for the same disposals.
+    #[serde(default)]
+    pub old_rule_payout_per_decade_median: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -552,6 +572,7 @@ struct Observer {
     hostile: Hostile,
     seen_raids: BTreeSet<(u32, u64, u64, u8, u8)>,
     seen_all_raids: BTreeSet<(u32, u64, u64, u8, u8)>,
+    seen_disposals: BTreeSet<(u64, u64)>,
     seen_raid_campaigns: BTreeSet<(u32, u64, u64, u8, u8)>,
     seen_deals: BTreeSet<(u64, u32)>,
     seen_campaigns: BTreeSet<u32>,
@@ -598,6 +619,7 @@ impl Observer {
             hostile: Hostile::default(),
             seen_raids: BTreeSet::new(),
             seen_all_raids: BTreeSet::new(),
+            seen_disposals: BTreeSet::new(),
             seen_raid_campaigns: BTreeSet::new(),
             seen_deals: BTreeSet::new(),
             seen_campaigns: BTreeSet::new(),
@@ -941,6 +963,42 @@ impl Observer {
                     {
                         self.capacity.raids_emptied_company += 1;
                     }
+                }
+            }
+        }
+        // Plant disposals: read from each seller's journal (one transaction per sale or write-off).
+        for (handle, firm) in world.firms.iter() {
+            let mut found: BTreeMap<u64, (bool, i64, i64, i64)> = BTreeMap::new();
+            for posting in firm.book.journal().iter().rev() {
+                if posting.week.0 + 2 < week {
+                    break;
+                }
+                let sold = match posting.memo.as_str() {
+                    "plant sale" => true,
+                    "plant written off" => false,
+                    _ => continue,
+                };
+                let entry = found.entry(posting.txn).or_insert((sold, 0, 0, 0));
+                match posting.account {
+                    cw_core::ledger::Account::FixedAssets => entry.1 -= posting.delta,
+                    cw_core::ledger::Account::AccumulatedDepreciation => entry.2 += posting.delta,
+                    cw_core::ledger::Account::Cash => entry.3 += posting.delta,
+                    _ => {}
+                }
+            }
+            for (txn, (sold, capex, depreciation, cash)) in found {
+                if !self.seen_disposals.insert((handle.0, txn)) {
+                    continue;
+                }
+                self.capacity.old_rule_payout_cents += (capex - depreciation).max(0) * 40 / 100;
+                if sold {
+                    self.capacity.plants_sold += 1;
+                    self.capacity.plant_sale_cents += cash;
+                    if group.contains(&handle.0) {
+                        self.capacity.plants_sold_by_player += 1;
+                    }
+                } else {
+                    self.capacity.plants_written_off += 1;
                 }
             }
         }
@@ -1775,6 +1833,24 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         raids_emptied_company_per_decade_median: med(careers
             .iter()
             .map(|c| per_decade(c.capacity.raids_emptied_company, c.weeks_played))
+            .collect()),
+        plants_sold_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.plants_sold, c.weeks_played))
+            .collect()),
+        plants_written_off_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.plants_written_off, c.weeks_played))
+            .collect()),
+        old_rule_payout_per_decade_median: med(careers
+            .iter()
+            .map(|c| {
+                if c.weeks_played == 0 {
+                    0.0
+                } else {
+                    c.capacity.old_rule_payout_cents as f64 / 100.0 * 520.0 / c.weeks_played as f64
+                }
+            })
             .collect()),
     }
 }

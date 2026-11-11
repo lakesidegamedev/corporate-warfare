@@ -1289,39 +1289,17 @@ fn apply_intent(
             Ok(())
         }
         CommandIntent::DisposeFacility { facility } => {
-            let (firm, book) = world
+            let firm = world
                 .facilities
                 .get(*facility)
-                .map(|entity| {
-                    (
-                        entity.firm,
-                        (entity.capex_cents - entity.accumulated_depreciation).max(0),
-                    )
-                })
+                .map(|entity| entity.firm)
                 .ok_or(DomainError::InvalidEntity {
                     handle: facility.0,
                     kind: EntityKind::Facility,
                 })?;
             require_control(world, actor, firm)?;
-            let proceeds = book * 40 / 100;
-            if let Some(stored) = world.facilities.get_mut(*facility) {
-                stored.status = FacilityStatus::Mothballed;
-            }
-            world.facilities.remove(*facility);
-            if let Some(entity) = world.firms.get_mut(firm) {
-                entity.facilities.retain(|handle| *handle != *facility);
-                let _ = entity.book.commit(
-                    world.tick,
-                    Txn::new()
-                        .debit(Account::Cash, proceeds, "facility sale")
-                        .debit(
-                            Account::OperatingExpense,
-                            book - proceeds,
-                            "facility disposal",
-                        )
-                        .credit(Account::FixedAssets, book, "facility sale"),
-                );
-            }
+            // 2.0: the plant goes to the best bidder, or is written off when nobody bids.
+            crate::economy::disposal::sell_plant(world, dataset, *facility)?;
             Ok(())
         }
         CommandIntent::SetPrice {

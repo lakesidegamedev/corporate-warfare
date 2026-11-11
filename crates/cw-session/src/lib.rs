@@ -1016,6 +1016,32 @@ impl Session {
         campaigns(&self.world, &self.dataset)
     }
 
+    /// The bids a plant would draw if it were put up for sale now (2.0). None when there is no
+    /// such plant.
+    pub fn plant_sale(&self, facility: u64) -> Option<dto::PlantSaleView> {
+        let handle = Handle(facility);
+        let plant = self.world.facilities.get(handle)?;
+        let bids = cw_sim::economy::disposal::plant_bids(&self.world, &self.dataset, handle)
+            .into_iter()
+            .map(|bid| dto::PlantBidView {
+                bidder: bid.bidder.0,
+                bidder_name: self
+                    .world
+                    .firm(bid.bidder)
+                    .map(|f| f.name.clone())
+                    .unwrap_or_default(),
+                price_cents: bid.price_cents,
+                weekly_cents: bid.weekly_cents,
+                blocks_used: bid.blocks_used,
+            })
+            .collect();
+        Some(dto::PlantSaleView {
+            facility,
+            book_cents: (plant.capex_cents - plant.accumulated_depreciation).max(0),
+            bids,
+        })
+    }
+
     pub fn capacity_openings(&self, limit: usize) -> Vec<dto::CapacityOpening> {
         let world = &self.world;
         let dataset = &self.dataset;
