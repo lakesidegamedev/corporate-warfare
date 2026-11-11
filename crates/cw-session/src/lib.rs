@@ -2249,7 +2249,9 @@ mod tests {
         // around the outside world's middle quote. In 2.0 it moved again from 8440e658... when
         // the market rules joined the dataset hash (the hash string is in the world) and services
         // began pricing on capacity against regional demand, plants ramping five points a week.
-        // The Swift
+        // In 2.0 it moved again from 04e9740b... when the capacity rules joined the dataset hash
+        // (build prices follow prices; rivals build, enter, close and pay out on one room-to-build
+        // signal). The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2275,7 +2277,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "04e9740b72580258dd3d52e4ecfe19a1a41104ef99327d84ed85cd04f4986e99"
+            "24eeba2c8504faa0ae503cd5308fdad16fe9e94afc803c9a0e7f20d2e3813d56"
         );
     }
 

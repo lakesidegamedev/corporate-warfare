@@ -743,7 +743,10 @@ fn construction_is_paid_in_stages_and_waits_for_the_equipment_payment() {
         cw_sim::economy::sectors::build_cost(&world, &dataset, builder, region, farm_recipe, 1);
     assert!(quote.opens_division);
     assert_eq!(quote.entry_fee_cents, 10_000_000);
-    assert_eq!(quote.capex_cents, list_capex / 2);
+    // Today's build price (capacity rules: price level, steel, building materials and
+    // construction against the catalogue), founding plant at half.
+    let priced = cw_sim::economy::sectors::build_price(&world, &dataset, list_capex);
+    assert_eq!(quote.capex_cents, priced - priced / 2);
     let capex = quote.capex_cents;
     let fee = quote.entry_fee_cents;
     fund(&mut world, builder, capex + fee);

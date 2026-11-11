@@ -1355,7 +1355,13 @@ fn reopen(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Pr
             .map(|g| g.smoothed_import_lots)
             .sum();
         let cost = cw_sim::economy::operations::reopen_cost(plant);
-        if block_contribution(world, dataset, firm, plant.recipe, plant.region) > 0
+        // A plant closed for losses stays shut at least as long as it had to lose money before
+        // closing, so a plant on the margin does not open and close every few weeks.
+        let rested = plant.mothballed_since.is_none_or(|since| {
+            world.tick.0.saturating_sub(since.0) >= dataset.capacity.close_after_loss_weeks
+        });
+        if rested
+            && block_contribution(world, dataset, firm, plant.recipe, plant.region) > 0
             && (imported * 2 >= template.weekly_output_lots * plant.blocks as i64
                 || (!template.by_products.is_empty()
                     && room_covers(world, dataset, template, plant.region, 2)))
@@ -1964,7 +1970,12 @@ fn strategic_candidates(world: &World, dataset: &Dataset, firm: Handle) -> Vec<C
     // Raid a rival's division in a cell the firm also operates in, when the captured capacity
     // is worth more over three years than the campaign and the purchase price, weighted by
     // the chance of success. Brand builders, consolidators and vultures raid most.
-    if let Some((target, region, industry, budget, value)) = best_raid(world, dataset, firm) {
+    // Under the capacity rules builders and the cautious compete by building, not raiding: with
+    // more plants every firm shares more markets, and without this a cautious firm raided nearly
+    // as often as a raider.
+    if (!capacity_rules || weights[2].max(weights[4]) >= 3)
+        && let Some((target, region, industry, budget, value)) = best_raid(world, dataset, firm)
+    {
         candidates.push(Candidate {
             score: weights[2].max(weights[4]) * value,
             target: target.0,
