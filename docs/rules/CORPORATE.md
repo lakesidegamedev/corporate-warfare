@@ -636,3 +636,84 @@ comes back at once, and a company selling shares reads its cost basis from the c
 book. The ownership cycle check now follows the shares a company holds, as its comment always said; a
 buyer that already holds some of a target is no cycle.
 
+
+## Careers (2.0)
+
+A career is a new-game option over any scenario: how it starts, what it plays for, how long it
+lasts and how it ends. A game started without it is the sandbox or five-year game as before
+(`World.career` is none; no rule reads anything new). Every number is in `content/careers.json`;
+a career copies the numbers it is judged by into its saved state when it starts. Engine:
+`cw_sim::economy::career`; session: `Session::create_career`, `Session::helm_offers`,
+`Session::career_summary`.
+
+**Start.** Founder is today's start. At the helm: the game offers `helm.offers` (3) companies
+from the company league's ranks `helm.rank_from` to `helm.rank_to` (8 to 15), in different
+sectors where it can. Companies another company or the state controls, and companies whose
+outside holders do not hold enough shares to sell control, are not offered. The player buys,
+at the opening mark, the shares that give more than half of the eligible votes, from the
+outside holders, largest holder first, through the exchange's own settlement: each seller's
+capital rises by exactly what it is paid and nothing is created. When the scenario's standard
+fortune cannot pay for the block, the fortune is raised to `helm.fortune_cover_bps` of the price
+(110 percent) times the difficulty factor (easy 120, standard 100, hard 93 percent; never below
+the price), and the offer and the summary say so. The sitting chief executive leaves (benched
+like any departed chief); the board, its seats and its mandates stay. From week 0 the company is
+the player's primary company and every rule that asks whether a firm is the player's reads its
+controlling holder, so the rival AI stops playing it and executives, letters and chapters treat
+it as the player's.
+
+**Leagues.** The company league is every operating company that no other company controls,
+ranked by value (the engine valuation's equity, book equity before the first valuation),
+largest first, ties by handle; the player's group counts once, as its primary company. The
+wealth league is the player and the corridor's outside investors, each valued as cash
+(capital for an outside investor) plus every share held at the fair price, less personal loans
+for the player. Rival chief executives keep no personal purse in the engine, so they are not in
+it. In every bundled scenario the wealth league has nine members: the player and eight funds.
+
+**Ambition.** One of four, each with bronze, silver and gold:
+
+| ambition | judged | bronze | silver | gold |
+|---|---|---|---|---|
+| Richest | at the end, wealth league place | 4th or better | 2nd | 1st |
+| Biggest | at the end, company league place | top 10 | top 3 | 1st |
+| Dominant | at any time | 20 percent | 30 percent | 40 percent |
+| Survivor | at the end | controls a solvent company | in the top half | in the top quarter |
+
+Dominant: the player's group makes at least the share of one industry's output across the
+corridor (lots made by operating plants, summed over the quarter) for `dominant.quarters` (4)
+quarters in a row. A quarter in which fewer than `dominant.min_producers` (5) owners made that
+industry's output counts as nothing, so a near monopoly at the start is not dominance won.
+Reaching Dominant gold ends the career as won at once.
+
+**Length.** 5, 10 or 20 years (default 10). The five-year score mode is the five-year length: a
+five-year game started with a career and no length plays five years, and its score sheet at week
+260 is unchanged.
+
+**Ending.** At the end of the length (completed, with the ambition's medal), at Dominant gold
+(won), or lost at any time:
+- no company in the player's group after `found_grace_weeks` (26) and a net worth under
+  `fortune_floor_cents` ($275,000: the least founding needs, $250,000 capital and the $25,000
+  fee);
+- a rival (or outside holders) holds control of the player's primary company;
+- the board removes the player. The rival rule for chief executives applied to the player:
+  after `board.grace_weeks` (52), `board.loss_periods` (6) four-week periods of losses in a row
+  draw the board's warning (an alert, a pause the player may waive, the chair's letter). One
+  profitable four-week period within `board.warning_weeks` (26) restores its confidence;
+  otherwise the board removes the player. The rival rule replaces a chief with a 25 percent
+  chance each period after the same losses; the player's is certain but announced.
+After any ending the world plays on as a sandbox; the career keeps its ending.
+
+**Telling the player.** Through the chair of the board's letters (`letters::career_letters`):
+every quarter the standing against the ambition, the board's warning and its lifting, and the
+ending. The pause `career_board_warning` is a warning pause; `career_end` is a milestone.
+
+**Summary.** `CareerSummaryDto`: start, ambition, length, the medal it stands at, the ending and
+its medal, one sentence from engine facts on why it ended as it did, a line a year (company
+rank and league size, company value, net worth and wealth place, medal), and the events that
+mattered (`events_kept`, 10), by weight then shown in date order: taking the helm, the first
+plant, companies bought, failed or lost, raids won and lost (the largest of each kind),
+companies paying their way out of default, mandates met and missed, the board's warnings and
+the ending.
+
+**Saved state.** `World.career` is outside the postcard payload, in its own `CARE` trailer,
+folded into the canonical hash while set (INTERFACE.md). The replay log carries the career
+option, so a replay rebuilds the same world.
