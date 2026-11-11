@@ -57,6 +57,10 @@ pub enum ReferencePolicy {
     Acquirer,
     /// Builds a plant every twelve weeks where imports show room, in any sector.
     Expander,
+    /// Founds one sensible company in week 0, sets full production once and never acts again.
+    Passive,
+    /// Borrows everything the lenders allow, overbuilds every cadence and never cuts back.
+    Reckless,
 }
 
 impl ReferencePolicy {
@@ -67,6 +71,8 @@ impl ReferencePolicy {
             "growth" => Some(ReferencePolicy::Growth),
             "acquirer" => Some(ReferencePolicy::Acquirer),
             "expander" => Some(ReferencePolicy::Expander),
+            "passive" => Some(ReferencePolicy::Passive),
+            "reckless" => Some(ReferencePolicy::Reckless),
             _ => None,
         }
     }
@@ -78,6 +84,8 @@ impl ReferencePolicy {
             ReferencePolicy::Growth => "growth",
             ReferencePolicy::Acquirer => "acquirer",
             ReferencePolicy::Expander => "expander",
+            ReferencePolicy::Passive => "passive",
+            ReferencePolicy::Reckless => "reckless",
         }
     }
 
@@ -89,6 +97,7 @@ impl ReferencePolicy {
             ReferencePolicy::Growth => 8,
             ReferencePolicy::Acquirer => 10,
             ReferencePolicy::Expander => 8,
+            ReferencePolicy::Passive | ReferencePolicy::Reckless => 0,
         }
     }
 
@@ -100,6 +109,7 @@ impl ReferencePolicy {
             ReferencePolicy::Growth => 4,
             ReferencePolicy::Acquirer => 2,
             ReferencePolicy::Expander => 2,
+            ReferencePolicy::Passive | ReferencePolicy::Reckless => 0,
         }
     }
 
@@ -183,6 +193,8 @@ pub struct PolicyRunner {
     verbose: bool,
     /// Last production target per firm, so a cash dip cannot churn staffing every cadence.
     last_target: BTreeMap<u64, i32>,
+    /// The passive player has founded its company and set its target; it never acts again.
+    passive_done: bool,
     pub stats: PolicyStats,
 }
 
@@ -193,6 +205,7 @@ impl PolicyRunner {
             next_low: 1,
             verbose,
             last_target: BTreeMap::new(),
+            passive_done: false,
             stats: PolicyStats::default(),
         }
     }
@@ -200,6 +213,10 @@ impl PolicyRunner {
     /// Decide for this week, if this is a cadence week and the clock is not paused.
     pub fn act(&mut self, session: &mut Session) {
         if self.policy == ReferencePolicy::None {
+            return;
+        }
+        if self.policy == ReferencePolicy::Passive {
+            self.act_passive(session);
             return;
         }
         if !session.world.tick.0.is_multiple_of(CADENCE_WEEKS) {
@@ -219,6 +236,10 @@ impl PolicyRunner {
                 return;
             }
         }
+        if self.policy == ReferencePolicy::Reckless {
+            self.act_reckless(session);
+            return;
+        }
         let controlled = controlled_firms(session);
         for firm in &controlled {
             self.operate(session, *firm);
@@ -230,23 +251,97 @@ impl PolicyRunner {
             && session.world.tick.0.is_multiple_of(12)
             && let Some(primary) = session.world.investor.primary_group
         {
-            self.expand(session, primary.0);
+            self.expand(session, primary.0, false);
+        }
+    }
+
+    /// Passive: in week 0 found the scenario's starting company (founder careers only) and set
+    /// full production once, then do nothing for the rest of the career.
+    fn act_passive(&mut self, session: &mut Session) {
+        if self.passive_done || session.world.pending_pause.is_some() {
+            return;
+        }
+        if session.world.investor.primary_group.is_none() {
+            if session.config.scenario != cw_sim::state::ScenarioKind::Founder {
+                self.passive_done = true;
+                return;
+            }
+            self.found_firm(session);
+        }
+        let Some(primary) = session.world.investor.primary_group else {
+            return;
+        };
+        self.submit(
+            session,
+            CommandIntent::SetProductionTarget {
+                firm: primary,
+                target_bps: 10_000,
+                lock: false,
+            },
+        );
+        self.passive_done = true;
+    }
+
+    /// Reckless: every cadence borrow the full secured and unsecured capacity, then build as many
+    /// plants as the cash buys (the best contribution wherever it is, no reserve, no demand
+    /// check), run flat out and never repay early or cut back.
+    fn act_reckless(&mut self, session: &mut Session) {
+        let Some(primary) = session.world.investor.primary_group else {
+            return;
+        };
+        let controlled = controlled_firms(session);
+        for firm in &controlled {
+            if self.last_target.get(firm) != Some(&10_000) {
+                self.submit(
+                    session,
+                    CommandIntent::SetProductionTarget {
+                        firm: Handle(*firm),
+                        target_bps: 10_000,
+                        lock: false,
+                    },
+                );
+                self.last_target.insert(*firm, 10_000);
+            }
+        }
+        let capacity = cw_sim::economy::credit::secured_capacity(&session.world, primary)
+            + cw_sim::economy::credit::unsecured_capacity(&session.world, primary);
+        let amount = capacity / 1_000_000 * 1_000_000;
+        if amount > 0 {
+            self.submit(
+                session,
+                CommandIntent::RequestLoan {
+                    firm: primary,
+                    amount_cents: amount,
+                },
+            );
+        }
+        for _ in 0..3 {
+            if !self.expand(session, primary.0, true) {
+                break;
+            }
         }
     }
 
     /// Build one plant where imports show the most room the firm can afford, in any sector: into
     /// an existing division of the same strategy, or opening a new one (an off-focus sector pays
     /// its coordination overhead). Keeps the policy's cash reserve.
-    fn expand(&mut self, session: &mut Session, firm: u64) {
+    ///
+    /// `reckless` drops the reserve, the demand check and the payback test: it builds the best
+    /// contribution it can pay for. Returns whether a build was accepted.
+    fn expand(&mut self, session: &mut Session, firm: u64, reckless: bool) -> bool {
         use cw_sim::economy::sectors;
         let world = &session.world;
         let dataset = &session.dataset;
         let handle = Handle(firm);
         let Some(entity) = world.firms.get(handle) else {
-            return;
+            return false;
         };
-        let reserve = cw_sim::economy::insolvency::mandatory_weekly_outflow(world, handle)
-            .saturating_mul(self.policy.reserve_weeks());
+        let reserve = if reckless {
+            0
+        } else {
+            cw_sim::economy::insolvency::mandatory_weekly_outflow(world, handle)
+                .saturating_mul(self.policy.reserve_weeks())
+        };
         let cash = entity.book.cash();
         let mut best: Option<(i64, u8, u16)> = None;
         for (index, recipe) in dataset.recipes.iter().enumerate() {
@@ -284,7 +379,7 @@ impl PolicyRunner {
                     }
                     total > 0 && covered * 5 * 4 >= total * 4 * 3
                 };
-                if !enough {
+                if !enough && !reckless {
                     continue;
                 }
                 let quote = sectors::build_cost(world, dataset, handle, region, recipe_index, 1);
@@ -295,7 +390,7 @@ impl PolicyRunner {
                 // location and coordination overhead, must repay the whole build.
                 let contribution = plant_contribution(world, dataset, entity, region, recipe_index);
                 let value = contribution * 156 - quote.total_cents();
-                if value <= 0 {
+                if value <= 0 && !reckless {
                     continue;
                 }
                 if best.is_none_or(|(b, ..)| value > b) {
@@ -304,7 +399,7 @@ impl PolicyRunner {
             }
         }
         if let Some((_, region, recipe)) = best {
-            self.submit(
+            return self.submit(
                 session,
                 CommandIntent::BuildFacility {
                     firm: handle,
@@ -314,6 +409,7 @@ impl PolicyRunner {
                 },
             );
         }
+        false
     }
 
     fn found_firm(&mut self, session: &mut Session) {
@@ -547,7 +643,10 @@ impl PolicyRunner {
         else {
             return false;
         };
-        let choice = if self.policy == ReferencePolicy::None {
+        let choice = if matches!(
+            self.policy,
+            ReferencePolicy::None | ReferencePolicy::Passive
+        ) {
             card.choices
                 .iter()
                 .find(|choice| choice.handler == "no_action")
@@ -764,5 +863,44 @@ mod tests {
         runner.act(&mut session);
         assert_eq!(session.world.firms.len(), before + 1);
         assert!(session.world.investor.primary_group.is_some());
+    }
+
+    #[test]
+    fn passive_founds_once_sets_a_target_and_never_acts_again() {
+        let mut session = Session::create(ScenarioConfig {
+            seed: 196,
+            ..config(196, false, false)
+        })
+        .unwrap();
+        let mut runner = PolicyRunner::new(ReferencePolicy::Passive, false);
+        runner.act(&mut session);
+        let after_first = runner.stats.attempted;
+        assert_eq!(after_first, 2, "found the firm and set the target");
+        for _ in 0..12 {
+            session.advance(1);
+            runner.act(&mut session);
+        }
+        assert_eq!(runner.stats.attempted, after_first);
+        assert!(session.world.investor.primary_group.is_some());
+    }
+
+    #[test]
+    fn reckless_borrows_and_builds_beyond_the_reserve() {
+        let mut session = Session::create(ScenarioConfig {
+            seed: 197,
+            ..config(197, false, false)
+        })
+        .unwrap();
+        let mut runner = PolicyRunner::new(ReferencePolicy::Reckless, false);
+        runner.act(&mut session);
+        let primary = session.world.investor.primary_group.unwrap();
+        let before = session.world.firm(primary).unwrap().facilities.len();
+        session.advance(1);
+        runner.act(&mut session);
+        assert!(runner.stats.accepted >= 3, "{:?}", runner.stats);
+        assert!(
+            session.world.firm(primary).unwrap().facilities.len() > before
+                || !session.world.firm(primary).unwrap().loans.is_empty()
+        );
     }
 }
