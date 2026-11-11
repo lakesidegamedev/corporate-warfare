@@ -74,6 +74,9 @@ object ProposalCareer {
             if (cached != null) kotlinx.coroutines.runBlocking { store.read { h -> cached.parentFile?.mkdirs(); cached.writeBytes(h.exportSave()) } }
             store.refresh()
         }
+        // Wait for the store to read the week 156 state back before anything is drawn.
+        val loaded = System.currentTimeMillis() + 30_000
+        while ((store.overview?.tick ?: 0u) < WEEK && System.currentTimeMillis() < loaded) Thread.sleep(100)
         Thread.sleep(1500)
         return store to settings
     }
