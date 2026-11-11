@@ -15,7 +15,7 @@ import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 
 /**
- * One seeded mid-career game shared by the 2.0 interface renders: a fixed seed played to week 156
+ * One seeded mid-career game shared by the 2.0 interface renders (guided, so the career starts with a company): a fixed seed played to week 156
  * with a plant built every quarter, so every table has rows in it. CW_PROPOSAL_SAVE keeps the
  * save between runs so the before and after pictures come from exactly the same game.
  */
@@ -44,7 +44,7 @@ object ProposalCareer {
         } else {
             store.startCareer(
                 uniffi.cw_ffi.NewGameDto(
-                    seed = 7uL, scenarioId = "great-lakes-2000", guided = false, fiveYear = false, difficulty = "standard", economy = "historic",
+                    seed = 7uL, scenarioId = "great-lakes-2000", guided = true, fiveYear = false, difficulty = "standard", economy = "historic",
                     startingCapitalCents = null, pricePath = "historical",
                 ),
             )
