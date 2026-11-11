@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "note": "Careers (2.0): how a career starts, what it plays for and how it ends. Every number of the career frame is here. Not part of the dataset hash; a career copies what it needs into its save when it starts. See docs/rules/CORPORATE.md, Careers.",
+  "helm": {
+    "rank_from": 8,
+    "rank_to": 15,
+    "offers": 3,
+    "fortune_cover_bps": 11000,
+    "fortune_difficulty_bps": { "easy": 12000, "standard": 10000, "hard": 9300 }
+  },
+  "lengths_years": [5, 10, 20],
+  "default_years": 10,
+  "fortune_floor_cents": 27500000,
+  "found_grace_weeks": 26,
+  "board": {
+    "grace_weeks": 52,
+    "loss_periods": 6,
+    "warning_weeks": 26
+  },
+  "dominant": {
+    "quarters": 4,
+    "bronze_bps": 2000,
+    "silver_bps": 3000,
+    "gold_bps": 4000
+  },
+  "ranks": {
+    "bronze": 10,
+    "silver": 3,
+    "gold": 1
+  },
+  "survivor": {
+    "silver_top_bps": 5000,
+    "gold_top_bps": 2500
+  },
+  "events_kept": 10
+}

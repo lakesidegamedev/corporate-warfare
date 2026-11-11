@@ -79,6 +79,9 @@ pub struct ReplayLog {
     pub config: ScenarioConfig,
     pub commands: Vec<RecordedCommand>,
     pub advance_calls: Vec<u32>,
+    /// The career option the session started with (2.0); none for a sandbox or five-year game.
+    #[serde(default)]
+    pub career: Option<cw_sim::economy::career::CareerSetup>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -170,6 +173,125 @@ pub struct ArchetypeActions {
 impl Session {
     pub fn create(config: ScenarioConfig) -> Result<Session, DomainError> {
         Self::create_with(config, None)
+    }
+
+    /// A new game with a career (2.0): a start (founder or at the helm of an established
+    /// company), an ambition and a length. `config` is the scenario's ordinary new-game config;
+    /// a career with no ambition is a sandbox career that never ends. The refusal is in plain
+    /// words (a helm pick that is not on offer).
+    pub fn create_career(
+        config: ScenarioConfig,
+        setup: &cw_sim::economy::career::CareerSetup,
+    ) -> Result<Session, String> {
+        let mut session = Self::create(config).map_err(|e| format!("{e:?}"))?;
+        cw_sim::economy::career::begin(&mut session.world, &session.dataset, setup)?;
+        session.log.career = Some(setup.clone());
+        Ok(session)
+    }
+
+    /// The established companies a helm start offers for this new-game config, with their
+    /// figures and the price of control at the opening mark, and the fortune each would start
+    /// with (the scenario's standard fortune, or the content cover of the price when that is
+    /// short).
+    pub fn helm_offers(config: ScenarioConfig) -> Result<Vec<dto::HelmOfferDto>, DomainError> {
+        let session = Self::create(config)?;
+        let world = &session.world;
+        let standard = world.investor.cash_cents;
+        Ok(cw_sim::economy::career::helm_offers(world)
+            .into_iter()
+            .map(|o| dto::HelmOfferDto {
+                firm: o.firm.0,
+                industry: cw_sim::state::INDUSTRY_NAMES
+                    .get(o.industry as usize)
+                    .copied()
+                    .unwrap_or("business")
+                    .to_owned(),
+                region: session
+                    .dataset
+                    .regions
+                    .get(o.region as usize)
+                    .map(|r| r.name.clone())
+                    .unwrap_or_default(),
+                fortune_cents: cw_sim::economy::career::helm_fortune(
+                    standard,
+                    o.price_cents,
+                    world.difficulty,
+                ),
+                standard_fortune_cents: standard,
+                name: o.name,
+                rank: o.rank,
+                value_cents: o.value_cents,
+                revenue_year_cents: o.revenue_year_cents,
+                plants: o.plants,
+                workers: o.workers,
+                shares_needed: o.shares_needed,
+                mark_cents: o.mark_cents,
+                price_cents: o.price_cents,
+            })
+            .collect())
+    }
+
+    /// The career's summary: ambition and standing, the year by year line, the events that
+    /// mattered and, once it has ended, the ending in one sentence. `None` without a career.
+    pub fn career_summary(&self) -> Option<dto::CareerSummaryDto> {
+        use cw_sim::economy::career as c;
+        let state = self.world.career.as_ref()?;
+        let sentence = state
+            .ending
+            .as_ref()
+            .map(|e| e.sentence.clone())
+            .unwrap_or_default();
+        Some(dto::CareerSummaryDto {
+            start: match state.start {
+                c::Start::Founder => "founder",
+                c::Start::Helm => "helm",
+            }
+            .to_owned(),
+            helm_company: state.helm.as_ref().map(|h| h.name.clone()),
+            helm_fortune_scaled: state
+                .helm
+                .as_ref()
+                .is_some_and(|h| h.fortune_cents != h.standard_fortune_cents),
+            ambition: state.ambition.map(|a| a.key().to_owned()),
+            years: state.years,
+            end_week: state.end_week,
+            standing: c::standing(&self.world, state).key().to_owned(),
+            ended: state.ending.is_some(),
+            ending: state
+                .ending
+                .as_ref()
+                .map(|e| e.kind.key().to_owned())
+                .unwrap_or_default(),
+            lost: state.ending.as_ref().is_some_and(|e| e.kind.lost()),
+            medal: state
+                .ending
+                .as_ref()
+                .map(|e| e.medal.key().to_owned())
+                .unwrap_or_default(),
+            sentence,
+            board_warned: state.tracking.warned_week.is_some(),
+            years_log: state
+                .years_log
+                .iter()
+                .map(|y| dto::CareerYearDto {
+                    year: y.year,
+                    rank: y.rank.unwrap_or(0),
+                    league: y.league,
+                    company_value_cents: y.company_value_cents,
+                    net_worth_cents: y.net_worth_cents,
+                    wealth_rank: y.wealth_rank,
+                    medal: y.medal.key().to_owned(),
+                })
+                .collect(),
+            events: c::key_events(state)
+                .into_iter()
+                .map(|e| dto::CareerEventDto {
+                    week: e.week,
+                    key: e.key,
+                    text: e.text,
+                })
+                .collect(),
+        })
     }
 
     /// A career from a custom scenario. Its difficulty, economy and capital replace the
@@ -284,6 +406,7 @@ impl Session {
             config: config.clone(),
             commands: Vec::new(),
             advance_calls: Vec::new(),
+            career: None,
         };
         Ok(Session {
             dataset,
@@ -482,6 +605,23 @@ impl Session {
                 "Your counteroffer was turned down. Open the company's labour page to try again, or continue."
                     .to_owned(),
                 None,
+            ),
+            "career_end" => proceed(
+                "milestone",
+                "Your career has ended".to_owned(),
+                self.career_summary()
+                    .map(|s| s.sentence)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "The career summary is ready.".to_owned())
+                    + " Continue to play on in the same world.",
+                None,
+            ),
+            "career_board_warning" => proceed(
+                "warning",
+                "The board has lost confidence".to_owned(),
+                "Your company has made losses for months. Turn a profit in a four-week period before the warning runs out, or the board removes you."
+                    .to_owned(),
+                self.world.investor.primary_group.map(|h| h.0),
             ),
             "five_year_score" => proceed(
                 "milestone",
@@ -1440,6 +1580,7 @@ impl Session {
             config: config.clone(),
             commands: Vec::new(),
             advance_calls: Vec::new(),
+            career: None,
         };
         Ok(Session {
             dataset,
@@ -1460,7 +1601,14 @@ impl Session {
 
     /// Replay a recorded log from a fresh scenario and return the canonical hash.
     pub fn replay(log: &ReplayLog) -> Result<String, DomainError> {
-        let mut session = Session::create(log.config.clone())?;
+        let mut session = match &log.career {
+            Some(setup) => Session::create_career(log.config.clone(), setup).map_err(|_| {
+                DomainError::InvalidSave {
+                    detail: cw_core::error::SaveFault::MalformedPayload,
+                }
+            })?,
+            None => Session::create(log.config.clone())?,
+        };
         for command in &log.commands {
             let intent = decode_intent(&command.intent).ok_or(DomainError::InvalidSave {
                 detail: cw_core::error::SaveFault::MalformedPayload,
@@ -1487,6 +1635,7 @@ fn is_warning_pause(reason: &str) -> bool {
     reason.starts_with("default_grace:")
         || reason.starts_with("strike:")
         || reason == "union_counter_rejected"
+        || reason == "career_board_warning"
 }
 
 fn decode_intent(text: &str) -> Option<CommandIntent> {

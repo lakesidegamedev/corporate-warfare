@@ -192,6 +192,7 @@ pub fn build_with(
         systems: Default::default(),
         mail: Default::default(),
         player_chief: None,
+        career: None,
         politics: crate::state::Politics::default(),
         logistics: Default::default(),
         systemic: Default::default(),
