@@ -52,6 +52,7 @@ heading.
 
 ### Fixed
 
+- Prices of goods the corridor exports no longer wobble up and down week after week. Home sellers used to read only what the very last exported lot fetched, which jumped a whole step whenever a week's leftover exports crossed a port's normal room; they now read what exporters were actually paid on average, which moves smoothly. Fuel in Silicon Valley reversed eleven times a year and now holds a steady course.
 - Opening the weekly brief while the board had a mandate offer on the table could crash the game when one of the offered mandates was a cash cover goal. The brief now measures each offer against the chapter it belongs to, and the progress sum can no longer fail.
 
 

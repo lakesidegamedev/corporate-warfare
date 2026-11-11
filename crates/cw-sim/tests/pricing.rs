@@ -848,22 +848,24 @@ fn trade_past_the_normal_room_presses_on_home_prices() {
         "a short corridor asks more: {short} vs {calm}"
     );
     assert!(pricing::price_reason(&world, &dataset, food).contains("Short of supply"));
-    // The same food exported 110 percent of the room instead: the last lots sold in the first
-    // cheap step, ten percent under the quote.
+    // The same food exported twice the room instead: the first room's worth sold at the quote and
+    // a quarter each in the four cheap steps (10, 20, 30 and 40 percent under it), so exporters
+    // were paid 12.5 percent under the quote on average.
     for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
         gateway.last_import_lots = 0;
-        gateway.last_export_lots = gateway.capacity_lots * 11 / 10;
+        gateway.last_export_lots = gateway.capacity_lots * 2;
     }
-    assert_eq!(
-        pricing::trade_pressure_bps(&world, &dataset, food),
-        (0, 1_000)
-    );
+    // (Whole lots: a gateway whose room is not a multiple of four rounds a few points.)
+    let (premium, discount) = pricing::trade_pressure_bps(&world, &dataset, food);
+    assert_eq!(premium, 0);
+    assert!((1_245..=1_255).contains(&discount), "{discount}");
     let glut = pricing::target_price(&world, &dataset, firm, food);
     assert!(
         glut < calm,
         "a glutted corridor asks less: {glut} vs {calm}"
     );
-    assert!(pricing::price_reason(&world, &dataset, food).contains("Glut"));
+    let reason = pricing::price_reason(&world, &dataset, food);
+    assert!(reason.contains("Glut"), "{reason}");
 }
 
 #[test]
