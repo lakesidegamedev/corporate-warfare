@@ -211,6 +211,17 @@ pub struct Hostile {
     /// Hostile moves that landed in weeks the player ranked in the top three.
     pub while_top_three: u32,
     pub weeks_top_three: u32,
+    /// Raids on the player by a firm that had earlier bought a plant at a break-up auction or
+    /// listing in the raided region, and how many of those it won (2.0 attribution).
+    #[serde(default)]
+    pub raids_by_plant_buyers: u32,
+    #[serde(default)]
+    pub raids_won_by_plant_buyers: u32,
+    /// Raids on the player by a firm that had earlier folded in a company, and wins.
+    #[serde(default)]
+    pub raids_by_mergers: u32,
+    #[serde(default)]
+    pub raids_won_by_mergers: u32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -268,6 +279,56 @@ pub struct CapacityStats {
     pub raids_won: u32,
     #[serde(default)]
     pub raids_emptied_company: u32,
+    /// Plants sold to another company, by the player's group and by everyone, the cash they
+    /// fetched, plants written off with no buyer, and what the pre-2.0 rule (40 percent of book
+    /// from no payer) would have paid for the same disposals, in cents.
+    #[serde(default)]
+    pub plants_sold: u32,
+    #[serde(default)]
+    pub plants_sold_by_player: u32,
+    #[serde(default)]
+    pub plant_sale_cents: i64,
+    #[serde(default)]
+    pub plants_written_off: u32,
+    #[serde(default)]
+    pub old_rule_payout_cents: i64,
+    /// Plant auctions (2.0), from the engine's own totals at the end: a failed company's plants
+    /// offered, sold and scrapped, listings made, sold and withdrawn, lots won by the player's
+    /// side, and what the break-up lots fetched against what the scrap rate (the rule before)
+    /// would have paid, in cents.
+    #[serde(default)]
+    pub breakup_lots: u32,
+    #[serde(default)]
+    pub breakup_sold: u32,
+    #[serde(default)]
+    pub breakup_scrapped: u32,
+    #[serde(default)]
+    pub listings: u32,
+    #[serde(default)]
+    pub listings_sold: u32,
+    #[serde(default)]
+    pub listings_withdrawn: u32,
+    #[serde(default)]
+    pub lots_won_by_player: u32,
+    #[serde(default)]
+    pub breakup_proceeds_cents: i64,
+    #[serde(default)]
+    pub breakup_scrap_cents: i64,
+    /// Lots offered by companies outside the player's side, and how many of them the player's
+    /// main company could have bought when offered: trading, reading the plant as worth running,
+    /// and holding cash above the scrap price.
+    #[serde(default)]
+    pub lots_offered_to_player: u32,
+    #[serde(default)]
+    pub lots_player_could_buy: u32,
+    /// Companies in the league when the career began.
+    #[serde(default)]
+    pub firms_at_start: u32,
+    /// Companies folded into their 90 percent owner, all owners and by rivals only.
+    #[serde(default)]
+    pub mergers: u32,
+    #[serde(default)]
+    pub rival_mergers: u32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -490,6 +551,35 @@ pub struct Aggregate {
     pub raids_won_per_decade_median: Option<f64>,
     #[serde(default)]
     pub raids_emptied_company_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub plants_sold_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub plants_written_off_per_decade_median: Option<f64>,
+    /// Dollars a decade the pre-2.0 disposal rule would have paid for the same disposals.
+    #[serde(default)]
+    pub old_rule_payout_per_decade_median: Option<f64>,
+    /// Plants that changed hands (every route) per decade per ten companies at the start.
+    #[serde(default)]
+    pub plants_changing_hands_per_decade_per_ten_firms_median: Option<f64>,
+    #[serde(default)]
+    pub breakup_sold_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub listing_sold_per_decade_median: Option<f64>,
+    /// Share of a failed company's plants that found a buyer, over every career pooled.
+    #[serde(default)]
+    pub breakup_buyer_share: Option<f64>,
+    /// Break-up proceeds over what the scrap rate would have paid, every career pooled.
+    #[serde(default)]
+    pub breakup_proceeds_over_scrap: Option<f64>,
+    #[serde(default)]
+    pub lots_player_could_buy_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub lots_won_by_player_total: u32,
+    #[serde(default)]
+    pub mergers_per_decade_median: Option<f64>,
+    /// Share of careers in which at least one company was folded into its owner.
+    #[serde(default)]
+    pub careers_with_merger_share: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -579,6 +669,14 @@ struct Observer {
     hostile: Hostile,
     seen_raids: BTreeSet<(u32, u64, u64, u8, u8)>,
     seen_all_raids: BTreeSet<(u32, u64, u64, u8, u8)>,
+    seen_disposals: BTreeSet<(u64, u64)>,
+    seen_lots: BTreeSet<u32>,
+    /// Closed lots read, and every (buyer, region) that bought a plant on offer.
+    seen_closed: BTreeSet<u32>,
+    plant_buys: BTreeSet<(u64, u8)>,
+    /// Firms that folded in a company, and how many merger records were read.
+    folded_in: BTreeSet<u64>,
+    mergers_read: usize,
     seen_raid_campaigns: BTreeSet<(u32, u64, u64, u8, u8)>,
     seen_deals: BTreeSet<(u64, u32)>,
     seen_campaigns: BTreeSet<u32>,
@@ -625,6 +723,12 @@ impl Observer {
             hostile: Hostile::default(),
             seen_raids: BTreeSet::new(),
             seen_all_raids: BTreeSet::new(),
+            seen_disposals: BTreeSet::new(),
+            seen_lots: BTreeSet::new(),
+            seen_closed: BTreeSet::new(),
+            plant_buys: BTreeSet::new(),
+            folded_in: BTreeSet::new(),
+            mergers_read: 0,
             seen_raid_campaigns: BTreeSet::new(),
             seen_deals: BTreeSet::new(),
             seen_campaigns: BTreeSet::new(),
@@ -971,6 +1075,109 @@ impl Observer {
                 }
             }
         }
+        // Plant auctions: the engine's totals, and each new lot from outside the player's side.
+        if self.capacity.firms_at_start == 0 {
+            self.capacity.firms_at_start = world.firms.len() as u32;
+        }
+        {
+            let t = &world.auctions.totals;
+            let c = &mut self.capacity;
+            c.breakup_lots = t.breakup_lots;
+            c.breakup_sold = t.breakup_sold;
+            c.breakup_scrapped = t.breakup_scrapped;
+            c.listings = t.listings;
+            c.listings_sold = t.listings_sold;
+            c.listings_withdrawn = t.listings_withdrawn;
+            c.lots_won_by_player = t.sold_to_player;
+            c.breakup_proceeds_cents = t.breakup_proceeds_cents;
+            c.breakup_scrap_cents = t.breakup_scrap_cents;
+            c.mergers = t.mergers;
+            c.rival_mergers = world
+                .auctions
+                .mergers
+                .iter()
+                .filter(|m| !group.contains(&m.buyer.0))
+                .count() as u32;
+        }
+        for closed in &world.auctions.closed {
+            if self.seen_closed.insert(closed.lot.id)
+                && let cw_sim::economy::auctions::LotOutcome::Sold { buyer, .. } = closed.outcome
+            {
+                self.plant_buys.insert((buyer.0, closed.lot.region));
+            }
+        }
+        for merger in world.auctions.mergers.iter().skip(self.mergers_read) {
+            self.folded_in.insert(merger.buyer.0);
+        }
+        self.mergers_read = world.auctions.mergers.len();
+        let new_lots: Vec<&cw_sim::economy::auctions::PlantLot> = world
+            .auctions
+            .lots
+            .iter()
+            .filter(|lot| !group.contains(&lot.seller.0))
+            .filter(|lot| !self.seen_lots.contains(&lot.id))
+            .collect();
+        if !new_lots.is_empty() {
+            let rooms = cw_sim::economy::capacity::input_rooms(world, &session.dataset);
+            for lot in new_lots {
+                self.seen_lots.insert(lot.id);
+                self.capacity.lots_offered_to_player += 1;
+                let could = primary
+                    .filter(|p| world.firm(*p).is_some_and(|f| f.operative()))
+                    .and_then(|p| {
+                        cw_sim::economy::disposal::appraise(
+                            world,
+                            &session.dataset,
+                            &rooms,
+                            p,
+                            lot.facility,
+                        )
+                    })
+                    .is_some_and(|view| {
+                        view.earnings_cents.min(view.replacement_cents) > lot.reserve_cents
+                            && view.spare_cents > lot.reserve_cents
+                    });
+                if could {
+                    self.capacity.lots_player_could_buy += 1;
+                }
+            }
+        }
+        // Plant disposals: read from each seller's journal (one transaction per sale or write-off).
+        for (handle, firm) in world.firms.iter() {
+            let mut found: BTreeMap<u64, (bool, i64, i64, i64)> = BTreeMap::new();
+            for posting in firm.book.journal().iter().rev() {
+                if posting.week.0 + 2 < week {
+                    break;
+                }
+                let sold = match posting.memo.as_str() {
+                    "plant sale" => true,
+                    "plant written off" => false,
+                    _ => continue,
+                };
+                let entry = found.entry(posting.txn).or_insert((sold, 0, 0, 0));
+                match posting.account {
+                    cw_core::ledger::Account::FixedAssets => entry.1 -= posting.delta,
+                    cw_core::ledger::Account::AccumulatedDepreciation => entry.2 += posting.delta,
+                    cw_core::ledger::Account::Cash => entry.3 += posting.delta,
+                    _ => {}
+                }
+            }
+            for (txn, (sold, capex, depreciation, cash)) in found {
+                if !self.seen_disposals.insert((handle.0, txn)) {
+                    continue;
+                }
+                self.capacity.old_rule_payout_cents += (capex - depreciation).max(0) * 40 / 100;
+                if sold {
+                    self.capacity.plants_sold += 1;
+                    self.capacity.plant_sale_cents += cash;
+                    if group.contains(&handle.0) {
+                        self.capacity.plants_sold_by_player += 1;
+                    }
+                } else {
+                    self.capacity.plants_written_off += 1;
+                }
+            }
+        }
         if !group.is_empty() {
             let mut plan_deals: BTreeSet<u64> = BTreeSet::new();
             for plan in &world.plans.plans {
@@ -1028,6 +1235,14 @@ impl Observer {
                     self.hostile.raids += 1;
                     if raid.success {
                         self.hostile.raids_succeeded += 1;
+                    }
+                    if self.plant_buys.contains(&(raid.attacker.0, raid.region)) {
+                        self.hostile.raids_by_plant_buyers += 1;
+                        self.hostile.raids_won_by_plant_buyers += raid.success as u32;
+                    }
+                    if self.folded_in.contains(&raid.attacker.0) {
+                        self.hostile.raids_by_mergers += 1;
+                        self.hostile.raids_won_by_mergers += raid.success as u32;
                     }
                     fresh += 1;
                     self.hostile.log.push(HostileEvent {
@@ -1864,6 +2079,64 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
             .iter()
             .map(|c| per_decade(c.capacity.raids_emptied_company, c.weeks_played))
             .collect()),
+        plants_sold_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.plants_sold, c.weeks_played))
+            .collect()),
+        plants_written_off_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.plants_written_off, c.weeks_played))
+            .collect()),
+        plants_changing_hands_per_decade_per_ten_firms_median: med(careers
+            .iter()
+            .map(|c| {
+                per_decade(c.capacity.plants_sold, c.weeks_played) * 10.0
+                    / c.capacity.firms_at_start.max(1) as f64
+            })
+            .collect()),
+        breakup_sold_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.breakup_sold, c.weeks_played))
+            .collect()),
+        listing_sold_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.listings_sold, c.weeks_played))
+            .collect()),
+        breakup_buyer_share: {
+            let lots: u32 = careers.iter().map(|c| c.capacity.breakup_lots).sum();
+            let sold: u32 = careers.iter().map(|c| c.capacity.breakup_sold).sum();
+            (lots > 0).then(|| sold as f64 / lots as f64)
+        },
+        breakup_proceeds_over_scrap: {
+            let scrap: i64 = careers.iter().map(|c| c.capacity.breakup_scrap_cents).sum();
+            let got: i64 = careers
+                .iter()
+                .map(|c| c.capacity.breakup_proceeds_cents)
+                .sum();
+            (scrap > 0).then(|| got as f64 / scrap as f64)
+        },
+        lots_player_could_buy_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.lots_player_could_buy, c.weeks_played))
+            .collect()),
+        lots_won_by_player_total: careers.iter().map(|c| c.capacity.lots_won_by_player).sum(),
+        mergers_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.mergers, c.weeks_played))
+            .collect()),
+        careers_with_merger_share: (!careers.is_empty()).then(|| {
+            careers.iter().filter(|c| c.capacity.mergers > 0).count() as f64 / careers.len() as f64
+        }),
+        old_rule_payout_per_decade_median: med(careers
+            .iter()
+            .map(|c| {
+                if c.weeks_played == 0 {
+                    0.0
+                } else {
+                    c.capacity.old_rule_payout_cents as f64 / 100.0 * 520.0 / c.weeks_played as f64
+                }
+            })
+            .collect()),
     }
 }
 
@@ -1904,6 +2177,10 @@ fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
         "top_ten_block_change_median" => aggregate.top_ten_block_change_median,
         "unmet_local_fall_pct_median" => aggregate.unmet_local_fall_pct_median,
         "raid_warning_weeks_median" => aggregate.raid_warning_weeks_median,
+        "careers_with_merger_share" => aggregate.careers_with_merger_share,
+        "plants_changing_hands_per_decade_per_ten_firms_median" => {
+            aggregate.plants_changing_hands_per_decade_per_ten_firms_median
+        }
         _ => None,
     }
 }
@@ -2144,6 +2421,10 @@ pub fn run(arguments: &[String]) {
     );
     crate::policy::LEGACY_CARDS.store(
         arguments.iter().any(|a| a == "--legacy-cards"),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    crate::policy::NO_PLANT_BIDS.store(
+        arguments.iter().any(|a| a == "--no-plant-bids"),
         std::sync::atomic::Ordering::Relaxed,
     );
     let seeds: u64 = flag(arguments, "--seeds")

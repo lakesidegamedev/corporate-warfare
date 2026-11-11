@@ -31,6 +31,26 @@ fn firm_with_industry(world: &World, industry: u8) -> cw_core::ids::Handle {
         .unwrap()
 }
 
+/// The insolvency part of a week, in the engine's order: plant lots at their deadline close
+/// before past-due firms are settled.
+fn week(world: &mut World, dataset: &Dataset) {
+    cw_sim::economy::auctions::weekly(world, dataset);
+    insolvency::settle(world, dataset);
+}
+
+/// Cash a firm paid for plants it bought at auction or from a listing.
+fn plants_bought(world: &World, firm: cw_core::ids::Handle) -> i64 {
+    -world
+        .firm(firm)
+        .unwrap()
+        .book
+        .journal()
+        .iter()
+        .filter(|p| p.memo == "plant purchase" && p.account == Account::Cash)
+        .map(|p| p.delta)
+        .sum::<i64>()
+}
+
 #[test]
 fn union_organisation_strike_and_binding_settlement() {
     let dataset = Dataset::load().unwrap();
@@ -269,11 +289,15 @@ fn a_parent_guarantee_backs_a_failed_subsidiary_only_up_to_its_cap() {
         "unpayable",
     );
     let dataset = Dataset::load().unwrap();
-    for _ in 0..8 {
+    // The grace weeks, then the break-up auction of the child's plants: the guarantee is called
+    // once the last lot has closed and the proceeds are paid out.
+    for _ in 0..16 {
         world.tick = world.tick.next();
-        insolvency::settle(&mut world, &dataset);
+        week(&mut world, &dataset);
     }
-    let paid = parent_cash - world.firm(parent).unwrap().book.cash();
+    assert_eq!(world.firm(child).unwrap().status, FirmStatus::Dissolved);
+    let paid =
+        parent_cash + plants_bought(&world, parent) - world.firm(parent).unwrap().book.cash();
     assert!(
         paid > 0,
         "the guarantee is called when unpaid claims remain"
@@ -281,7 +305,7 @@ fn a_parent_guarantee_backs_a_failed_subsidiary_only_up_to_its_cap() {
     assert!(paid >= 0, "the guarantor is never credited by the failure");
     assert!(paid <= 10_000_000, "payment is capped by the guarantee");
     assert_eq!(
-        world.firm(sibling).unwrap().book.cash(),
+        world.firm(sibling).unwrap().book.cash() + plants_bought(&world, sibling),
         sibling_cash,
         "siblings carry no implied guarantee"
     );
@@ -416,9 +440,10 @@ fn liquidation_pays_creditors_before_equity_and_keeps_siblings() {
         Account::OperatingExpense,
         "unpayable",
     );
-    for _ in 0..8 {
+    let dataset = Dataset::load().unwrap();
+    for _ in 0..16 {
         world.tick = world.tick.next();
-        insolvency::settle(&mut world, &Dataset::load().unwrap());
+        week(&mut world, &dataset);
     }
     let status = world.firm(doomed).unwrap().status;
     assert!(
@@ -428,8 +453,9 @@ fn liquidation_pays_creditors_before_equity_and_keeps_siblings() {
         ),
         "grace expires into a resolution, was {status:?}"
     );
+    // Unless it bought one of the failed company's plants at the auction, and then only the price.
     assert_eq!(
-        world.firm(sibling).unwrap().book.cash(),
+        world.firm(sibling).unwrap().book.cash() + plants_bought(&world, sibling),
         sibling_cash,
         "an unrelated sibling keeps its cash"
     );

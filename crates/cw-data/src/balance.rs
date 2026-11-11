@@ -372,6 +372,10 @@ pub struct CapacityRules {
     /// households ask for their whole category budget (the rule before 2.0).
     pub household_cover_bps: i64,
     pub household_unmet_bps: i64,
+    /// Weeks a plant on offer stays open for bids: a failed company's plants in its break-up
+    /// auction, and a plant its owner lists for sale. Zero: a failed company's plants are sold
+    /// off at once for scrap and no plant can be listed (the rule before 2.0).
+    pub plant_auction_weeks: u32,
 }
 
 impl Default for CapacityRules {
@@ -393,6 +397,7 @@ impl Default for CapacityRules {
             raid_warning_weeks: 0,
             household_cover_bps: 0,
             household_unmet_bps: 0,
+            plant_auction_weeks: 0,
         }
     }
 }

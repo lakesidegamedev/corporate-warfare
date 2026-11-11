@@ -15,7 +15,9 @@ pub struct OptionDto {
 /// `kind` tells the app which control to draw and where its options come from:
 /// `my_firm` (a company the player controls, defaulting to the selected one), `any_firm`,
 /// `bank`, `insurer`, `region`, `product`, `recipe`, `sector`, `my_facility`, `my_loan`,
-/// `my_contract`, `my_deal`, `my_policy`, `vote`, `bond`, `my_bond`, `my_venture`, `open_campaign`, `money` (cents), `lots`, `shares`, `bps`
+/// `my_contract`, `my_deal`, `my_policy`, `vote`, `bond`, `my_bond`, `my_venture`, `open_campaign`,
+/// `plant_lot` (a site on offer, from `plant_lots`), `my_listing` (a lot of `plant_lots` with
+/// `yours` set), `money` (cents), `lots`, `shares`, `bps`
 /// (a percentage in basis points), `weeks`, `count`, `bool`, `choice` and `text`.
 /// `encoding` is how the value goes into the JSON: `number`, `string`, `bool` or `optional`
 /// (a number, or null when left empty).
@@ -343,9 +345,45 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             "WindDown",
             "Operations",
             "Wind the company down",
-            "Close a company that has nothing left to run. Its remaining sites and stock are sold at salvage value, every lender, bondholder and unpaid bill is paid in full, the rest goes to the shareholders and the company is dissolved. Only a solvent company with no working, building or retooling site, no stake in another company and no open bills can do this, and never your main company.",
+            "Close a company that has nothing left to run. Its stock and other assets are sold at salvage value and its idle sites go to a four week auction, where rivals bid and any site nobody wants is sold for scrap. Every lender, bondholder and unpaid bill is paid in full, the rest goes to the shareholders and the company is dissolved. Only a solvent company with no working, building or retooling site, no stake in another company and no open bills can do this, and never your main company. To see the bids for a site and choose, list it for sale first.",
             "wind down close dissolve liquidate shut shell",
             vec![firm()],
+        ),
+        a(
+            "ListPlant",
+            "Operations",
+            "Put a site up for sale",
+            "Offer a working or mothballed site to rival companies for four weeks. The site keeps running. When bidding closes you see every bid and have four more weeks to accept the best one or keep the site; if you do nothing the offer lapses.",
+            "sell list auction plant site divest offer",
+            vec![f("facility", "Site", "my_facility")],
+        ),
+        a(
+            "AcceptPlantBid",
+            "Operations",
+            "Sell a listed site to the best bid",
+            "Sell a site you listed to the best bid still able to pay. The buyer pays the price in cash and takes over the site with its staff.",
+            "accept sell bid offer plant site",
+            vec![f("lot", "Listing", "my_listing")],
+        ),
+        a(
+            "WithdrawListing",
+            "Operations",
+            "Take a site off the market",
+            "Withdraw a site you listed for sale. Nothing changes hands and the site keeps running.",
+            "withdraw keep cancel listing plant site",
+            vec![f("lot", "Listing", "my_listing")],
+        ),
+        a(
+            "BidForPlant",
+            "Operations",
+            "Bid for a site on offer",
+            "Place a sealed bid for a site a failed company's liquidator is auctioning or a rival has listed. Your company must hold the cash when you bid and again when bidding closes. At an auction the best bid at or above the scrap price wins; a listed site is sold only if its owner accepts. A bid of zero withdraws yours.",
+            "buy bid auction plant site acquire liquidation listing",
+            vec![
+                firm(),
+                f("lot", "Site on offer", "plant_lot"),
+                money("price_cents", "Your bid").range(0, 0, 100_000, 0),
+            ],
         ),
         a(
             "SetProductionTarget",
@@ -992,6 +1030,17 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             "Ask shareholders to approve the merger.",
             "vote merge",
             vec![f("deal", "Deal", "my_deal")],
+        ),
+        a(
+            "FoldInCompany",
+            "Deals",
+            "Fold in a company you own 90 percent of",
+            "Merge a company into one of yours that holds at least 90 percent of its shares, however you came to hold them. The last outside shareholders are paid fair value in cash. Refused if any deal between the two went to a competition review or carried a remedy, and a large buyout needs the board's approval.",
+            "merge squeeze out minority absorb fold subsidiary",
+            vec![
+                f("buyer", "Your company", "my_firm"),
+                f("target", "Company to fold in", "any_firm"),
+            ],
         ),
         a(
             "SubmitRemedy",

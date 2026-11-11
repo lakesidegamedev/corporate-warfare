@@ -98,6 +98,65 @@ pub enum CampaignRole {
     BetweenRivals,
 }
 
+/// What selling a plant would bring (2.0), for the player to read before confirming
+/// `DisposeFacility`. `bids` is best first; the first one buys. With no bids the plant is written
+/// off for nothing. `book_cents` is what the plant stands at on the books, so the gain or loss on
+/// the sale is the best bid less it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlantSaleView {
+    pub facility: u64,
+    pub book_cents: i64,
+    pub bids: Vec<PlantBidView>,
+}
+
+/// One company's offer for a plant: its price, and the weekly contribution and blocks it reads
+/// the plant as worth to it at public prices.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlantBidView {
+    pub bidder: u64,
+    pub bidder_name: String,
+    pub price_cents: i64,
+    pub weekly_cents: i64,
+    pub blocks_used: i64,
+}
+
+/// A plant on offer (2.0): a failed company's plant in its break-up auction, or a plant its owner
+/// listed. `route` is "break_up" or "listing". Rival bids are sealed until the deadline, so `bids`
+/// is empty while bidding is open; once a listing's bids are put to its owner they are listed best
+/// first (public to everyone, since the sale is). `reserve_cents` is what a scrap buyer pays for a
+/// break-up plant, the least a bid must reach. The opening figures are how the player's main
+/// company reads the plant, by the same rule rivals bid with: `weekly_cents` for `blocks_used`
+/// blocks, `earnings_cents` over the payback horizon and `replacement_cents` for building the same
+/// blocks today, scaled by the share not yet written off. `player_bid_cents` and
+/// `player_bid_firm` are the player's sealed bid, zero when none. `yours` is true when the player
+/// owns the plant (its bids are the player's to accept or refuse until `answer_by`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlantLotView {
+    pub lot: u32,
+    pub facility: u64,
+    pub route: String,
+    pub seller: u64,
+    pub seller_name: String,
+    pub plant_name: String,
+    pub region: u8,
+    pub region_name: String,
+    pub blocks: u8,
+    pub book_cents: i64,
+    pub reserve_cents: i64,
+    pub opened_week: u32,
+    pub closes_week: u32,
+    pub weeks_left: u32,
+    pub weekly_cents: i64,
+    pub blocks_used: i64,
+    pub earnings_cents: i64,
+    pub replacement_cents: i64,
+    pub player_bid_cents: i64,
+    pub player_bid_firm: u64,
+    pub yours: bool,
+    pub bids: Vec<PlantBidView>,
+    pub answer_by_week: u32,
+}
+
 /// A raid campaign announced and not yet decided (2.0), with today's figures. The chance and
 /// stake are what the raid would be if it were decided now; the defence measured at resolution
 /// decides it.
