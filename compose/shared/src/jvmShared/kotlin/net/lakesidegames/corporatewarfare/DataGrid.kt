@@ -175,6 +175,7 @@ fun <T> DataGrid(
             Column(Modifier.fillMaxSize()) {
                 // The header stays put while the rows scroll under it.
                 Row(Modifier.fillMaxWidth().height(22.dp).background(Palette.ink).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(Modifier.width(2.dp))
                     visible.forEach { c ->
                         val arrow = if (c.id == sortId) (if (descending) " v" else " ^") else ""
                         Explain(c.tip ?: Words.about(c.title), cellModifier(c)) {
@@ -186,6 +187,7 @@ fun <T> DataGrid(
                             )
                         }
                     }
+                    if (onOpen != null) Spacer(Modifier.width(18.dp))
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), state = list) {
