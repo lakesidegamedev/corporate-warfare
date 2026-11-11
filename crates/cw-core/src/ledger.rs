@@ -347,6 +347,11 @@ pub struct Ledger {
     lifetime: Lifetime,
     recent_weeks: Vec<WeekClose>,
     overdrawn: bool,
+    /// How many postings at the front of the journal are already known to be in week order, so
+    /// the compaction check reads only what was posted since the last one. Not saved: a loaded
+    /// ledger starts at zero and checks its whole journal once.
+    #[serde(skip)]
+    ordered_len: usize,
 }
 
 impl Default for Ledger {
@@ -359,6 +364,7 @@ impl Default for Ledger {
             lifetime: Lifetime::default(),
             recent_weeks: Vec::new(),
             overdrawn: false,
+            ordered_len: 0,
         }
     }
 }
@@ -570,8 +576,8 @@ impl Ledger {
         // Postings are appended in week order, so what falls out of the window is a prefix. The
         // slow path below gives the same journal and hash for any order; this is only the fast
         // one, taken when the weeks never go backwards.
-        let ordered = self
-            .journal
+        let from = self.ordered_len.saturating_sub(1).min(self.journal.len());
+        let ordered = self.journal[from..]
             .windows(2)
             .all(|pair| pair[0].week.0 <= pair[1].week.0);
         let split = if ordered {
@@ -595,6 +601,7 @@ impl Ledger {
                 fold(&posting, &mut hasher);
                 pruned += 1;
             }
+            self.ordered_len = self.journal.len();
         } else {
             let mut keep = Vec::with_capacity(self.journal.len());
             for posting in self.journal.drain(..) {
@@ -606,6 +613,7 @@ impl Ledger {
                 }
             }
             self.journal = keep;
+            self.ordered_len = 0;
         }
         if pruned > 0 {
             let mut chained = CanonicalHasher::new(DOMAIN_STATE);
