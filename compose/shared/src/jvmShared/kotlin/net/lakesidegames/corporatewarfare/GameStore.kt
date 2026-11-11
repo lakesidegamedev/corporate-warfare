@@ -57,6 +57,8 @@ data class Pickers(
     val deals: List<uniffi.cw_ffi.DealDto> = emptyList(),
     /** Options the engine lists itself: bonds, ventures and open activist campaigns. */
     val extra: Map<String, List<uniffi.cw_ffi.PickDto>> = emptyMap(),
+    /** Plants on offer, for the bid, accept and withdraw forms. */
+    val lots: List<uniffi.cw_ffi.PlantLotDto> = emptyList(),
 )
 
 /** One market row for the selected region: a product and its local market, if traded. */
@@ -607,6 +609,7 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
                     votes = firm?.let { handle.boardVotes(it) } ?: emptyList(),
                     deals = handle.deals(),
                     extra = listOf("bond", "my_bond", "my_venture", "open_campaign").associateWith { handle.structurePicks(it) },
+                    lots = handle.plantLots(),
                 )
             }
             onResult(result)

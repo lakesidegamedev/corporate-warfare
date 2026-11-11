@@ -73,6 +73,9 @@ private enum class Tab(val title: String, val icon: String) {
     Portfolio("Portfolio", "portfolio"),
 }
 
+/** Which phone tab a career opens on: the map, except in render tests that picture each tab. */
+internal var PhoneStartTab: Int = 0
+
 /** Settings that live outside a career, for any screen that needs them. */
 val LocalAppSettings = androidx.compose.runtime.staticCompositionLocalOf<AppSettings?> { null }
 
@@ -158,7 +161,8 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                     store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         if (maxWidth >= DesktopBreakpoint) {
                             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                                DesktopShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
+                                if (NewShell.enabled) TycoonShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
+                                else DesktopShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
                                 if (settings.showBriefEachWeek) BriefWeeklyHost(store)
                             }
                         }
@@ -234,7 +238,7 @@ fun GoldButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = t
 
 @Composable
 private fun MainScreen(store: GameStore, onSettings: () -> Unit) {
-    var tab by remember { mutableStateOf(Tab.Map) }
+    var tab by remember { mutableStateOf(Tab.entries[PhoneStartTab.coerceIn(0, Tab.entries.size - 1)]) }
     var menu by remember { mutableStateOf(false) }
     // Full screens opened over the tabs: actions, research, stats.
     var overlay by remember { mutableStateOf<String?>(null) }

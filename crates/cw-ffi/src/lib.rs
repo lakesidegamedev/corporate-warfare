@@ -29,6 +29,7 @@ mod letters;
 mod paper;
 mod plans;
 mod politics;
+mod series;
 mod statements;
 mod systems;
 pub use cast::{
@@ -1440,6 +1441,18 @@ fn alert_text(alert: cw_session::Alert) -> String {
             "{}: a rival reserved capacity on a lane you ship on.",
             alert.subject
         ),
+        "alert.decision" => format!("Decision needed: {}", alert.subject),
+        "alert.past_due" => format!(
+            "{}: payments are past due. Raise cash or the company goes into restructuring.",
+            alert.subject
+        ),
+        "alert.payout_frozen" => format!(
+            "{}: payouts to shareholders are frozen until the company is back in good standing.",
+            alert.subject
+        ),
+        // These carry their whole sentence in the subject.
+        "alert.incident" | "alert.law_carrier" | "alert.law_rescue" | "alert.state_rescue"
+        | "alert.quota" | "alert.reserve" => alert.subject,
         "alert.raid_announced" => format!(
             "{}: a rival has announced a raid on one of its businesses. Raise marketing before it is decided to cut their chance.",
             alert.subject
@@ -1453,6 +1466,17 @@ fn alert_text(alert: cw_session::Alert) -> String {
             "{}: its whole business is one block, which a raid could take. Marketing is its defence.",
             alert.subject
         ),
+        "alert.plant_auction" => format!(
+            "{} is in liquidation and a plant is up for auction. Bid before the deadline.",
+            alert.subject
+        ),
+        "alert.plant_listed" => format!("{} has put a plant up for sale.", alert.subject),
+        "alert.plant_bids_in" => format!(
+            "Bids are in for a plant {} listed. Accept the best or keep the plant.",
+            alert.subject
+        ),
+        // An unknown key never reaches the player as a raw key: show what it is about instead.
+        _ if !alert.subject.is_empty() => alert.subject,
         _ => alert.key,
     }
 }
@@ -5144,6 +5168,47 @@ impl SessionHandle {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn every_alert_key_reads_as_a_sentence() {
+        let keys = [
+            "alert.decision",
+            "alert.past_due",
+            "alert.payout_frozen",
+            "alert.incident",
+            "alert.law_carrier",
+            "alert.law_rescue",
+            "alert.state_rescue",
+            "alert.quota",
+            "alert.reserve",
+            "alert.storage_full",
+            "alert.storage_fees",
+            "alert.spoilage",
+            "alert.lane_congested",
+            "alert.carrier_hike",
+            "alert.activist",
+            "alert.squeeze",
+            "alert.captive_markdown",
+            "alert.bond_due",
+            "alert.lane_reserved",
+            "alert.plant_auction",
+            "alert.plant_listed",
+            "alert.plant_bids_in",
+            "alert.something_new",
+        ];
+        for key in keys {
+            let text = super::alert_text(cw_session::Alert {
+                key: key.to_owned(),
+                subject: "Acme".to_owned(),
+                severity: 1,
+                detail: String::new(),
+            });
+            assert!(
+                !text.starts_with("alert."),
+                "{key} reached the player raw: {text}"
+            );
+        }
+    }
+
     use super::*;
 
     #[test]
