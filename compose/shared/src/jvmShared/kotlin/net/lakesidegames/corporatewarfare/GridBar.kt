@@ -63,6 +63,7 @@ internal fun <T> ControlBar(
     columns: List<GridColumn<T>>, tf: Timeframe, search: String, menu: String?, phone: Boolean, dropped: Int,
     onView: (ViewState) -> Unit, onSearch: (String) -> Unit, onTyping: (Boolean) -> Unit, onMenu: (String?) -> Unit,
     onCommitSearch: () -> Unit, csv: () -> String, distinct: (String) -> List<String>, onExtra: (String) -> Unit,
+    onChart: () -> Unit = {},
 ) {
     val prefs = LocalAppSettings.current
     fun pick(v: ViewState) { onView(v); book.activate(v.name); onMenu(null) }
@@ -126,6 +127,7 @@ internal fun <T> ControlBar(
                     MenuItem("Compact", on = GridPrefs.compact) { GridPrefs.chooseCompact(true, prefs) }
                     MenuItem("Comfortable", on = !GridPrefs.compact) { GridPrefs.chooseCompact(false, prefs) }
                     MenuRule()
+                    MenuItem("Chart these", hint = "marked rows") { onChart(); onMenu(null) }
                     MenuItem("Copy the grid for a spreadsheet", hint = "CSV") { clip.setText(AnnotatedString(csv())); onMenu(null) }
                     if (modified) MenuItem("Reset view") { book.named(view.name)?.let(onView); onMenu(null) }
                 }
@@ -287,6 +289,12 @@ private fun TimeframeMenu(view: ViewState, tf: Timeframe, onView: (ViewState) ->
     FlowRow(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         Timeframe.entries.forEach { t -> GridButton(t.label, view.timeframe == t, 10.sp) { onView(view.copy(timeframe = t)) } }
     }
+    MenuRule()
+    // Compare puts the timeframe's average beside the period before it or the same weeks a year earlier.
+    MenuHeading("Compare", "change and % columns")
+    Compare.entries.forEach { c ->
+        MenuItem(c.label, on = view.compare == c, enabled = c == Compare.None || tf != Timeframe.All, hint = if (c != Compare.None && tf == Timeframe.All) "not with All" else "") { onView(view.copy(compare = c)) }
+    }
 }
 
 @Composable
@@ -295,15 +303,20 @@ private fun <T> ScopeMenu(view: ViewState, views: GridViews<T>, onView: (ViewSta
     fun toggle(id: String) = onView(view.copy(scope = if (id in view.scope) view.scope - id else view.scope + id))
     MenuHeading("Scope", "tick to combine")
     MenuItem("Everything", on = view.scope.isEmpty()) { only(null) }
-    MenuItem("Mine", on = view.scope == listOf("mine"), box = "mine" in view.scope, onBox = { toggle("mine") }) { only("mine") }
+    val prefs = LocalAppSettings.current
+    // "Pin" makes a choice the focus every screen follows, shown in the top strip.
+    fun pin(id: String, label: String) = GridPrefs.chooseFocus(if (GridPrefs.focus == id) null else id, label, prefs)
+    fun pinWord(id: String) = if (GridPrefs.focus == id) "unpin" else "pin"
+    MenuItem("Mine", on = view.scope == listOf("mine"), box = "mine" in view.scope, onBox = { toggle("mine") }, action = pinWord("mine"), onAction = { pin("mine", "Mine") }) { only("mine") }
     views.scopes.groupBy { it.kind }.forEach { (kind, options) ->
         MenuHeading(kind)
-        options.forEach { o -> MenuItem(o.label, on = view.scope == listOf(o.id), color = o.color, box = o.id in view.scope, onBox = { toggle(o.id) }) { only(o.id) } }
+        options.forEach { o -> MenuItem(o.label, on = view.scope == listOf(o.id), color = o.color, box = o.id in view.scope, onBox = { toggle(o.id) }, action = pinWord(o.id), onAction = { pin(o.id, o.label) }) { only(o.id) } }
     }
+    Text("Pin a choice to make it the focus every screen follows.", color = Palette.secondary, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
 }
 
 @Composable
-private fun <T> FilterMenu(view: ViewState, columns: List<GridColumn<T>>, menu: String, onView: (ViewState) -> Unit, onMenu: (String?) -> Unit, distinct: (String) -> List<String>) {
+internal fun <T> FilterMenu(view: ViewState, columns: List<GridColumn<T>>, menu: String, onView: (ViewState) -> Unit, onMenu: (String?) -> Unit, distinct: (String) -> List<String>) {
     val id = menu.removePrefix("filter").removePrefix(":")
     val c = columns.firstOrNull { it.id == id }
     if (c == null) {
@@ -343,7 +356,7 @@ private fun <T> FilterMenu(view: ViewState, columns: List<GridColumn<T>>, menu: 
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun <T> ColumnsMenu(view: ViewState, columns: List<GridColumn<T>>, onView: (ViewState) -> Unit, onExtra: (String) -> Unit) {
+internal fun <T> ColumnsMenu(view: ViewState, columns: List<GridColumn<T>>, onView: (ViewState) -> Unit, onExtra: (String) -> Unit) {
     var find by remember { mutableStateOf("") }
     var open by remember { mutableStateOf<String?>(null) }
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp)) { GridSearch(find, "Find a column", 300.dp, {}, { find = it }, {}) }
@@ -369,17 +382,30 @@ private fun <T> ColumnsMenu(view: ViewState, columns: List<GridColumn<T>>, onVie
 /** The chips under the bar: scope, every filter and the grouping, each with its own cross, and Clear all. Not drawn when there are none. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun <T> ChipRow(view: ViewState, views: GridViews<T>, columns: List<GridColumn<T>>, onView: (ViewState) -> Unit) {
-    if (view.filters.isEmpty() && view.scope.isEmpty() && view.groupBy == null) return
+internal fun <T> ChipRow(
+    view: ViewState, views: GridViews<T>, columns: List<GridColumn<T>>, onView: (ViewState) -> Unit,
+    focus: String? = null, marked: Int = 0, onChart: () -> Unit = {}, onUnmark: () -> Unit = {},
+) {
+    if (view.filters.isEmpty() && view.scope.isEmpty() && view.groupBy == null && focus == null && marked == 0) return
+    val prefs = LocalAppSettings.current
     val titles = columns.associate { it.id to it.title }
     FlowRow(
         Modifier.fillMaxWidth().background(Palette.ink).padding(horizontal = 6.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        // The pinned focus comes first: it is the top strip's, so its cross unpins it everywhere.
+        if (focus != null) Chip("Focus: $focus", null) { GridPrefs.chooseFocus(null, "", prefs) }
+        if (marked > 0) {
+            Chip("$marked marked", Palette.positive, onUnmark)
+            Text(
+                "CHART THESE", color = Palette.gold, fontFamily = Pixel.font, fontSize = 9.sp,
+                modifier = Modifier.border(1.dp, Palette.gold).pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onChart).padding(horizontal = 6.dp, vertical = 3.dp),
+            )
+        }
         if (view.scope.isNotEmpty()) Chip("Scope: " + view.scope.joinToString(" + ") { scopeLabel(it, views) }, views.scopes.firstOrNull { it.id == view.scope.first() }?.color) { onView(view.copy(scope = emptyList())) }
         view.filters.forEach { f -> Chip(f.label { titles[it] ?: it }, null) { onView(view.withoutFilter(f)) } }
         view.groupBy?.let { g -> Chip("Grouped by ${titles[g] ?: g}", null) { onView(view.copy(groupBy = null)) } }
-        Text(
+        if (view.filters.isNotEmpty() || view.scope.isNotEmpty() || view.groupBy != null) Text(
             "CLEAR ALL", color = Palette.secondary, fontFamily = Pixel.font, fontSize = 9.sp,
             modifier = Modifier.pointerHoverIcon(PointerIcon.Hand).clickable { onView(view.copy(filters = emptyList(), scope = emptyList(), groupBy = null)) }.padding(horizontal = 6.dp, vertical = 3.dp),
         )

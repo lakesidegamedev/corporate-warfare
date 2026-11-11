@@ -1,6 +1,10 @@
 package net.lakesidegames.corporatewarfare
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -98,6 +102,10 @@ class GridColumn<T>(
     val total: Boolean = false,
     /** The heading the column chooser files it under. */
     val topic: String = "Figures",
+    /** A coarser, longer history used when [series] does not reach back far enough (debt: a year by week, then the career by quarter). */
+    val longSeries: ((T) -> List<Long>)? = null,
+    /** Weeks per point of [longSeries]. */
+    val longStep: Int = 13,
 )
 
 /** Body text for figures: the readable face with every digit the same width, so columns line up. */
@@ -127,6 +135,13 @@ class GridViews<T>(
 object GridPrefs {
     var timeframe by mutableStateOf(Timeframe.Default)
     var compact by mutableStateOf(true)
+    /** The pinned focus every grid follows where it applies: a scope id ("mine", "sector:chemicals", "region:TX") and its label. */
+    var focus by mutableStateOf<String?>(null)
+    var focusLabel by mutableStateOf("")
+    /** The right rail folded to its icons. */
+    var railFolded by mutableStateOf(false)
+    /** Moves when a view is opened from outside its grid (Ctrl K), so the grid picks it up. */
+    var epoch by mutableStateOf(0)
     private var loaded = false
 
     fun load(prefs: ViewPrefs) {
@@ -134,7 +149,16 @@ object GridPrefs {
         loaded = true
         Timeframe.of(prefs.read("grid.timeframe"))?.let { timeframe = it }
         prefs.read("grid.density")?.let { compact = it != "comfortable" }
+        focus = prefs.read("grid.focus")?.takeIf { it.isNotBlank() }
+        focusLabel = prefs.read("grid.focusLabel").orEmpty()
+        railFolded = prefs.read("grid.rail") == "folded"
     }
+
+    fun chooseFocus(id: String?, label: String, prefs: ViewPrefs?) {
+        focus = id; focusLabel = if (id == null) "" else label
+        prefs?.write("grid.focus", id); prefs?.write("grid.focusLabel", if (id == null) null else label)
+    }
+    fun foldRail(on: Boolean, prefs: ViewPrefs?) { railFolded = on; prefs?.write("grid.rail", if (on) "folded" else null) }
 
     fun chooseTimeframe(tf: Timeframe, prefs: ViewPrefs?) { timeframe = tf; prefs?.write("grid.timeframe", tf.label) }
     fun chooseCompact(on: Boolean, prefs: ViewPrefs?) { compact = on; prefs?.write("grid.density", if (on) "compact" else "comfortable") }
@@ -150,13 +174,43 @@ object Watchlist {
         prefs = p
         items.clear()
         items.addAll(p.read("watch")?.split('|')?.filter { it.isNotBlank() }.orEmpty())
+        loadAlerts(p.read("watch.alerts"))
     }
+
+    /** One simple alert per starred item, kept with the watchlist. */
+    val alerts = androidx.compose.runtime.mutableStateMapOf<String, WatchAlert>()
 
     fun has(id: String) = id in items
     fun toggle(id: String) {
         if (id in items) items.remove(id) else items.add(id)
-        prefs?.write("watch", items.joinToString("|"))
+        if (id !in items) alerts.remove(id)
+        persist()
     }
+
+    fun setAlert(id: String, alert: WatchAlert?) {
+        if (alert == null) alerts.remove(id) else alerts[id] = alert
+        persist()
+    }
+
+    private fun persist() {
+        prefs?.write("watch", items.joinToString("|"))
+        prefs?.write("watch.alerts", alerts.entries.joinToString("|") { (k, a) -> "$k=${if (a.above) ">" else "<"}${a.level}" }.ifEmpty { null })
+    }
+
+    internal fun loadAlerts(raw: String?) {
+        alerts.clear()
+        raw?.split('|')?.forEach { e ->
+            val at = e.lastIndexOf('=')
+            if (at <= 0 || at >= e.length - 1) return@forEach
+            val level = e.substring(at + 2).toLongOrNull() ?: return@forEach
+            alerts[e.substring(0, at)] = WatchAlert(e[at + 1] == '>', level)
+        }
+    }
+}
+
+/** Whether Ctrl is held: the shell tracks it from key events, so a click can open beside instead of over. */
+object Keys {
+    var ctrl by mutableStateOf(false)
 }
 
 /** Pictures and tests only: open a menu, type a search or reshape a screen's view when its grid first draws. */
@@ -166,7 +220,15 @@ object GridDemo {
     var search: String = ""
     var shape: ((ViewState) -> ViewState)? = null
     var railTab: String? = null
-    fun clear() { screen = null; menu = null; search = ""; shape = null; railTab = null }
+    /** The Ctrl K finder open with this text typed. */
+    var find: String? = null
+    /** The watch alert editor open on this starred item. */
+    var alertEdit: String? = null
+    /** A heading menu open on this column, a drill-down open on this column of the first row, or "chart" for chart these. */
+    var head: String? = null
+    var drill: String? = null
+    var chart: Boolean = false
+    fun clear() { screen = null; menu = null; search = ""; shape = null; railTab = null; find = null; alertEdit = null; head = null; drill = null; chart = false }
 }
 
 private val fallbackPrefs = MapViewPrefs()
@@ -204,7 +266,7 @@ fun <T> DataGrid(
     val book = remember(views?.screen) { views?.let { ViewBook(it.screen, it.builtIn, prefs) } }
     val plain = remember { ViewState("", columns.filter { it.shown }.map { ColumnSpec(it.id) }, initialSort, initialDescending) }
     val demo = views != null && GridDemo.screen == views.screen
-    var view by remember(views?.screen) {
+    var view by remember(views?.screen, GridPrefs.epoch) {
         mutableStateOf(book?.let { b -> b.named(b.activeName)!!.let { v -> if (demo) GridDemo.shape?.invoke(v) ?: v else v } } ?: plain)
     }
     var search by remember(views?.screen) { mutableStateOf(if (demo) GridDemo.search else "") }
@@ -214,6 +276,12 @@ fun <T> DataGrid(
     val extra = remember { mutableStateListOf<String>() }
     val collapsed = remember { mutableStateListOf<String>() }
     var hovered by remember { mutableStateOf<Any?>(null) }
+    // Rows marked for "chart these" (Ctrl-click or a long press on a row), the heading whose menu is open, and an open drill-down.
+    val marked = remember(views?.screen) { mutableStateListOf<Any>() }
+    var headMenu by remember { mutableStateOf(if (demo) GridDemo.head else null) }
+    var drill by remember { mutableStateOf<DrillItem?>(null) }
+    var charting by remember { mutableStateOf(demo && GridDemo.chart) }
+    var drillDemo by remember { mutableStateOf(if (demo) GridDemo.drill else null) }
     val base = book?.named(view.name)
     val modified = book != null && base != null && !view.sameShape(base)
     val tf = view.timeframe ?: GridPrefs.timeframe
@@ -239,8 +307,12 @@ fun <T> DataGrid(
     val scoped = if (view.scope.isEmpty() || views == null) rows else rows.filter { r ->
         view.scope.any { id -> if (id == "mine") views.mine(r) else views.scopes.firstOrNull { it.id == id }?.test?.invoke(r) ?: false }
     }
-    val kept = applyFilters(scoped, view.filters + typed, reader)
-    val effective = specs.map { s -> applyMode(byId.getValue(s.id), s, tf, kept) }
+    // The pinned focus in the top strip narrows every grid it applies to, on top of the view's own scope.
+    val focusId = GridPrefs.focus
+    val focusTest: ((T) -> Boolean)? = if (views == null || focusId == null) null else if (focusId == "mine") views.mine else views.scopes.firstOrNull { it.id == focusId }?.test
+    val focused = focusTest?.let { t -> scoped.filter(t) } ?: scoped
+    val kept = applyFilters(focused, view.filters + typed, reader)
+    val effective = specs.map { s -> applyMode(byId.getValue(s.id), s, tf, kept, view.compare) }
     val sortCol = effective.firstOrNull { it.id == view.sort }
     val shown = run {
         val sorted = when {
@@ -316,8 +388,9 @@ fun <T> DataGrid(
                 csv = { gridCsv(shown, visible) },
                 distinct = { id -> rows.mapNotNull { byId[id]?.text?.invoke(it) }.filter { it.isNotBlank() && it != DASH }.distinct().sorted() },
                 onExtra = { id -> extra.add(id) },
+                onChart = { charting = true },
             )
-            ChipRow(view, views, columns, ::change)
+            ChipRow(view, views, columns, ::change, focus = if (focusTest != null) GridPrefs.focusLabel else null, marked = marked.size, onChart = { charting = true }, onUnmark = { marked.clear() })
         } else {
             // Title, count and filter: the small grids inside a pane.
             Row(Modifier.fillMaxWidth().background(Palette.panelRaised).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -344,20 +417,46 @@ fun <T> DataGrid(
                 // The header stays put while the rows scroll under it.
                 Row(Modifier.fillMaxWidth().height(22.dp).background(Palette.ink).padding(horizontal = pad), verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.width(2.dp))
-                    HeaderCell(firstCol, firstWidth, firstCol.id == view.sort, view.descending, tf) { pickSort(firstCol) }
+                    // A right-click or a long press on a heading opens its menu: sort, show as, filter, group, hide.
+                    val headingMenu: @Composable (GridColumn<T>) -> Unit = { c ->
+                        if (views != null && headMenu == c.id) {
+                            val spec = specs.firstOrNull { it.key == c.id } ?: ColumnSpec(c.id)
+                            HeadingMenu(byId.getValue(spec.id), spec, c.numeric, view, columns, first.id, ::change, { headMenu = null }) { id ->
+                                rows.mapNotNull { byId[id]?.text?.invoke(it) }.filter { it.isNotBlank() && it != DASH }.distinct().sorted()
+                            }
+                        }
+                    }
+                    val openHead: ((String) -> Unit)? = if (views != null) { id -> headMenu = id } else null
+                    HeaderCell(firstCol, firstWidth, firstCol.id == view.sort, view.descending, tf, openHead?.let { o -> { o(firstCol.id) } }, { headingMenu(firstCol) }) { pickSort(firstCol) }
                     Box(Modifier.weight(1f).horizontalScroll(hScroll)) {
-                        Row(Modifier.width(restWidth)) { rest.forEach { c -> HeaderCell(c, widths.getValue(c.id), c.id == view.sort, view.descending, tf) { pickSort(c) } } }
+                        Row(Modifier.width(restWidth)) { rest.forEach { c -> HeaderCell(c, widths.getValue(c.id), c.id == view.sort, view.descending, tf, openHead?.let { o -> { o(c.id) } }, { headingMenu(c) }) { pickSort(c) } } }
                     }
                     if (onOpen != null) Spacer(Modifier.width(18.dp))
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
                 val cellMenu: ((Filter) -> Unit)? = if (views != null) { f -> change(view.withFilter(f)) } else null
+                // A figure the game keeps history of opens its breakdown; with Ctrl, or held, it opens beside the screen.
+                val figure: ((T, GridColumn<T>, Boolean) -> Unit)? = if (views == null) null else { r, c, beside ->
+                    val src = byId[c.id.substringBefore('.')]
+                    val s = src?.series?.invoke(r)
+                    if (src != null && s != null) {
+                        val item = DrillItem("${first.text(r)}: ${src.title}", s, src.step, src.fmt ?: { v -> Format.count(v) }, src.longSeries?.invoke(r), src.longStep)
+                        if (beside) SidePanes.open(item) else drill = item
+                    }
+                }
+                LaunchedEffect(drillDemo, shown.size) {
+                    val d = drillDemo
+                    if (d != null && figure != null && shown.isNotEmpty()) { effective.firstOrNull { it.id == d }?.let { figure(shown.first(), it, false) }; drillDemo = null }
+                }
+                fun rowClick(r: T) { if (Keys.ctrl && views != null) toggleMark(marked, key(r)) else onSelect(r) }
+                val rowHold: ((T) -> Unit)? = if (views != null) { r -> toggleMark(marked, key(r)) } else null
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), state = list) {
                     if (group == null) {
                         items(shown.size, key = { i -> key(shown[i]) }) { i ->
                             val r = shown[i]
                             GridRow(i, r, firstCol, firstWidth, rest, widths, restWidth, hScroll, key(r) == selected, rowHeight, cellMenu,
-                                onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { onSelect(r) }, onOpen = onOpen?.let { o -> { o(r) } }, watch = watchKey?.invoke(r))
+                                onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { rowClick(r) }, onOpen = onOpen?.let { o -> { o(r) } }, watch = watchKey?.invoke(r),
+                                marked = key(r) in marked, onHold = rowHold?.let { h -> { h(r) } }, onFigure = figure?.let { f -> { c, beside -> f(r, c, beside) } })
                         }
                     } else {
                         groupRows(shown) { group.text(it) }.forEach { (name, members) ->
@@ -367,7 +466,8 @@ fun <T> DataGrid(
                             if (name !in collapsed) items(members.size, key = { i -> key(members[i]) }) { i ->
                                 val r = members[i]
                                 GridRow(i, r, firstCol, firstWidth, rest, widths, restWidth, hScroll, key(r) == selected, rowHeight, cellMenu,
-                                    onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { onSelect(r) }, onOpen = onOpen?.let { o -> { o(r) } }, watch = watchKey?.invoke(r))
+                                    onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { rowClick(r) }, onOpen = onOpen?.let { o -> { o(r) } }, watch = watchKey?.invoke(r),
+                                    marked = key(r) in marked, onHold = rowHold?.let { h -> { h(r) } }, onFigure = figure?.let { f -> { c, beside -> f(r, c, beside) } })
                             }
                         }
                     }
@@ -387,10 +487,19 @@ fun <T> DataGrid(
                     )
                 }
             }
+            // The drill-down and "chart these" open over the rows, on the right, and close with their button.
+            drill?.let { d -> DrillOverlay(d, tf, { drill = null }, Modifier.align(Alignment.TopEnd).padding(8.dp).width(420.dp)) }
+            if (charting) {
+                val picks = shown.filter { key(it) in marked }.ifEmpty { shown.take(6) }
+                ChartThese(picks, { first.text(it) }, effective.map { byId[it.id.substringBefore('.')] ?: it }.distinctBy { it.id }, view.sort?.substringBefore('.'), tf, { charting = false },
+                    Modifier.align(Alignment.TopEnd).padding(8.dp).width(560.dp))
+            }
         }
     }
     }
 }
+
+private fun toggleMark(marked: MutableList<Any>, k: Any) { if (k in marked) marked.remove(k) else marked.add(k) }
 
 private fun digitOf(k: Key): Int? = when (k) {
     Key.One -> 1; Key.Two -> 2; Key.Three -> 3; Key.Four -> 4; Key.Five -> 5
@@ -413,31 +522,53 @@ internal fun <T> modesOf(c: GridColumn<T>): List<ColumnMode> = when {
     else -> listOf(ColumnMode.Value, ColumnMode.Bar, ColumnMode.Rank)
 }
 
-/** A column as it shows in [spec]'s way over [tf]: its text, sort, tone, bar and sparkline follow. */
-private fun <T> applyMode(c: GridColumn<T>, spec: ColumnSpec, tf: Timeframe, rows: List<T>): GridColumn<T> {
+/** A column as it shows in [spec]'s way over [tf] (and against [compare]): its text, sort, tone, bar and sparkline follow. */
+private fun <T> applyMode(c: GridColumn<T>, spec: ColumnSpec, tf: Timeframe, rows: List<T>, compare: Compare = Compare.None): GridColumn<T> {
     val series = c.series
     val sort = c.sort
-    fun make(text: (T) -> String, sortBy: ((T) -> Long)?, tone: (T) -> Color, bar: ((T) -> Float)? = null, spark: ((T) -> List<Long>)? = null, width: Dp? = c.width, tip: String) =
-        GridColumn(spec.key, modeTitle(c.title, spec.mode), width, true, text, sortBy, tone, bar, spark, tip, true, false, c.dropOrder, null, null, series, c.step, c.fmt, c.scale, false, c.topic)
+    fun make(text: (T) -> String, sortBy: ((T) -> Long)?, tone: (T) -> Color, bar: ((T) -> Float)? = null, spark: ((T) -> List<Long>)? = null, width: Dp? = c.width, tip: String, title: String = modeTitle(c.title, spec.mode)) =
+        GridColumn(
+            spec.key, title, width, true, text, sortBy, tone, bar, spark, tip, true, false, c.dropOrder, null, null, series, c.step, c.fmt, c.scale, false, c.topic,
+            longSeries = c.longSeries, longStep = c.longStep,
+        )
     val span = if (tf == Timeframe.All) "over all the history kept" else "over the last ${tf.label}"
+    fun win(r: T): List<Long>? = windowOf(series?.invoke(r), c.step, c.longSeries?.invoke(r), c.longStep, tf)
+    // A compare measures the average over the timeframe against the period before or a year earlier.
+    val comparing = compare != Compare.None && tf != Timeframe.All && series != null
+    fun cmp(r: T): Pair<Long, Long>? = series?.let { compareAverages(it(r), tf, c.step, compare) }
+    val against = if (compare == Compare.Previous) "vs prev" else "vs yr ago"
+    val cmpTip = if (compare == Compare.Previous) "the ${tf.label} before" else "the same ${tf.label} a year earlier"
     return when (spec.mode) {
         ColumnMode.Value -> c
-        ColumnMode.Change -> if (series == null) c else make(
-            text = { r -> seriesChange(series(r), tf, c.step)?.let { v -> (if (v > 0) "+" else "") + (c.fmt?.invoke(v) ?: Format.count(v)) } ?: DASH },
-            sortBy = { r -> seriesChange(series(r), tf, c.step) ?: Long.MIN_VALUE },
-            tone = { r -> seriesChange(series(r), tf, c.step)?.let { if (it > 0) Palette.positive else if (it < 0) Palette.negative else Palette.secondary } ?: Palette.secondary },
+        ColumnMode.Change -> if (series == null) c else if (comparing) make(
+            text = { r -> cmp(r)?.let { (a, b) -> val v = a - b; (if (v > 0) "+" else "") + (c.fmt?.invoke(v) ?: Format.count(v)) } ?: DASH },
+            sortBy = { r -> cmp(r)?.let { it.first - it.second } ?: Long.MIN_VALUE },
+            tone = { r -> cmp(r)?.let { tint(it.first - it.second) } ?: Palette.secondary },
+            tip = "The average ${c.title.lowercase()} over the last ${tf.label} less the average over $cmpTip. A dash means the game has no record that far back.",
+            title = "${c.title} $against",
+        ) else make(
+            text = { r -> win(r)?.let(::windowChange)?.let { v -> (if (v > 0) "+" else "") + (c.fmt?.invoke(v) ?: Format.count(v)) } ?: DASH },
+            sortBy = { r -> win(r)?.let(::windowChange) ?: Long.MIN_VALUE },
+            tone = { r -> win(r)?.let { tint(windowChange(it)) } ?: Palette.secondary },
             tip = "How much ${c.title.lowercase()} changed $span. A dash means the game has no record that far back.",
         )
-        ColumnMode.Percent -> if (series == null) c else make(
-            text = { r -> seriesChangeBps(series(r), tf, c.step)?.let(::changeText) ?: DASH },
-            sortBy = { r -> seriesChangeBps(series(r), tf, c.step) ?: Long.MIN_VALUE },
-            tone = { r -> seriesChangeBps(series(r), tf, c.step)?.let(::changeTint) ?: Palette.secondary },
+        ColumnMode.Percent -> if (series == null) c else if (comparing) make(
+            text = { r -> cmp(r)?.let(::compareBps)?.let(::changeText) ?: DASH },
+            sortBy = { r -> cmp(r)?.let(::compareBps) ?: Long.MIN_VALUE },
+            tone = { r -> cmp(r)?.let(::compareBps)?.let(::changeTint) ?: Palette.secondary },
+            width = 84.dp,
+            tip = "The average ${c.title.lowercase()} over the last ${tf.label} against the average over $cmpTip, in percent. A dash means the game has no record that far back.",
+            title = "${c.title} % $against",
+        ) else make(
+            text = { r -> win(r)?.let(::windowBps)?.let(::changeText) ?: DASH },
+            sortBy = { r -> win(r)?.let(::windowBps) ?: Long.MIN_VALUE },
+            tone = { r -> win(r)?.let(::windowBps)?.let(::changeTint) ?: Palette.secondary },
             width = 70.dp,
             tip = "${c.title} $span, as a percent of where it started. A dash means the game has no record that far back.",
         )
         ColumnMode.Spark -> if (series == null) c else make(
-            text = { DASH }, sortBy = { r -> seriesChangeBps(series(r), tf, c.step) ?: Long.MIN_VALUE }, tone = { Palette.secondary },
-            spark = { r -> seriesWindow(series(r), tf, c.step) ?: emptyList() }, width = 90.dp,
+            text = { DASH }, sortBy = { r -> win(r)?.let(::windowBps) ?: Long.MIN_VALUE }, tone = { Palette.secondary },
+            spark = { r -> win(r) ?: emptyList() }, width = 90.dp,
             tip = "${c.title} $span. Sorting by it sorts by the change in percent.",
         )
         ColumnMode.Bar -> if (sort == null) c else {
@@ -453,6 +584,8 @@ private fun <T> applyMode(c: GridColumn<T>, spec: ColumnSpec, tf: Timeframe, row
     }
 }
 
+private fun tint(v: Long): Color = if (v > 0) Palette.positive else if (v < 0) Palette.negative else Palette.secondary
+
 /** What one grid needs besides its rows: the title bar, the column heading, the breakdown line and the frame. */
 val GridChromeHeight: Dp = 88.dp
 
@@ -460,15 +593,48 @@ val GridChromeHeight: Dp = 88.dp
 fun gridNaturalHeight(rows: Int): Dp = GridChromeHeight + GridRowHeight * rows.coerceAtLeast(2)
 
 @Composable
-private fun <T> HeaderCell(c: GridColumn<T>, width: Dp, sorted: Boolean, descending: Boolean, tf: Timeframe, onClick: () -> Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun <T> HeaderCell(c: GridColumn<T>, width: Dp, sorted: Boolean, descending: Boolean, tf: Timeframe, onMenu: (() -> Unit)? = null, menu: @Composable () -> Unit = {}, onClick: () -> Unit) {
     val arrow = if (sorted) (if (descending) " v" else " ^") else ""
-    Explain(c.tip ?: Words.about(c.title), Modifier.width(width)) {
-        Text(
-            c.title.uppercase() + arrow, color = if (sorted) Palette.gold else Palette.secondary,
-            fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Visible,
-            textAlign = if (c.numeric) TextAlign.End else TextAlign.Start,
-            modifier = Modifier.fillMaxWidth().pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick).padding(horizontal = 4.dp),
-        )
+    Box(Modifier.width(width)) {
+        Explain(c.tip ?: Words.about(c.title), Modifier.width(width)) {
+            Text(
+                c.title.uppercase() + arrow, color = if (sorted) Palette.gold else Palette.secondary,
+                fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Visible,
+                textAlign = if (c.numeric) TextAlign.End else TextAlign.Start,
+                modifier = Modifier.fillMaxWidth().pointerHoverIcon(PointerIcon.Hand).onSecondaryPress(onMenu)
+                    .combinedClickable(onClick = onClick, onLongClick = onMenu).padding(horizontal = 4.dp),
+            )
+        }
+        menu()
+    }
+}
+
+/** A heading's own menu: sort, show as, filter, group and hide, for that column only. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun <T> HeadingMenu(
+    c: GridColumn<T>, spec: ColumnSpec, numeric: Boolean, view: ViewState, columns: List<GridColumn<T>>, firstId: String,
+    onView: (ViewState) -> Unit, onClose: () -> Unit, distinct: (String) -> List<String>,
+) {
+    PixelMenu(onClose, 260.dp) {
+        MenuHeading(modeTitle(c.title, spec.mode))
+        MenuItem(if (numeric) "Sort high first" else "Sort Z to A", on = view.sort == spec.key && view.descending) { onView(view.copy(sort = spec.key, descending = true)); onClose() }
+        MenuItem(if (numeric) "Sort low first" else "Sort A to Z", on = view.sort == spec.key && !view.descending) { onView(view.copy(sort = spec.key, descending = false)); onClose() }
+        val modes = modesOf(c)
+        if (modes.size > 1) {
+            MenuHeading("Show as")
+            FlowRow(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 3.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                modes.forEach { m -> GridButton(m.label, spec.mode == m, 9.sp) { onView(view.withMode(spec.key, m)); onClose() } }
+            }
+        }
+        if (c.sort != null || !c.numeric) {
+            MenuRule()
+            FilterMenu(view, columns, "filter:${c.id}", onView, { if (it == null) onClose() }, distinct)
+        }
+        MenuRule()
+        if (!c.numeric && c.id != firstId) MenuItem("Group rows by ${c.title}", on = view.groupBy == c.id) { onView(view.copy(groupBy = if (view.groupBy == c.id) null else c.id)); onClose() }
+        if (c.id != firstId) MenuItem("Hide this column") { onView(view.copy(columns = view.columns - spec, sort = view.sort.takeIf { it != spec.key })); onClose() }
     }
 }
 
@@ -477,6 +643,7 @@ private fun <T> GridRow(
     index: Int, row: T, first: GridColumn<T>, firstWidth: Dp, rest: List<GridColumn<T>>, widths: Map<String, Dp>, restWidth: Dp,
     hScroll: androidx.compose.foundation.ScrollState, selected: Boolean, height: Dp, cellMenu: ((Filter) -> Unit)?,
     onHover: (Boolean) -> Unit, onClick: () -> Unit, onOpen: (() -> Unit)?, watch: String? = null,
+    marked: Boolean = false, onHold: (() -> Unit)? = null, onFigure: ((GridColumn<T>, Boolean) -> Unit)? = null,
 ) {
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
@@ -485,10 +652,11 @@ private fun <T> GridRow(
     Row(
         Modifier.fillMaxWidth().height(height)
             .background(if (selected) Palette.gold.copy(alpha = 0.18f) else if (hovered) Palette.panelRaised else base)
-            .hoverable(hover).pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick).padding(horizontal = 6.dp),
+            .hoverable(hover).pointerHoverIcon(PointerIcon.Hand).combinedClickable(onClick = onClick, onLongClick = onHold).padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(2.dp).fillMaxHeight().background(if (selected) Palette.gold else Color.Transparent))
+        // Gold marks the picked row; a row marked for a chart carries a wider green edge.
+        Box(Modifier.width(if (marked) 4.dp else 2.dp).fillMaxHeight().background(if (marked) Palette.positive else if (selected) Palette.gold else Color.Transparent))
         if (watch != null) {
             // The star shows on a watched row, or under the pointer, so an unwatched grid stays calm.
             val on = Watchlist.has(watch)
@@ -502,7 +670,7 @@ private fun <T> GridRow(
             Row(Modifier.width(restWidth).fillMaxHeight()) {
                 rest.forEach { c ->
                     // A category cell (a sector, a region) offers "only this" and "not this".
-                    GridCell(row, c, widths.getValue(c.id), if (!c.numeric) cellMenu else null, onClick)
+                    GridCell(row, c, widths.getValue(c.id), if (!c.numeric) cellMenu else null, onClick, if (c.numeric && c.series != null && c.spark == null) onFigure else null)
                 }
             }
         }
@@ -546,7 +714,8 @@ private fun <T> GroupRow(
 }
 
 @Composable
-private fun <T> GridCell(row: T, c: GridColumn<T>, width: Dp, onPick: ((Filter) -> Unit)?, onClick: () -> Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun <T> GridCell(row: T, c: GridColumn<T>, width: Dp, onPick: ((Filter) -> Unit)?, onClick: () -> Unit, onFigure: ((GridColumn<T>, Boolean) -> Unit)? = null) {
     // A category cell (a sector, a region) offers "only this" and "not this" when clicked.
     var open by remember { mutableStateOf(false) }
     val value = c.text(row)
@@ -556,7 +725,13 @@ private fun <T> GridCell(row: T, c: GridColumn<T>, width: Dp, onPick: ((Filter) 
             MenuItem("Not $value") { onPick(Filter(FilterOp.Not, c.id, value)); open = false }
         }
     }
-    val m = Modifier.width(width).fillMaxHeight().let { if (onPick != null && value.isNotBlank() && value != DASH) it.clickable { onClick(); open = true } else it }.padding(horizontal = 4.dp)
+    val m = Modifier.width(width).fillMaxHeight().let {
+        when {
+            onPick != null && value.isNotBlank() && value != DASH -> it.clickable { onClick(); open = true }
+            onFigure != null -> it.combinedClickable(onClick = { onClick(); onFigure(c, Keys.ctrl) }, onLongClick = { onFigure(c, true) })
+            else -> it
+        }
+    }.padding(horizontal = 4.dp)
     val spark = c.spark
     if (spark != null) {
         val values = spark(row)

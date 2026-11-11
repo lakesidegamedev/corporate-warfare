@@ -160,7 +160,12 @@ class GridViewTest {
         val screens = mapOf(
             GoodsViews to setOf("name", "sector", "price", "vsnormal", "week", "made", "sold", "through", "stock", "imported", "exported", "yours"),
             LeagueViews to setOf("name", "sector", "revenue", "profit", "margin", "cash", "debt", "price", "week", "cap", "fair", "float", "divisions", "held", "overlap", "theirlots", "raids"),
-            DivisionViews to setOf("name", "sector", "region", "strategy", "plants", "share", "stock", "serves", "made", "sold", "util", "price", "cost", "margin", "weekly"),
+            DivisionViews to setOf("name", "sector", "region", "strategy", "plants", "share", "stock", "serves", "made", "sold", "util", "price", "cost", "margin", "weekly", "mpct", "earned"),
+            LineViews to setOf("name", "price", "market", "cost", "margin", "made", "sold", "stock", "posture"),
+            ResultViews to setOf("week", "revenue", "goods", "wages", "net", "cash", "equity", "nm"),
+            OpeningViews to setOf("name", "sector", "region", "room", "block", "unmet", "price", "vsnormal", "contrib", "build", "payback", "traded"),
+            AuctionViews to setOf("name", "seller", "route", "region", "blocks", "book", "reserve", "weekly", "best", "bids", "yourbid", "left"),
+            RaidViews to setOf("name", "role", "target", "sector", "region", "budget", "attack", "defence", "chance", "stake", "left"),
         )
         for ((views, ids) in screens) {
             assertTrue(views.size in 3..5)
@@ -169,6 +174,48 @@ class GridViewTest {
                 assertNotNull(v.columns.firstOrNull { it.key == v.sort }, "${v.name} sorts by a column it does not show")
             }
         }
+    }
+
+    @Test
+    fun longHistoryFillsInWhereTheWeeklyStops() {
+        // A year of weekly debt (53 closes) and five years by quarter (21 closes, 13 weeks each).
+        val weekly = (0L..52L).map { 1_000 + it }
+        val quarterly = (0L..20L).map { it * 100 }
+        // 13 weeks: the weekly series reaches; 5 years: only the quarterly one does.
+        assertEquals(listOf(1_039L, 1_052L), windowOf(weekly, 1, quarterly, 13, Timeframe.W13)?.let { listOf(it.first(), it.last()) })
+        val five = windowOf(weekly, 1, quarterly, 13, Timeframe.Y5)!!
+        assertEquals(21, five.size)
+        assertEquals(2_000L, windowChange(five))
+        assertEquals(null, windowBps(five)) // starts at zero: no percent
+        assertEquals(null, windowOf(weekly.take(3), 1, null, 13, Timeframe.W13))
+    }
+
+    @Test
+    fun compareAgainstThePeriodBeforeAndAYearEarlier() {
+        // 104 weekly points: 100 for the first year, then 150 for 39 weeks and 200 for the last 13.
+        val s = List(52) { 100L } + List(39) { 150L } + List(13) { 200L }
+        // Last 13 weeks average 200; the 13 before average 150; the same 13 a year earlier average 100.
+        assertEquals(200L to 150L, compareAverages(s, Timeframe.W13, 1, Compare.Previous))
+        assertEquals(200L to 100L, compareAverages(s, Timeframe.W13, 1, Compare.YearAgo))
+        assertEquals(3_333L, compareBps(200L to 150L))
+        assertEquals(10_000L, compareBps(200L to 100L))
+        assertEquals(null, compareAverages(s, Timeframe.All, 1, Compare.Previous))
+        assertEquals(null, compareAverages(s, Timeframe.W13, 1, Compare.None))
+        // A year back needs 52 weeks plus the window: 60 points are not enough for 13 weeks.
+        assertEquals(null, compareAverages(s.takeLast(60), Timeframe.W13, 1, Compare.YearAgo))
+    }
+
+    @Test
+    fun watchAlertsFireAndSurviveTheSettingsFile() {
+        assertTrue(WatchAlert(above = true, level = 1_000).fired(1_001))
+        assertTrue(!WatchAlert(above = true, level = 1_000).fired(1_000))
+        assertTrue(WatchAlert(above = false, level = 1_000).fired(999))
+        Watchlist.loadAlerts("good:steel=>1250|firm:Gulf Oil=<4000|broken")
+        assertEquals(WatchAlert(true, 1_250), Watchlist.alerts["good:steel"])
+        assertEquals(WatchAlert(false, 4_000), Watchlist.alerts["firm:Gulf Oil"])
+        assertEquals(2, Watchlist.alerts.size)
+        Watchlist.loadAlerts(null)
+        assertTrue(Watchlist.alerts.isEmpty())
     }
 
     @Test

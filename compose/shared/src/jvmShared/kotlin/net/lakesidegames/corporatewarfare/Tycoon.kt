@@ -25,6 +25,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uniffi.cw_ffi.CommodityDto
 import uniffi.cw_ffi.DivisionDto
+import uniffi.cw_ffi.DivisionSeriesDto
+import uniffi.cw_ffi.GoodSeriesDto
 import uniffi.cw_ffi.HeadToHeadDto
 import uniffi.cw_ffi.PeriodDto
 import uniffi.cw_ffi.ProductLineDto
@@ -64,9 +68,12 @@ enum class Place(val title: String, val group: String, val key: String, val conv
     Research("Research", "Company", "F3", false),
     Office("Office room", "Company", "", false),
     Goods("Goods", "Markets", "F5", true),
+    Openings("Openings", "Markets", "", true),
+    Auctions("Auctions, listings", "Markets", "", true),
     Exchange("Stocks, economy", "Markets", "", false),
     Map("Map, freight", "Markets", "F1", false),
     League("League table", "Rivals", "F6", true),
+    Raids("Raids", "Rivals", "", true),
     Paper("The paper", "World", "F8", false),
     Inbox("Letters", "World", "", false),
     Portfolio("Portfolio", "You", "F7", false),
@@ -92,18 +99,26 @@ fun TycoonShell(store: GameStore, onSettings: () -> Unit, onMenu: () -> Unit = {
     var dockShare by remember { mutableStateOf(DOCK_DEFAULT) }
     var dockLayer by remember { mutableStateOf(MapLayer.Presence) }
     var dockSelected by remember { mutableStateOf<String?>(null) }
+    var goodsPick by remember { mutableStateOf<UInt?>(null) }
+    // An action opened from a screen (bid for this site, defend this market) with its fields filled in.
+    var action by remember { mutableStateOf<Pair<String, Map<String, String>>?>(null) }
+    var allActions by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    fun open(p: Place) { place = p; palette = false }
+    fun open(p: Place) { place = p; palette = false; action = null }
     fun openRival(firm: ULong) { leaguePick = firm; open(Place.League) }
+    fun openGood(product: UInt) { goodsPick = product; open(Place.Goods) }
+    fun closePalette() { palette = false; action = null; allActions = false }
     Box(
         Modifier.fillMaxSize().background(Palette.ink).focusRequester(focus).focusable()
             .onPreviewKeyEvent { e ->
+                // Ctrl held turns a click on a figure into "open beside" and a click on a row into "mark".
+                Keys.ctrl = e.isCtrlPressed
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when {
-                    e.isCtrlPressed && e.key == Key.K -> { palette = !palette; true }
+                    e.isCtrlPressed && e.key == Key.K -> { if (palette) closePalette() else palette = true; true }
                     e.isCtrlPressed && e.key == Key.M -> { docked = !docked; true }
-                    e.key == Key.Escape && palette -> { palette = false; true }
+                    e.key == Key.Escape && palette -> { closePalette(); true }
                     else -> Place.entries.firstOrNull { it.key.isNotEmpty() && keyName(e.key) == it.key }?.let { open(it); true } ?: false
                 }
             },
@@ -116,21 +131,39 @@ fun TycoonShell(store: GameStore, onSettings: () -> Unit, onMenu: () -> Unit = {
                 PlaceNav(place, store.inboxBadge, ::open, onSettings, onMenu, docked) { docked = !docked }
                 Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.stroke))
                 Box(Modifier.weight(1f).fillMaxHeight()) {
-                    val content: @Composable () -> Unit = { PlaceContent(store, place, leaguePick, { leaguePick = it }, ::open, ::openRival) }
+                    val content: @Composable () -> Unit = {
+                        androidx.compose.runtime.CompositionLocalProvider(LocalActions provides { cmd, preset -> action = cmd to preset; palette = true }) {
+                            PlaceContent(store, place, leaguePick, { leaguePick = it }, ::open, ::openRival, goodsPick)
+                        }
+                    }
                     if (docked && place != Place.Map) {
                         DockedSplit(dockShare, { dockShare = it }, map = {
                             DockedMap(store, dockLayer, { dockLayer = it }, dockSelected, { dockSelected = it }) { open(Place.Map) }
                         }, page = content)
                     } else content()
                 }
+                // The side pane: figures opened beside the screen, one above the other to compare.
+                if (SidePanes.items.isNotEmpty()) {
+                    Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.stroke))
+                    SidePaneColumn(Modifier.width(330.dp).fillMaxHeight())
+                }
                 Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.stroke))
-                AlertRail(store, Modifier.width(250.dp).fillMaxHeight(), ::open, ::openRival)
+                AlertRail(store, Modifier.width(if (GridPrefs.railFolded) 38.dp else 250.dp).fillMaxHeight(), ::open, ::openRival, ::openGood)
             }
         }
-        if (palette) {
-            Box(Modifier.fillMaxSize().background(Palette.ink.copy(alpha = 0.7f)).clickable { palette = false }, contentAlignment = Alignment.TopCenter) {
+        if (palette || GridDemo.find != null) {
+            Box(Modifier.fillMaxSize().background(Palette.ink.copy(alpha = 0.7f)).clickable { closePalette() }, contentAlignment = Alignment.TopCenter) {
                 Box(Modifier.padding(top = 60.dp).width(900.dp).height(640.dp).border(2.dp, Palette.gold).background(Palette.panel).clickable(enabled = false) {}) {
-                    CommandCenterScreen(store, onClose = { palette = false })
+                    val a = action
+                    when {
+                        a != null -> CommandCenterScreen(store, onClose = ::closePalette, initialCommand = a.first, preset = a.second)
+                        allActions -> CommandCenterScreen(store, onClose = ::closePalette)
+                        // Ctrl K finds first: places, goods, companies, divisions, saved views and actions in one list.
+                        else -> FindPalette(
+                            store, GridDemo.find.orEmpty(), onPlace = ::open, onGood = ::openGood, onRival = ::openRival,
+                            onAction = { cmd -> action = cmd to emptyMap() }, onAllActions = { allActions = true }, onClose = ::closePalette,
+                        )
+                    }
                 }
             }
         }
@@ -143,11 +176,14 @@ private fun keyName(k: Key): String = when (k) {
 }
 
 @Composable
-private fun PlaceContent(store: GameStore, place: Place, leaguePick: ULong?, onLeaguePick: (ULong) -> Unit, open: (Place) -> Unit, openRival: (ULong) -> Unit) {
+private fun PlaceContent(store: GameStore, place: Place, leaguePick: ULong?, onLeaguePick: (ULong) -> Unit, open: (Place) -> Unit, openRival: (ULong) -> Unit, goodsPick: UInt? = null) {
     when (place) {
         Place.Overview -> CompanyOverviewScreen(store)
-        Place.Goods -> GoodsScreen(store)
+        Place.Goods -> key(goodsPick) { GoodsScreen(store, goodsPick) }
+        Place.Openings -> OpeningsScreen(store)
+        Place.Auctions -> AuctionsScreen(store)
         Place.League -> LeagueScreen(store, leaguePick, onLeaguePick)
+        Place.Raids -> RaidsScreen(store, openRival)
         Place.Finance -> DesktopStats(store)
         Place.Research -> Box(Modifier.fillMaxSize().padding(10.dp)) { ResearchScreen(store) }
         Place.Office -> DesktopOffice(store) { page -> Place.entries.firstOrNull { it.name == page.name }?.let(open) ?: open(Place.Overview) }
@@ -190,6 +226,7 @@ fun TopStrip(store: GameStore, onOpen: (Place) -> Unit, onPalette: () -> Unit) {
         StripFigure("Net worth", Format.compact(o?.investorNetWorthCents ?: 0)) { onOpen(Place.Portfolio) }
         store.economy?.let { e -> StripFigure("Economy", "${e.phase.replaceFirstChar { it.uppercase() }} ${"%.2f%%".format(e.policyRateBps / 100.0)}", economyPhaseTint(e.phase)) { onOpen(Place.Exchange) } }
         Spacer(Modifier.weight(1f))
+        FocusChip()
         TimeframeStrip()
         Spacer(Modifier.width(10.dp))
         GridButton("Ctrl K  Actions", false, 10.sp, onPalette)
@@ -210,6 +247,20 @@ fun TimeframeStrip() {
     Explain("How far back every change, trend and bar on the grids looks. A grid can keep its own in its timeframe button.") {
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
             Timeframe.entries.forEach { t -> GridButton(t.label, GridPrefs.timeframe == t, 10.sp) { GridPrefs.chooseTimeframe(t, prefs) } }
+        }
+    }
+}
+
+/** The pinned focus every grid follows where it applies (a sector, a region, your own). Its cross unpins it. */
+@Composable
+fun FocusChip() {
+    val prefs = LocalAppSettings.current
+    if (GridPrefs.focus == null) return
+    Explain("Every grid that can show ${GridPrefs.focusLabel.lowercase()} shows only that. Pin or unpin a focus from any grid's Scope menu.") {
+        Row(Modifier.padding(end = 10.dp).border(1.dp, Palette.gold).background(Palette.ink).padding(start = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("FOCUS: " + GridPrefs.focusLabel.uppercase(), color = Palette.gold, fontFamily = Pixel.font, fontSize = 10.sp, maxLines = 1)
+            val cross = Modifier.pointerHoverIcon(PointerIcon.Hand).clickable { GridPrefs.chooseFocus(null, "", prefs) }.padding(horizontal = 6.dp, vertical = 3.dp)
+            Text("x", color = Palette.gold, fontFamily = Pixel.font, fontSize = 10.sp, modifier = cross)
         }
     }
 }
@@ -274,9 +325,17 @@ private fun NavItem(title: String, key: String, selected: Boolean, badge: Int, o
 /** How far back the alert rail looks for raids and rival moves. */
 private const val RAIL_WEEKS = 13L
 
-/** What needs the player, newest first, each line a link to where they act on it. Empty sections are not shown. */
+/** The rail's open tab, kept while the player moves between places. */
+object RailState {
+    var tab by mutableStateOf("Needs you")
+}
+
+/**
+ * What needs the player, newest first, each line a link to where they act on it. Empty sections
+ * are not shown. Folded, the rail is a column of three counts that open their tab.
+ */
 @Composable
-fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onRival: (ULong) -> Unit) {
+fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onRival: (ULong) -> Unit, onGood: (UInt) -> Unit = { onOpen(Place.Goods) }) {
     val o = store.overview
     val decisions = store.events.filter { it.mandatory }
     // Only what the player can act on: raids and rival moves from the last 13 weeks. Older ones live in the dossier.
@@ -288,33 +347,71 @@ fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onR
     val moves = store.rivalFeed.filter { recent(it.week) }
         .sortedWith(compareByDescending<RivalMoveFeedDto> { mine.isNotEmpty() && it.text.contains(mine) }.thenByDescending { it.week })
         .take(8)
-    val watchPrefs = LocalAppSettings.current
-    remember(watchPrefs) { watchPrefs?.let(Watchlist::load); 0 }
+    val prefs = LocalAppSettings.current
+    remember(prefs) { prefs?.let(Watchlist::load); prefs?.let(GridPrefs::load); 0 }
     // A decision already shows under Needs you; do not list it twice.
     val alerts = o?.alerts.orEmpty().filter { a -> decisions.none { d -> a.contains(d.title) } }
-    val needs = decisions.size + alerts.size + store.unreadLetters + if (o?.pauseInfo != null) 1 else 0
-    var tab by remember { mutableStateOf(GridDemo.railTab ?: "Needs you") }
-    Column(modifier.background(Palette.panel)) {
-        // Three tabs: what needs you, what you watch, and what rivals did.
-        Row(Modifier.fillMaxWidth().background(Palette.ink).padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            listOf("Needs you" to needs, "Watch" to Watchlist.items.size, "Feed" to raids.size + moves.size).forEach { (name, n) ->
-                GridButton(if (n > 0) "$name $n" else name, tab == name, 9.sp) { tab = name }
+    val fired = firedWatchAlerts(store)
+    val needs = decisions.size + alerts.size + store.unreadLetters + fired.size + if (o?.pauseInfo != null) 1 else 0
+    GridDemo.railTab?.let { RailState.tab = it }
+    val tabs = listOf(Triple("Needs you", "!", needs), Triple("Watch", "*", Watchlist.items.size), Triple("Feed", "~", raids.size + moves.size))
+    if (GridPrefs.railFolded) {
+        // Folded: a mark and a count per tab; a click opens the rail on that tab.
+        Column(modifier.background(Palette.panel).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GridButton("<", false, 9.sp) { GridPrefs.foldRail(false, prefs) }
+            tabs.forEach { (name, mark, n) ->
+                Explain(name) {
+                    Column(
+                        Modifier.width(30.dp).border(1.dp, if (name == "Needs you" && n > 0) Palette.warning else Palette.stroke).pointerHoverIcon(PointerIcon.Hand)
+                            .clickable { RailState.tab = name; GridPrefs.foldRail(false, prefs) }.padding(vertical = 3.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(mark, color = if (name == "Needs you" && n > 0) Palette.warning else Palette.gold, fontFamily = Pixel.font, fontSize = 12.sp)
+                        Text("$n", color = Palette.primaryText, style = GridFigures, fontSize = 10.sp)
+                    }
+                }
             }
         }
+        return
+    }
+    Column(modifier.background(Palette.panel)) {
+        // Three tabs: what needs you, what you watch, and what rivals did; the last button folds the rail.
+        Row(Modifier.fillMaxWidth().background(Palette.ink).padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            tabs.forEach { (name, _, n) -> GridButton(if (n > 0) "$name $n" else name, RailState.tab == name, 9.sp) { RailState.tab = name } }
+            Spacer(Modifier.weight(1f))
+            GridButton(">", false, 9.sp) { GridPrefs.foldRail(true, prefs) }
+        }
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
-            when (tab) {
-                "Watch" -> WatchTab(store, onOpen, onRival)
+            when (RailState.tab) {
+                "Watch" -> WatchTab(store, onOpen, onRival, onGood)
                 "Feed" -> FeedTab(store, raids, moves, onOpen, onRival)
-                else -> NeedsTab(store, decisions, alerts, onOpen)
+                else -> NeedsTab(store, decisions, alerts, fired, onOpen)
             }
         }
     }
 }
 
+/** A starred item's current figure for its alert: a good's price or a company's share price, in cents. */
+private fun watchFigure(store: GameStore, id: String): Pair<String, Long>? = when {
+    id.startsWith("good:") -> store.commodities.firstOrNull { "good:" + it.productId == id }?.let { it.name to it.priceCents }
+    id.startsWith("firm:") -> store.stocks.firstOrNull { "firm:" + it.name == id }?.let { it.name to it.priceCents }
+    else -> null
+}
+
+/** The watch alerts that have fired this week, as lines for Needs you. */
+private fun firedWatchAlerts(store: GameStore): List<String> = Watchlist.alerts.mapNotNull { (id, a) ->
+    val (name, value) = watchFigure(store, id) ?: return@mapNotNull null
+    if (!a.fired(value)) null else "$name is ${if (a.above) "above" else "below"} ${Format.money(a.level)}: now ${Format.money(value)}"
+}
+
 @Composable
-private fun NeedsTab(store: GameStore, decisions: List<uniffi.cw_ffi.EventDto>, alerts: List<String>, onOpen: (Place) -> Unit) {
+private fun NeedsTab(store: GameStore, decisions: List<uniffi.cw_ffi.EventDto>, alerts: List<String>, fired: List<String>, onOpen: (Place) -> Unit) {
     val o = store.overview
     run {
+        if (fired.isNotEmpty()) {
+            RailHeading("Your alerts", fired.size)
+            fired.forEach { f -> RailLine(f, "Starred", Palette.warning) { RailState.tab = "Watch" } }
+        }
         if (decisions.isNotEmpty() || o?.pauseInfo != null) {
             RailHeading("Needs you", decisions.size)
             o?.pauseInfo?.let { RailLine(it.title, it.detail, Palette.warning) { onOpen(Place.Inbox) } }
@@ -328,15 +425,18 @@ private fun NeedsTab(store: GameStore, decisions: List<uniffi.cw_ffi.EventDto>, 
             RailHeading("Letters", store.unreadLetters)
             store.letters.filter { !it.read }.take(4).forEach { l -> RailLine(l.summary.ifEmpty { l.salutation }, l.sender.name, Palette.primaryText) { onOpen(Place.Inbox) } }
         }
-        if (decisions.isEmpty() && alerts.isEmpty() && store.unreadLetters == 0 && o?.pauseInfo == null) {
+        if (decisions.isEmpty() && alerts.isEmpty() && fired.isEmpty() && store.unreadLetters == 0 && o?.pauseInfo == null) {
             Text("Nothing needs you this week.", color = Palette.secondary, fontSize = 11.sp, modifier = Modifier.padding(10.dp))
         }
     }
 }
 
-/** Starred goods and companies with this week's figure and its change over the game's timeframe. Each opens its screen. */
+/**
+ * Starred goods and companies with this week's figure and its change over the game's timeframe,
+ * from the five-year closes. Each opens its screen; each can carry one alert (above or below a price).
+ */
 @Composable
-private fun WatchTab(store: GameStore, onOpen: (Place) -> Unit, onRival: (ULong) -> Unit) {
+private fun WatchTab(store: GameStore, onOpen: (Place) -> Unit, onRival: (ULong) -> Unit, onGood: (UInt) -> Unit) {
     val tf = GridPrefs.timeframe
     val goods = store.commodities.filter { Watchlist.has("good:" + it.productId) }
     val firms = store.stocks.filter { Watchlist.has("firm:" + it.name) }
@@ -344,26 +444,59 @@ private fun WatchTab(store: GameStore, onOpen: (Place) -> Unit, onRival: (ULong)
         Text("Star a good or a company in its table (the star shows under the pointer) to keep it here.", color = Palette.secondary, fontSize = 11.sp, lineHeight = 14.sp, modifier = Modifier.padding(10.dp))
         return
     }
+    val goodCloses = rememberEngine(store, store.overview?.tick) { h -> h.goodsPriceSeries().associate { it.id.toUInt() to it.values } }.orEmpty()
+    val shareCloses = rememberEngine(store, store.overview?.tick) { h -> h.sharePriceSeries().associate { it.id to it.values } }.orEmpty()
+    var editing by remember { mutableStateOf<String?>(GridDemo.alertEdit) }
     if (goods.isNotEmpty()) {
         RailHeading("Goods, ${tf.label}", goods.size)
         goods.forEach { g ->
-            val bps = seriesChangeBps(g.historyCents, tf)
-            WatchLine(g.name, Format.money(g.priceCents), bps) { onOpen(Place.Goods) }
+            val id = "good:" + g.productId
+            val bps = seriesChangeBps(goodCloses[g.product] ?: g.historyCents, tf)
+            WatchLine(g.name, Format.money(g.priceCents), bps, Watchlist.alerts[id], g.priceCents, { editing = if (editing == id) null else id }) { onGood(g.product) }
+            if (editing == id) AlertEditor(id, g.priceCents) { editing = null }
         }
     }
     if (firms.isNotEmpty()) {
         RailHeading("Companies, ${tf.label}", firms.size)
         firms.forEach { s ->
-            val bps = seriesChangeBps(s.historyCents, tf)
-            WatchLine(s.name, Format.price(s.priceCents), bps) { onRival(s.firm) }
+            val id = "firm:" + s.name
+            val bps = seriesChangeBps(shareCloses[s.firm] ?: s.historyCents, tf)
+            WatchLine(s.name, Format.price(s.priceCents), bps, Watchlist.alerts[id], s.priceCents, { editing = if (editing == id) null else id }) { onRival(s.firm) }
+            if (editing == id) AlertEditor(id, s.priceCents) { editing = null }
+        }
+    }
+}
+
+/** One alert for one starred item: above or below a price, set or cleared in place. */
+@Composable
+private fun AlertEditor(id: String, now: Long, onDone: () -> Unit) {
+    val current = Watchlist.alerts[id]
+    var above by remember { mutableStateOf(current?.above ?: true) }
+    var text by remember { mutableStateOf(current?.let { "%.2f".format(it.level / 100.0) } ?: "%.2f".format(now / 100.0)) }
+    Column(Modifier.fillMaxWidth().background(Palette.ink).padding(horizontal = 10.dp, vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Tell me when the price is", color = Palette.secondary, fontSize = 10.sp)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+            GridButton("Above", above, 9.sp) { above = true }
+            GridButton("Below", !above, 9.sp) { above = false }
+            GridSearch(text, "price", 70.dp, {}, { text = it }, {})
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            GridButton("Set", false, 9.sp) {
+                text.replace(",", "").replace("$", "").trim().toDoubleOrNull()?.let { Watchlist.setAlert(id, WatchAlert(above, kotlin.math.round(it * 100).toLong())) }
+                onDone()
+            }
+            if (current != null) GridButton("Clear", false, 9.sp) { Watchlist.setAlert(id, null); onDone() }
         }
     }
 }
 
 @Composable
-private fun WatchLine(name: String, value: String, bps: Long?, onClick: () -> Unit) {
+private fun WatchLine(name: String, value: String, bps: Long?, alert: WatchAlert?, now: Long, onAlert: () -> Unit, onClick: () -> Unit) {
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
+    val fired = alert?.fired(now) == true
     Row(
         Modifier.fillMaxWidth().background(if (hovered) Palette.panelRaised else Color.Transparent).hoverable(hover)
             .pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 3.dp),
@@ -371,9 +504,16 @@ private fun WatchLine(name: String, value: String, bps: Long?, onClick: () -> Un
     ) {
         Text("*", color = Palette.gold, fontFamily = Pixel.font, fontSize = 11.sp)
         Spacer(Modifier.width(6.dp))
-        Text(name, color = Palette.primaryText, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(name, color = if (fired) Palette.warning else Palette.primaryText, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Text(value, color = Palette.primaryText, style = GridFigures, fontSize = 11.sp)
         Text(bps?.let(::changeText) ?: DASH, color = bps?.let(::changeTint) ?: Palette.secondary, style = GridFigures, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.width(54.dp))
+        // The alert mark: the level when one is set, a quiet "!" under the pointer when not.
+        Text(
+            alert?.let { (if (it.above) ">" else "<") + Format.money(it.level) } ?: "!",
+            color = if (fired) Palette.warning else if (alert != null) Palette.gold else if (hovered) Palette.secondary else Color.Transparent,
+            style = GridFigures, fontSize = 10.sp, maxLines = 1,
+            modifier = Modifier.padding(start = 4.dp).clickable(onClick = onAlert),
+        )
     }
 }
 
@@ -486,12 +626,14 @@ fun CompanyOverviewScreen(store: GameStore, divisionRows: List<DivisionDto> = st
             // room it does not use goes to the results table below, which scrolls when it is long.
             BoxWithConstraints(Modifier.weight(1.3f).fillMaxHeight()) {
                 val cap = maxHeight * 0.38f
-                val divHeight = minOf(gridNaturalHeight(divisionRows.size), cap)
+                val divHeight = minOf(gridNaturalHeight(divisionRows.size) + 30.dp, cap)
                 val lineHeight = minOf(gridNaturalHeight(lineRows.size), cap)
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val opsAll = rememberEngine(store, store.overview?.tick, divisionRows.size) { h -> divisionRows.associate { d -> (d.region + "/" + d.industry) to h.divisionOps(firm.handle, d.region, d.industry) } }.orEmpty()
+                    // Each division week by week for five years: share, revenue and costs, made and sold.
+                    val weekly = rememberEngine(store, store.overview?.tick, firm.handle) { h -> h.divisionSeries(firm.handle).associateBy { it.region + "/" + it.industry } }.orEmpty()
                     DataGrid(
-                        "Divisions", divisionRows, divisionColumns(opsAll, cur), key = { it.region + "/" + it.industry },
+                        "Divisions", divisionRows, divisionColumns(opsAll, cur, weekly), key = { it.region + "/" + it.industry },
                         views = GridViews("divisions", DivisionViews, scopes = divisionScopes(divisionRows)),
                         modifier = Modifier.fillMaxWidth().height(divHeight),
                         filterText = { "${Sectors.name(it.industry)} ${it.regionName} ${it.strategyName}" },
@@ -501,16 +643,21 @@ fun CompanyOverviewScreen(store: GameStore, divisionRows: List<DivisionDto> = st
                             (if (d.serves.isEmpty()) "ships wherever the best lane is" else "serves ${d.serves.size} regions") },
                         initialSort = "share",
                     )
+                    val lineCloses = rememberEngine(store, store.overview?.tick) { h -> h.goodsPriceSeries().associate { it.id.toUInt() to it.values } }.orEmpty()
                     DataGrid(
-                        "Product lines", lineRows, productColumns(), key = { it.product },
-                        modifier = Modifier.fillMaxWidth().height(lineHeight),
+                        "Product lines", lineRows, productColumns(lineCloses), key = { it.product },
+                        views = GridViews("lines", LineViews, mine = { true }),
+                        modifier = Modifier.fillMaxWidth().height(lineHeight + 30.dp),
                         filterText = { it.name }, onSelect = { editing = it }, onOpen = { editing = it },
                         breakdown = { l -> "${l.name}: price ${Format.money(l.priceCents)}, market ${Format.money(l.marketCents)}, normal ${Format.money(l.referenceCents)}, cost ${Format.money(l.unitCostCents)}; made ${Format.count(l.madeLastWeekLots)}, sold ${Format.count(l.soldLastWeekLots)}, in stock ${Format.count(l.stockLots)} lots" },
                         initialSort = "made",
                     )
-                    val periods = store.history.takeLast(24)
+                    // The results grid shows the periods inside the game's timeframe (All: every period kept).
+                    val now = store.overview?.tick?.toLong() ?: 0L
+                    val periods = GridPrefs.timeframe.weeks?.let { w -> store.history.filter { it.firstWeek.toLong() + w > now } } ?: store.history
                     DataGrid(
                         "Results by period", periods, periodColumns(cur), key = { it.firstWeek },
+                        views = GridViews("results", ResultViews),
                         modifier = Modifier.fillMaxWidth().weight(1f),
                         filterText = { ResultBuckets.weekLabel(it.firstWeek.toInt()) },
                         breakdown = { p -> "From ${ResultBuckets.weekLabel(p.firstWeek.toInt())}, ${p.weeks} weeks: revenue ${Format.compact(p.revenueCents, cur)}, goods ${Format.compact(p.costOfGoodsCents, cur)}, wages ${Format.compact(p.wagesCents, cur)}, running ${Format.compact(p.operatingExpenseCents, cur)}, wear ${Format.compact(p.depreciationCents, cur)}, interest ${Format.compact(p.netInterestCents, cur)}, tax ${Format.compact(p.taxCents, cur)}" },
@@ -534,20 +681,31 @@ fun CompanyOverviewScreen(store: GameStore, divisionRows: List<DivisionDto> = st
     editing?.let { line -> PostureDialog(store, line) { editing = null } }
 }
 
-private fun divisionColumns(ops: Map<String, uniffi.cw_ffi.DivisionOpsDto?>, cur: String): List<GridColumn<DivisionDto>> {
+private fun divisionColumns(ops: Map<String, uniffi.cw_ffi.DivisionOpsDto?>, cur: String, weekly: Map<String, DivisionSeriesDto> = emptyMap()): List<GridColumn<DivisionDto>> {
     fun o(d: DivisionDto) = ops[d.region + "/" + d.industry]
+    fun w(d: DivisionDto) = weekly[d.region + "/" + d.industry]
+    // Margin as a percent of revenue and earnings over costs, each week, from the division's own figures.
+    fun marginSeries(d: DivisionDto) = w(d)?.let { s -> s.revenueCents.zip(s.costsCents) { r, c -> if (r > 0) (r - c) * 10_000 / r else 0L } }.orEmpty()
+    fun earnedSeries(d: DivisionDto) = w(d)?.let { s -> s.revenueCents.zip(s.costsCents) { r, c -> r - c } }.orEmpty()
     return listOf(
         GridColumn("name", "Division", null, numeric = false, text = { "${Sectors.name(it.industry)} · ${it.regionName}" }, bold = true),
         GridColumn("sector", "Sector", 110.dp, numeric = false, text = { Sectors.name(it.industry) }, tone = { Palette.secondary }, topic = "About", dropOrder = 6),
         GridColumn("region", "Region", 110.dp, numeric = false, text = { it.regionName }, tone = { Palette.secondary }, topic = "About", dropOrder = 6),
         GridColumn("strategy", "Strategy", 150.dp, numeric = false, text = { it.strategyName + if (it.retooling) " (retooling)" else "" }, tone = { if (it.retooling) Palette.warning else Palette.secondary }, topic = "About", dropOrder = 2),
         GridColumn("plants", "Plants", 56.dp, text = { "${it.blocks}" }, sort = { it.blocks.toLong() }, total = true, topic = "Operations"),
-        GridColumn("share", "Share", 84.dp, text = { gridPct(it.shareBps.toLong()) }, sort = { it.shareBps.toLong() }, bar = { it.shareBps / 10_000f }, tone = { Palette.gold }, scale = 100.0, topic = "Market"),
+        GridColumn("share", "Share", 84.dp, text = { gridPct(it.shareBps.toLong()) }, sort = { it.shareBps.toLong() }, bar = { it.shareBps / 10_000f }, tone = { Palette.gold }, scale = 100.0, topic = "Market",
+            series = { d -> w(d)?.shareBps.orEmpty() }, fmt = ::gridPct, tip = "The division's share of its market. Its change and trend use the weekly share, five years of it."),
         // The engine reports 0 weeks for "use the company's usual cover" and no regions for "ship wherever the best lane is": neither is a real zero.
         GridColumn("stock", "Stock wks", 70.dp, text = { if (it.stockWeeks > 0) "${it.stockWeeks}" else DASH }, sort = { it.stockWeeks.toLong() }, tone = { if (it.stockWeeks > 0) Palette.primaryText else Palette.secondary }, tip = "Weeks of inputs this division keeps in store. A dash means the company's usual cover.", topic = "Operations"),
         GridColumn("serves", "Serves", 60.dp, text = { if (it.serves.isEmpty()) DASH else "${it.serves.size}" }, sort = { it.serves.size.toLong() }, tone = { if (it.serves.isEmpty()) Palette.secondary else Palette.primaryText }, tip = "Regions this division ships to. A dash means it ships wherever the best lane is.", topic = "Operations"),
-        GridColumn("made", "Made", 64.dp, text = { d -> o(d)?.let { Format.count(it.madeMilli / 1000) } ?: DASH }, sort = { d -> o(d)?.madeMilli?.div(1000) ?: Long.MIN_VALUE }, total = true, topic = "Operations", tip = "Lots made last week."),
-        GridColumn("sold", "Sold", 64.dp, text = { d -> o(d)?.let { Format.count(it.soldMilli / 1000) } ?: DASH }, sort = { d -> o(d)?.soldMilli?.div(1000) ?: Long.MIN_VALUE }, total = true, topic = "Operations", tip = "Lots sold last week."),
+        GridColumn("made", "Made", 64.dp, text = { d -> o(d)?.let { Format.count(it.madeMilli / 1000) } ?: DASH }, sort = { d -> o(d)?.madeMilli?.div(1000) ?: Long.MIN_VALUE }, total = true, topic = "Operations", tip = "Lots made last week.",
+            series = { d -> w(d)?.madeMilli?.map { it / 1000 }.orEmpty() }),
+        GridColumn("sold", "Sold", 64.dp, text = { d -> o(d)?.let { Format.count(it.soldMilli / 1000) } ?: DASH }, sort = { d -> o(d)?.soldMilli?.div(1000) ?: Long.MIN_VALUE }, total = true, topic = "Operations", tip = "Lots sold last week.",
+            series = { d -> w(d)?.soldMilli?.map { it / 1000 }.orEmpty() }),
+        GridColumn("mpct", "Margin %", 76.dp, text = { d -> marginSeries(d).lastOrNull()?.let(::gridPct) ?: DASH }, sort = { d -> marginSeries(d).lastOrNull() ?: Long.MIN_VALUE }, tone = { d -> tint(marginSeries(d).lastOrNull() ?: 0) },
+            series = ::marginSeries, fmt = ::gridPct, scale = 100.0, topic = "Money", tip = "Revenue less costs as a percent of revenue, last week. Its change and trend use the weekly figures."),
+        GridColumn("earned", "Earned, week", 92.dp, text = { d -> earnedSeries(d).lastOrNull()?.let { Format.compact(it, cur) } ?: DASH }, sort = { d -> earnedSeries(d).lastOrNull() ?: Long.MIN_VALUE }, tone = { d -> tint(earnedSeries(d).lastOrNull() ?: 0) },
+            series = ::earnedSeries, fmt = { Format.compact(it, cur) }, scale = 100.0, total = true, topic = "Money", tip = "Revenue less costs last week, before tax and interest. Its change and trend use the weekly figures."),
         GridColumn("util", "Running", 70.dp, text = { d -> o(d)?.let { gridPct(it.utilisationBps) } ?: DASH }, sort = { d -> o(d)?.utilisationBps ?: Long.MIN_VALUE }, bar = { d -> (o(d)?.utilisationBps ?: 0) / 10_000f }, scale = 100.0, topic = "Operations", tip = "How much of its capacity the division used last week."),
         GridColumn("price", "Price", 80.dp, text = { d -> o(d)?.let { Format.money(it.priceCents) } ?: DASH }, sort = { d -> o(d)?.priceCents ?: Long.MIN_VALUE }, scale = 100.0, topic = "Money"),
         GridColumn("cost", "Unit cost", 80.dp, text = { d -> o(d)?.let { Format.money(it.unitCostCents) } ?: DASH }, sort = { d -> o(d)?.unitCostCents ?: Long.MIN_VALUE }, scale = 100.0, topic = "Money"),
@@ -565,22 +723,35 @@ private fun divisionScopes(rows: List<DivisionDto>): List<ScopeOption<DivisionDt
 internal fun cols(vararg keys: String): List<ColumnSpec> = keys.map { k -> k.split('.').let { ColumnSpec(it[0], if (it.size > 1) ColumnMode.valueOf(it[1]) else ColumnMode.Value) } }
 
 internal val DivisionViews = listOf(
-    ViewState("Overview", cols("name", "strategy", "plants", "share", "util", "weekly"), sort = "share"),
-    ViewState("Operations", cols("name", "strategy", "plants", "made", "sold", "util", "stock", "serves"), sort = "made"),
-    ViewState("Money", cols("name", "plants", "price", "cost", "margin", "weekly", "util", "share"), sort = "weekly"),
+    ViewState("Overview", cols("name", "strategy", "plants", "share", "share.Spark", "util", "weekly"), sort = "share"),
+    ViewState("Operations", cols("name", "strategy", "plants", "made", "made.Percent", "sold", "util", "stock", "serves"), sort = "made"),
+    ViewState("Money", cols("name", "plants", "price", "cost", "margin", "mpct", "mpct.Change", "earned", "earned.Spark"), sort = "earned"),
 )
 
-private fun productColumns(): List<GridColumn<ProductLineDto>> = listOf(
+private fun productColumns(closes: Map<UInt, List<Long>> = emptyMap()): List<GridColumn<ProductLineDto>> = listOf(
     GridColumn("name", "Product", null, numeric = false, text = { it.name }, bold = true),
-    GridColumn("price", "Price", 80.dp, text = { Format.money(it.priceCents) }, sort = { it.priceCents }),
-    GridColumn("market", "Market", 80.dp, text = { Format.money(it.marketCents) }, sort = { it.marketCents }, tone = { Palette.secondary }),
-    GridColumn("cost", "Cost", 80.dp, text = { if (it.unitCostCents > 0) Format.money(it.unitCostCents) else "n/a" }, sort = { it.unitCostCents }),
-    GridColumn("margin", "Margin", 80.dp, text = { if (it.unitCostCents > 0) Format.signed(it.priceCents - it.unitCostCents) else "" }, sort = { it.priceCents - it.unitCostCents }, tone = { tint(it.priceCents - it.unitCostCents) }),
-    GridColumn("made", "Made", 64.dp, text = { Format.count(it.madeLastWeekLots) }, sort = { it.madeLastWeekLots }),
+    GridColumn("price", "Price", 80.dp, text = { Format.money(it.priceCents) }, sort = { it.priceCents }, scale = 100.0, topic = "Price", tip = "Your price this week."),
+    GridColumn("market", "Market", 80.dp, text = { Format.money(it.marketCents) }, sort = { it.marketCents }, tone = { Palette.secondary }, scale = 100.0, topic = "Price",
+        series = { closes[it.product].orEmpty() }, fmt = { Format.money(it) }, tip = "The market price of a lot. Its change and trend use the weekly closing prices, five years of them."),
+    GridColumn("cost", "Cost", 80.dp, text = { if (it.unitCostCents > 0) Format.money(it.unitCostCents) else "n/a" }, sort = { it.unitCostCents }, scale = 100.0, topic = "Money"),
+    GridColumn("margin", "Margin", 80.dp, text = { if (it.unitCostCents > 0) Format.signed(it.priceCents - it.unitCostCents) else "" }, sort = { it.priceCents - it.unitCostCents }, tone = { tint(it.priceCents - it.unitCostCents) }, scale = 100.0, topic = "Money"),
+    GridColumn("made", "Made", 64.dp, text = { Format.count(it.madeLastWeekLots) }, sort = { it.madeLastWeekLots }, total = true, topic = "Output"),
     GridColumn("sold", "Sold", 70.dp, text = { if (it.madeLastWeekLots > 0) "${it.soldLastWeekLots * 100 / it.madeLastWeekLots}%" else "" }, sort = { if (it.madeLastWeekLots > 0) it.soldLastWeekLots * 100 / it.madeLastWeekLots else -1 },
-        bar = { if (it.madeLastWeekLots > 0) it.soldLastWeekLots.toFloat() / it.madeLastWeekLots else 0f }, tip = "The share of last week's output that sold."),
-    GridColumn("stock", "Stock", 64.dp, text = { Format.count(it.stockLots) }, sort = { it.stockLots }),
-    GridColumn("posture", "Posture", 110.dp, numeric = false, text = { postureLabel(it) }, tone = { Palette.secondary }),
+        bar = { if (it.madeLastWeekLots > 0) it.soldLastWeekLots.toFloat() / it.madeLastWeekLots else 0f }, tip = "The share of last week's output that sold.", topic = "Output"),
+    GridColumn("stock", "Stock", 64.dp, text = { Format.count(it.stockLots) }, sort = { it.stockLots }, total = true, topic = "Output"),
+    GridColumn("posture", "Posture", 110.dp, numeric = false, text = { postureLabel(it) }, tone = { Palette.secondary }, topic = "About"),
+)
+
+internal val LineViews = listOf(
+    ViewState("Overview", cols("name", "price", "market", "cost", "margin", "made", "sold", "stock", "posture"), sort = "made"),
+    ViewState("Prices", cols("name", "price", "market", "market.Percent", "market.Spark", "cost", "margin"), sort = "margin"),
+    ViewState("Stock", cols("name", "made", "sold", "stock", "stock.Bar", "posture"), sort = "stock"),
+)
+
+internal val ResultViews = listOf(
+    ViewState("Income", cols("week", "revenue", "goods", "wages", "net", "nm"), sort = "week"),
+    ViewState("Balance", cols("week", "cash", "equity", "net", "net.Bar"), sort = "week"),
+    ViewState("Best periods", cols("week", "revenue", "net", "net.Rank", "nm"), sort = "net"),
 )
 
 private fun periodColumns(cur: String): List<GridColumn<PeriodDto>> = listOf(
@@ -591,6 +762,8 @@ private fun periodColumns(cur: String): List<GridColumn<PeriodDto>> = listOf(
     GridColumn("net", "Net income", 84.dp, text = { Format.compact(it.netIncomeCents, cur) }, sort = { it.netIncomeCents }, tone = { tint(it.netIncomeCents) }),
     GridColumn("cash", "Cash", 80.dp, text = { Format.compact(it.cashCents, cur) }, sort = { it.cashCents }),
     GridColumn("equity", "Equity", 80.dp, text = { Format.compact(it.equityCents, cur) }, sort = { it.equityCents }, shown = true),
+    GridColumn("nm", "Net margin", 80.dp, text = { if (it.revenueCents > 0) gridPct(it.netIncomeCents * 10_000 / it.revenueCents) else DASH }, sort = { if (it.revenueCents > 0) it.netIncomeCents * 10_000 / it.revenueCents else Long.MIN_VALUE },
+        tone = { tint(it.netIncomeCents) }, scale = 100.0, tip = "Net income as a percent of revenue in the period."),
 )
 
 // MARK: Markets: goods
@@ -601,11 +774,14 @@ fun GoodsScreen(store: GameStore, startPick: UInt? = null) {
     val goods = store.commodities
     var pick by remember { mutableStateOf(startPick ?: goods.maxByOrNull { it.soldLots }?.product) }
     val shares = rememberEngine(store, store.overview?.tick, goods.size) { h -> goods.associate { g -> g.product to (h.goodDepth(g.product)?.yourShareBps ?: 0L) } }.orEmpty()
+    // Five years of weekly figures per good and of closing prices, read once a week for the whole grid.
+    val flows = rememberEngine(store, store.overview?.tick) { h -> h.goodsSeries().associateBy { it.product } }.orEmpty()
+    val closes = rememberEngine(store, store.overview?.tick) { h -> h.goodsPriceSeries().associate { it.id.toUInt() to it.values } }.orEmpty()
     BoxWithConstraints(Modifier.fillMaxSize().padding(8.dp)) {
         val wide = maxWidth >= 900.dp
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DataGrid(
-                "Goods", goods, goodsColumns(shares), key = { it.product },
+                "Goods", goods, goodsColumns(shares, flows, closes), key = { it.product },
                 watchKey = { "good:" + it.productId },
                 views = GridViews("goods", GoodsViews, mine = { it.yours || (shares[it.product] ?: 0L) > 0 }, scopes = goodsScopes(goods)),
                 modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -627,34 +803,35 @@ fun GoodsScreen(store: GameStore, startPick: UInt? = null) {
     }
 }
 
-private fun goodsColumns(shares: Map<UInt, Long>): List<GridColumn<CommodityDto>> = listOf(
+private fun goodsColumns(shares: Map<UInt, Long>, flows: Map<UInt, GoodSeriesDto>, closes: Map<UInt, List<Long>>): List<GridColumn<CommodityDto>> = listOf(
     GridColumn("name", "Good", null, minWidth = 190.dp, numeric = false, text = { it.name + if (it.yours) " *" else "" }, tone = { if (it.yours) Palette.gold else Palette.primaryText }, bold = true),
     GridColumn("sector", "Sector", 120.dp, numeric = false, text = { if (it.sector == "other") DASH else Sectors.name(it.sector) }, tone = { Palette.secondary }, topic = "About"),
-    GridColumn("price", "Price", 84.dp, text = { Format.money(it.priceCents) }, sort = { it.priceCents }, series = { it.historyCents }, fmt = { Format.money(it) }, scale = 100.0, topic = "Price",
-        tip = "The price of a lot this week. Its change, percent and trend use the weekly closing prices the game keeps (one year)."),
+    GridColumn("price", "Price", 84.dp, text = { Format.money(it.priceCents) }, sort = { it.priceCents }, series = { closes[it.product] ?: it.historyCents }, fmt = { Format.money(it) }, scale = 100.0, topic = "Price",
+        tip = "The price of a lot this week. Its change, percent and trend use the weekly closing prices, five years of them."),
     GridColumn("vsnormal", "Vs normal", 76.dp, text = { if (it.referenceCents > 0) changeText((it.priceCents - it.referenceCents) * 10_000 / it.referenceCents) else "" },
         sort = { if (it.referenceCents > 0) (it.priceCents - it.referenceCents) * 10_000 / it.referenceCents else 0 }, tone = { tint(it.priceCents - it.referenceCents) }, tip = "The price now against the good's normal price.", dropOrder = 1, scale = 100.0, topic = "Price"),
     GridColumn("week", "Week", 62.dp, text = { changeText(it.changeWeekBps) }, sort = { it.changeWeekBps }, tone = { changeTint(it.changeWeekBps) }, dropOrder = 2, scale = 100.0, topic = "Price", tip = "The price change over the last week, whatever the timeframe."),
-    GridColumn("made", "Made", 72.dp, text = { Format.count(it.madeLots) }, sort = { it.madeLots }, total = true, topic = "Supply", tip = "Lots made last week. The game keeps no history of it, so it has no change or trend."),
-    GridColumn("sold", "Sold", 72.dp, text = { Format.count(it.soldLots) }, sort = { it.soldLots }, total = true, topic = "Supply", tip = "Lots sold last week. The game keeps no history of it, so it has no change or trend."),
+    GridColumn("made", "Made", 72.dp, text = { Format.count(it.madeLots) }, sort = { it.madeLots }, series = { flows[it.product]?.made.orEmpty() }, total = true, topic = "Supply", tip = "Lots made last week. Its change and trend use the weekly figures, five years of them."),
+    GridColumn("sold", "Sold", 72.dp, text = { Format.count(it.soldLots) }, sort = { it.soldLots }, series = { flows[it.product]?.sold.orEmpty() }, total = true, topic = "Supply", tip = "Lots sold last week. Its change and trend use the weekly figures, five years of them."),
     GridColumn("through", "Sold %", 84.dp, text = { if (it.madeLots > 0) "${it.soldLots * 100 / it.madeLots}%" else "" }, sort = { if (it.madeLots > 0) it.soldLots * 100 / it.madeLots else -1 },
         bar = { if (it.madeLots > 0) (it.soldLots.toFloat() / it.madeLots) else 0f }, tip = "Sold as a share of what was made.", topic = "Supply"),
-    GridColumn("stock", "Stock", 70.dp, text = { Format.count(it.stockLots) }, sort = { it.stockLots }, total = true, topic = "Supply"),
-    GridColumn("imported", "Imported", 72.dp, text = { if (it.importedLots > 0) Format.count(it.importedLots) else "" }, sort = { it.importedLots }, tone = { Palette.positive }, dropOrder = 4, total = true, topic = "Trade"),
-    GridColumn("exported", "Exported", 72.dp, text = { if (it.exportedLots > 0) Format.count(it.exportedLots) else "" }, sort = { it.exportedLots }, tone = { Palette.secondary }, dropOrder = 4, total = true, topic = "Trade"),
+    GridColumn("stock", "Stock", 70.dp, text = { Format.count(it.stockLots) }, sort = { it.stockLots }, series = { flows[it.product]?.stock.orEmpty() }, total = true, topic = "Supply"),
+    GridColumn("imported", "Imported", 72.dp, text = { if (it.importedLots > 0) Format.count(it.importedLots) else "" }, sort = { it.importedLots }, series = { flows[it.product]?.imported.orEmpty() }, tone = { Palette.positive }, dropOrder = 4, total = true, topic = "Trade"),
+    GridColumn("exported", "Exported", 72.dp, text = { if (it.exportedLots > 0) Format.count(it.exportedLots) else "" }, sort = { it.exportedLots }, series = { flows[it.product]?.exported.orEmpty() }, tone = { Palette.secondary }, dropOrder = 4, total = true, topic = "Trade"),
     GridColumn("yours", "Your share", 80.dp, text = { (shares[it.product] ?: 0L).let { s -> if (s > 0) gridPct(s) else "" } }, sort = { shares[it.product] ?: 0L },
-        bar = { (shares[it.product] ?: 0L) / 10_000f }, tone = { Palette.gold }, tip = "Your share of what was sold of this good.", scale = 100.0, topic = "You"),
+        series = { g -> flows[g.product]?.let { f -> f.yourSold.zip(f.sold) { y, t -> if (t > 0) y * 10_000 / t else 0L } }.orEmpty() }, fmt = ::gridPct,
+        bar = { (shares[it.product] ?: 0L) / 10_000f }, tone = { Palette.gold }, tip = "Your share of what was sold of this good. Its change and trend use your weekly sales against everyone's.", scale = 100.0, topic = "You"),
 )
 
 private fun goodsScopes(goods: List<CommodityDto>): List<ScopeOption<CommodityDto>> =
     goods.map { it.sector }.filter { it != "other" }.distinct().sortedBy { Sectors.order.indexOf(it) }.map { sec -> ScopeOption<CommodityDto>("sector:$sec", Sectors.name(sec), "Sector", Sectors.color(sec)) { it.sector == sec } }
 
 internal val GoodsViews = listOf(
-    ViewState("Overview", cols("name", "sector", "price", "price.Percent", "price.Spark", "made", "sold", "through", "stock", "yours"), sort = "sold"),
+    ViewState("Overview", cols("name", "sector", "price", "price.Percent", "price.Spark", "made", "sold", "sold.Percent", "through", "stock", "yours"), sort = "sold"),
     ViewState("Prices", cols("name", "sector", "price", "vsnormal", "week", "price.Change", "price.Percent", "price.Spark"), sort = "price.Percent"),
-    ViewState("Supply", cols("name", "sector", "made", "sold", "through", "stock", "imported", "exported"), sort = "made"),
-    ViewState("My business", cols("name", "sector", "price", "price.Percent", "yours", "sold", "stock"), sort = "yours", filters = listOf(Filter(FilterOp.Mine))),
-    ViewState("Trade", cols("name", "sector", "price", "price.Percent", "imported", "exported", "made", "sold"), sort = "imported"),
+    ViewState("Supply", cols("name", "sector", "made", "made.Percent", "sold", "sold.Percent", "through", "stock", "stock.Spark"), sort = "made"),
+    ViewState("My business", cols("name", "sector", "price", "price.Percent", "yours", "yours.Change", "yours.Spark", "sold", "stock"), sort = "yours", filters = listOf(Filter(FilterOp.Mine))),
+    ViewState("Trade", cols("name", "sector", "price", "price.Percent", "imported", "imported.Change", "exported", "exported.Change", "made"), sort = "imported"),
 )
 
 // MARK: Rivals: league table
@@ -673,9 +850,13 @@ fun LeagueScreen(store: GameStore, pick: ULong?, onPick: (ULong) -> Unit) {
     val periods = rememberEngine(store, store.overview?.tick, rows.size) { h -> rows.associate { it.firm to h.history(it.firm) } }.orEmpty()
     val contest = rememberEngine(store, store.overview?.tick, rows.size, me) { h -> if (me == null) emptyMap<ULong, List<HeadToHeadDto>>() else rows.filter { !it.yours }.associate { it.firm to h.headToHead(me, it.firm) } }.orEmpty()
     val raidsOnYou = store.recentRaids.filter { it.playerDefender }.groupingBy { it.attacker }.eachCount()
+    // Five years of share closes, and debt by week for a year and by quarter for the career.
+    val shareCloses = rememberEngine(store, store.overview?.tick) { h -> h.sharePriceSeries().associate { it.id to it.values } }.orEmpty()
+    val debtWeeks = rememberEngine(store, store.overview?.tick) { h -> h.debtSeries("week").associate { it.id to it.values } }.orEmpty()
+    val debtQuarters = rememberEngine(store, store.overview?.tick) { h -> h.debtSeries("quarter").associate { it.id to it.values } }.orEmpty()
     Row(Modifier.fillMaxSize().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         DataGrid(
-            "League table", rows, leagueColumns(rank, maxCap, stocks, periods, contest, raidsOnYou), key = { it.firm },
+            "League table", rows, leagueColumns(rank, maxCap, stocks, periods, contest, raidsOnYou, LeagueHistory(shareCloses, debtWeeks, debtQuarters)), key = { it.firm },
             watchKey = { "firm:" + it.name },
             views = GridViews("league", LeagueViews, mine = { it.yours }, scopes = leagueScopes(rows)),
             modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -711,7 +892,7 @@ fun LeagueScreen(store: GameStore, pick: ULong?, onPick: (ULong) -> Unit) {
 
 private fun leagueColumns(
     rank: Map<ULong, Int>, maxCap: Long, stocks: Map<ULong, uniffi.cw_ffi.StockDto>, periods: Map<ULong, List<PeriodDto>>,
-    contest: Map<ULong, List<HeadToHeadDto>>, raidsOnYou: Map<String, Int>,
+    contest: Map<ULong, List<HeadToHeadDto>>, raidsOnYou: Map<String, Int>, hist: LeagueHistory = LeagueHistory(),
 ): List<GridColumn<RivalRowDto>> = listOf(
     // The company's name leads: its rank and sector badge sit in front of it. Your own company is gold.
     GridColumn("name", "Company", null, minWidth = 210.dp, numeric = false, text = { it.name }, tone = { if (it.yours) Palette.gold else Palette.primaryText }, bold = true,
@@ -727,9 +908,11 @@ private fun leagueColumns(
         fmt = { Format.compact(it) }, scale = 100.0, total = true, topic = "Results", tip = "Profit after interest and tax. Its change and trend compare four-week results."),
     GridColumn("margin", "Margin", 62.dp, text = { it.netMarginBps?.let(::gridPct) ?: "" }, sort = { it.netMarginBps ?: Long.MIN_VALUE }, tone = { tint(it.netMarginBps ?: 0) }, dropOrder = 2, scale = 100.0, topic = "Results"),
     GridColumn("cash", "Cash", 78.dp, text = { Format.compact(it.cashCents) }, sort = { it.cashCents }, series = { r -> periods[r.firm].orEmpty().map { it.cashCents } }, step = 4, fmt = { Format.compact(it) }, dropOrder = 3, scale = 100.0, total = true, topic = "Balance sheet"),
-    GridColumn("debt", "Debt", 78.dp, text = { Format.compact(it.debtCents) }, sort = { it.debtCents }, tone = { Palette.secondary }, dropOrder = 4, scale = 100.0, total = true, topic = "Balance sheet"),
-    GridColumn("price", "Share", 72.dp, text = { Format.price(it.sharePriceCents) }, sort = { it.sharePriceCents }, series = { stocks[it.firm]?.historyCents.orEmpty() }, fmt = { Format.price(it) }, scale = 100.0, topic = "Shares",
-        tip = "The share price. Its change, percent and trend use the weekly closing prices the game keeps (one year)."),
+    GridColumn("debt", "Debt", 78.dp, text = { Format.compact(it.debtCents) }, sort = { it.debtCents }, tone = { Palette.secondary }, dropOrder = 4, scale = 100.0, total = true, topic = "Balance sheet",
+        series = { hist.debtWeeks[it.firm].orEmpty() }, longSeries = { hist.debtQuarters[it.firm].orEmpty() }, longStep = 13, fmt = { Format.compact(it) },
+        tip = "Debt at the close. Its change and trend use the weekly balance for a year and the quarterly balance beyond."),
+    GridColumn("price", "Share", 72.dp, text = { Format.price(it.sharePriceCents) }, sort = { it.sharePriceCents }, series = { hist.shares[it.firm] ?: stocks[it.firm]?.historyCents.orEmpty() }, fmt = { Format.price(it) }, scale = 100.0, topic = "Shares",
+        tip = "The share price. Its change, percent and trend use the weekly closing prices, five years of them."),
     GridColumn("week", "Week", 60.dp, text = { stocks[it.firm]?.let { s -> changeText(s.changeWeekBps) } ?: "" }, sort = { stocks[it.firm]?.changeWeekBps ?: 0 }, tone = { changeTint(stocks[it.firm]?.changeWeekBps ?: 0) }, scale = 100.0, topic = "Shares"),
     GridColumn("cap", "Value", 96.dp, text = { Format.compact(it.marketCapCents) }, sort = { it.marketCapCents }, bar = { it.marketCapCents.toFloat() / maxCap }, fmt = { Format.compact(it) }, scale = 100.0, total = true, topic = "Shares",
         tip = "Market value: share price times shares issued."),
@@ -742,12 +925,19 @@ private fun leagueColumns(
     GridColumn("raids", "Raids on you", 92.dp, text = { r -> raidsOnYou[r.name]?.toString() ?: "" }, sort = { r -> raidsOnYou[r.name]?.toLong() ?: 0 }, tone = { Palette.negative }, total = true, topic = "Against you", tip = "Their raids on your businesses in the raid log."),
 )
 
+/** The league's long histories, read once a week for the whole table. */
+internal class LeagueHistory(
+    val shares: Map<ULong, List<Long>> = emptyMap(),
+    val debtWeeks: Map<ULong, List<Long>> = emptyMap(),
+    val debtQuarters: Map<ULong, List<Long>> = emptyMap(),
+)
+
 private fun leagueScopes(rows: List<RivalRowDto>): List<ScopeOption<RivalRowDto>> =
     rows.map { it.industry }.distinct().sortedBy { Sectors.order.indexOf(it) }.map { ind -> ScopeOption<RivalRowDto>("sector:$ind", Sectors.name(ind), "Sector", Sectors.color(ind)) { it.industry == ind } }
 
 internal val LeagueViews = listOf(
     ViewState("Overview", cols("name", "sector", "revenue", "profit", "margin", "price", "price.Spark", "cap"), sort = "cap"),
-    ViewState("Finance", cols("name", "revenue", "revenue.Percent", "profit", "profit.Change", "margin", "cash", "debt"), sort = "revenue"),
+    ViewState("Finance", cols("name", "revenue", "revenue.Percent", "profit", "profit.Change", "margin", "cash", "debt", "debt.Change"), sort = "revenue"),
     ViewState("Shares", cols("name", "price", "price.Percent", "price.Spark", "cap", "fair", "float", "held"), sort = "cap"),
     ViewState("Against me", cols("name", "sector", "overlap", "theirlots", "raids", "cap", "profit"), sort = "theirlots", filters = listOf(Filter(FilterOp.Above, "overlap", number = 0.0))),
 )

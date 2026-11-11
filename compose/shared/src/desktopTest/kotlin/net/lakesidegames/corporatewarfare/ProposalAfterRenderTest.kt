@@ -53,6 +53,57 @@ class ProposalAfterRenderTest {
         }
     }
 
+    /** Round 2: history on every grid, compare, focus, folded rail, alerts, drill-down, side panes, Ctrl K, chart these, heading menu and the three new screens. */
+    @Test
+    fun roundTwoScreens() {
+        val (store, settings) = ProposalCareer.open()
+        fun shot(name: String, place: Place = Place.Goods, setup: () -> Unit = {}) {
+            setup()
+            try { ProposalCareer.shoot(name, 1920, 1080, settings) { TycoonShell(store, onSettings = {}, start = place) } } finally { GridDemo.clear(); RailState.tab = "Needs you" }
+        }
+        // Five years of weekly supply on the goods grid, a year back.
+        shot("goods-supply-1y") { GridDemo.screen = "goods"; GridDemo.shape = { GoodsViews[2].copy(timeframe = Timeframe.Y1) } }
+        // Compare: the last 13 weeks against the 13 before, on the Prices view.
+        shot("goods-compare") { GridDemo.screen = "goods"; GridDemo.shape = { GoodsViews[1].copy(compare = Compare.Previous) } }
+        // A right-click heading menu on the price column.
+        shot("heading-menu") { GridDemo.screen = "goods"; GridDemo.head = "price" }
+        // A figure's drill-down with its own period buttons.
+        shot("drill-down") { GridDemo.screen = "goods"; GridDemo.shape = { GoodsViews[1] }; GridDemo.drill = "price" }
+        // Chart these: the first rows of the Supply view as lines.
+        shot("chart-these") { GridDemo.screen = "goods"; GridDemo.shape = { GoodsViews[2].copy(timeframe = Timeframe.Y1) }; GridDemo.chart = true }
+        // Two side panes, the top one pinned: a good's price beside a company's share price.
+        val good = store.commodities.maxBy { it.soldLots }
+        val rival = store.stocks.filter { !it.controlledByYou }.maxBy { it.marketCapCents }
+        SidePanes.items.clear()
+        SidePanes.open(DrillItem("${good.name}: Price", good.historyCents, 1, { Format.money(it) }))
+        SidePanes.pin(SidePanes.items.first())
+        SidePanes.open(DrillItem("${rival.name}: Share", rival.historyCents, 1, { Format.price(it) }))
+        try { shot("side-panes") } finally { SidePanes.items.clear() }
+        // The pinned focus: one sector, followed by goods and the divisions grid.
+        val sector = store.commodities.filter { it.sector != "other" }.groupBy { it.sector }.maxByOrNull { it.value.size }!!.key
+        GridPrefs.load(settings)
+        GridPrefs.chooseFocus("sector:$sector", Sectors.name(sector), settings)
+        try { shot("focus-pinned") } finally { GridPrefs.chooseFocus(null, "", settings) }
+        // The rail folded to its marks and counts.
+        GridPrefs.foldRail(true, settings)
+        try { shot("rail-folded", Place.League) } finally { GridPrefs.foldRail(false, settings) }
+        // A starred good with an alert, the editor open on it.
+        Watchlist.load(settings)
+        val watched = "good:" + good.productId
+        if (!Watchlist.has(watched)) Watchlist.toggle(watched)
+        Watchlist.setAlert(watched, WatchAlert(above = true, level = good.priceCents - 1))
+        try { shot("watch-alert") { GridDemo.railTab = "Watch"; GridDemo.alertEdit = watched } } finally { Watchlist.toggle(watched) }
+        // Ctrl K finding a good, a company and saved views.
+        shot("find") { GridDemo.find = "st" }
+        // The three new screens and the overview's product lines and results with their bars.
+        shot("openings", Place.Openings)
+        shot("openings-by-region", Place.Openings) { GridDemo.screen = "openings"; GridDemo.shape = { OpeningViews[2] } }
+        shot("auctions", Place.Auctions)
+        shot("raids", Place.Raids) { GridDemo.screen = "raids"; GridDemo.shape = { RaidViews[3] } }
+        shot("overview-lines-results", Place.Overview) { GridDemo.screen = "lines"; GridDemo.shape = { LineViews[1] } }
+        ProposalCareer.shoot("openings-phone", 390, 844, settings, density = 2f) { OpeningsScreen(store) }
+    }
+
     @Test
     fun overviewOfALargeCompany() {
         // The test career stays small, so a large company is made from the real rows: 14 divisions and 18

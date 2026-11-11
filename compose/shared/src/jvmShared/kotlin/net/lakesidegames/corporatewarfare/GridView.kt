@@ -240,6 +240,44 @@ fun seriesChangeBps(series: List<Long>, tf: Timeframe, step: Int = 1): Long? {
     return (w.last() - w.first()) * 10_000 / kotlin.math.abs(w.first())
 }
 
+/**
+ * The window to measure over: the short, fine series when it reaches back far enough, else the
+ * long, coarse one (a year of weekly debt, then the career by quarter). Null when neither does.
+ */
+fun windowOf(short: List<Long>?, step: Int, long: List<Long>?, longStep: Int, tf: Timeframe): List<Long>? =
+    short?.let { seriesWindow(it, tf, step) } ?: long?.let { seriesWindow(it, tf, longStep) }
+
+/** Last minus first of a window. */
+fun windowChange(w: List<Long>): Long = w.last() - w.first()
+
+/** A window's change in basis points of its start, or null when it starts at zero. */
+fun windowBps(w: List<Long>): Long? = if (w.first() == 0L) null else (w.last() - w.first()) * 10_000 / kotlin.math.abs(w.first())
+
+/**
+ * A compare: the average over the timeframe and the average over the period before it, or over
+ * the same weeks a year earlier. Null when there is nothing to compare with (All, no compare, or
+ * a series that does not reach back that far).
+ */
+fun compareAverages(series: List<Long>, tf: Timeframe, step: Int, compare: Compare): Pair<Long, Long>? {
+    val weeks = tf.weeks ?: return null
+    if (compare == Compare.None || series.isEmpty()) return null
+    val n = ((weeks + step - 1) / step).coerceAtLeast(1)
+    val back = if (compare == Compare.Previous) n else (52 + step - 1) / step
+    if (series.size < n + back) return null
+    val now = series.takeLast(n)
+    val then = series.subList(series.size - n - back, series.size - back)
+    return now.sum() / now.size to then.sum() / then.size
+}
+
+/** A compare's change in basis points of the earlier average, or null when that is zero. */
+fun compareBps(pair: Pair<Long, Long>): Long? = if (pair.second == 0L) null else (pair.first - pair.second) * 10_000 / kotlin.math.abs(pair.second)
+
+/** A simple alert on a starred item: fires when its figure is above (or below) a level, in the figure's own units. */
+@Serializable
+data class WatchAlert(val above: Boolean, val level: Long) {
+    fun fired(value: Long): Boolean = if (above) value > level else value < level
+}
+
 /** A screen's views: its built-in ones and what the player saved. Persisted as one small JSON value per screen. */
 @Serializable
 data class SavedViews(val views: List<ViewState> = emptyList(), val active: String? = null)
