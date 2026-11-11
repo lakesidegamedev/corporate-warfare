@@ -391,6 +391,8 @@ private fun Chip(text: String, color: Color?, onRemove: () -> Unit) {
     Row(Modifier.background(Palette.panelRaised).border(1.dp, Palette.gold.copy(alpha = 0.6f)).padding(start = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         if (color != null) { Box(Modifier.width(8.dp).height(8.dp).background(color)); Spacer(Modifier.width(5.dp)) }
         Text(text, color = Palette.primaryText, fontSize = 11.sp, maxLines = 1)
-        Text("x", color = Palette.gold, fontFamily = Pixel.font, fontSize = 10.sp, modifier = Modifier.pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onRemove).padding(horizontal = 6.dp, vertical = 2.dp))
+        // The cross that removes the chip (a letter, not a pixel icon).
+        val cross = Modifier.pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onRemove).padding(horizontal = 6.dp, vertical = 2.dp)
+        Text("x", color = Palette.gold, fontFamily = Pixel.font, fontSize = 10.sp, modifier = cross)
     }
 }
