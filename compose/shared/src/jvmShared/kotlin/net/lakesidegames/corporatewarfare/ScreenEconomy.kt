@@ -111,7 +111,7 @@ fun EconomyScreen(store: GameStore) {
                 DataGrid(
                     "World price families", e.worldPrices, familyColumns(), key = { it.family },
                     modifier = Modifier.fillMaxWidth().height(gridNaturalHeight(e.worldPrices.size.coerceAtMost(10))),
-                    initialSort = "index",
+                    initialSort = "index", phoneBelow = 200.dp,
                 )
             }
             val shocks = e.incidents
@@ -119,7 +119,7 @@ fun EconomyScreen(store: GameStore) {
                 DataGrid(
                     "Shocks", shocks, shockColumns(), key = { "${it.week}${it.kind}${it.text.hashCode()}" },
                     modifier = Modifier.fillMaxWidth().height(gridNaturalHeight(shocks.size.coerceAtMost(8))),
-                    initialSort = "week",
+                    initialSort = "week", phoneBelow = 200.dp,
                 )
             } else {
                 Text("No shock is running. A named shock (a bank run, a supply crunch) appears here while it lasts.", color = Palette.secondary, fontSize = 11.sp)

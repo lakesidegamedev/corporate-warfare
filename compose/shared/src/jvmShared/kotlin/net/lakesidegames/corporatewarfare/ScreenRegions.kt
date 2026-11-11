@@ -114,7 +114,7 @@ private fun regionColumns(): List<GridColumn<RegionRow>> = listOf(
     GridColumn("broadband", "Broadband", 80.dp, text = { pctBps(it.board.broadbandBps) }, sort = { it.board.broadbandBps.toLong() }, bar = { it.board.broadbandBps / 10_000f }, scale = 100.0, topic = "Infrastructure"),
     GridColumn("land", "Land", 62.dp, text = { pctBps(it.board.landIndexBps) }, sort = { it.board.landIndexBps.toLong() }, series = { series(it.dossier, "land_index") }, fmt = { pctBps(it.toInt()) }, scale = 100.0, topic = "Cost",
         tip = "The land price against the corridor average."),
-    GridColumn("demand", "Household demand", 112.dp, text = { pctBps(it.board.demandIndexBps) }, sort = { it.board.demandIndexBps.toLong() }, scale = 100.0, topic = "Households", tip = "How much households here ask for, against the corridor average."),
+    GridColumn("demand", "Demand", 70.dp, text = { pctBps(it.board.demandIndexBps) }, sort = { it.board.demandIndexBps.toLong() }, scale = 100.0, topic = "Households", tip = "How much households here ask for, against the corridor average."),
     GridColumn("spend", "Spend, week", 90.dp, text = { it.dossier?.spendCents?.let { c -> Format.compact(c) } ?: DASH }, sort = { it.dossier?.spendCents ?: Long.MIN_VALUE }, series = { series(it.dossier, "spend") },
         fmt = { Format.compact(it) }, scale = 100.0, total = true, topic = "Households", tip = "What households here spend each week. Its change and trend use the weekly figures."),
     GridColumn("unmet", "Going without", 96.dp, text = { if (it.unmetLots > 0) Format.count(it.unmetLots) else "" }, sort = { it.unmetLots }, tone = { Palette.warning }, total = true, topic = "Households",
@@ -131,7 +131,7 @@ private fun regionScopes(rows: List<RegionRow>): List<ScopeOption<RegionRow>> =
     rows.map { it.board.stateName }.distinct().sorted().map { s -> ScopeOption<RegionRow>("state:$s", s, "State") { it.board.stateName == s } }
 
 internal val RegionViews = listOf(
-    ViewState("Overview", cols("name", "state", "wage", "skill", "roads", "power", "demand", "unmet", "migration", "plants", "rival"), sort = "plants"),
+    ViewState("Overview", cols("name", "wage", "skill", "roads", "power", "demand", "unmet", "migration", "plants", "rival"), sort = "plants"),
     ViewState("Labour", cols("name", "pop", "pop.Percent", "idle", "wage", "wage.Percent", "wage.Spark", "wageidx", "skill"), sort = "wageidx", descending = false),
     ViewState("Infrastructure", cols("name", "roads", "power", "broadband", "skill", "land"), sort = "roads"),
     ViewState("Households", cols("name", "demand", "spend", "spend.Percent", "spend.Spark", "unmet", "migration"), sort = "unmet"),

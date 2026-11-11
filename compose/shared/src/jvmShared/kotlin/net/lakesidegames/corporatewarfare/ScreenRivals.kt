@@ -76,7 +76,8 @@ fun ActivityScreen(store: GameStore, onRival: (ULong) -> Unit) {
         feed.forEachIndexed { i, m ->
             val kind = moveKind(m.text)
             // A raid already in the raid log above is not listed twice.
-            if (kind != "Raid") add(ActivityRow("move$i-${m.week}", m.week.toInt(), kind, m.firmName, m.firm, "", null, "", "", "", 0, m.text, mineNames.any { it in m.text }))
+            val other = store.stocks.filter { it.name != m.firmName && it.name in m.text }.maxByOrNull { it.name.length }
+            if (kind != "Raid") add(ActivityRow("move$i-${m.week}", m.week.toInt(), kind, m.firmName, m.firm, other?.name.orEmpty(), other?.firm, "", "", "", 0, m.text, mineNames.any { it in m.text }))
         }
         lots.forEach { l ->
             add(ActivityRow("lot${l.lot}", now, "Plant sale", l.sellerName, null, if (l.bids.isEmpty()) "" else "${l.bids.size} bids", null, l.regionName, "", "On offer, ${l.weeksLeft} weeks left", l.blocks.toInt(),
@@ -142,7 +143,7 @@ internal val ActivityViews = listOf(
     ViewState("Everything", cols("who", "kind", "whom", "place", "sector", "result", "when"), sort = "ago", descending = false),
     ViewState("Raids", cols("who", "whom", "place", "sector", "result", "plants", "when"), sort = "ago", descending = false, filters = listOf(Filter(FilterOp.Is, "kind", "Raid"))),
     ViewState("Mergers and sales", cols("who", "kind", "whom", "place", "result", "plants", "when"), sort = "ago", descending = false, filters = listOf(Filter(FilterOp.Is, "kind", "Merger"))),
-    ViewState("Against me", cols("who", "kind", "whom", "place", "sector", "result", "when"), sort = "ago", descending = false, filters = listOf(Filter(FilterOp.Mine))),
+    ViewState("Involving me", cols("who", "kind", "whom", "place", "sector", "result", "when"), sort = "ago", descending = false, filters = listOf(Filter(FilterOp.Mine))),
     ViewState("Rival moves", cols("who", "kind", "text", "when"), sort = "ago", descending = false, filters = listOf(Filter(FilterOp.Is, "kind", "Move"))),
 )
 
@@ -200,7 +201,7 @@ fun DealsScreen(store: GameStore, onRival: (ULong) -> Unit) {
             val mine = d.buyerHandle in mineFirms || d.targetHandle in mineFirms
             val stock = store.stocks.firstOrNull { it.firm == d.targetHandle }
             add(
-                DealRow("deal${d.handle}", "Deal", if (d.buyerHandle in mineFirms) d.target else d.buyer, if (d.buyerHandle in mineFirms) d.targetHandle else d.buyerHandle, dealKindText(d.kind), d.state,
+                DealRow("deal${d.handle}", if (terminal(d.state)) "Finished deal" else "Deal", if (d.buyerHandle in mineFirms) d.target else d.buyer, if (d.buyerHandle in mineFirms) d.targetHandle else d.buyerHandle, dealKindText(d.kind), d.state,
                     d.committedShares, stock?.sharesIssued?.takeIf { it > 0 }?.let { d.committedShares * 10_000 / it } ?: 0, d.offerPriceCents, d.committedShares * d.offerPriceCents, d.escrowCents,
                     d.deadline?.toInt(), stock?.changeQuarterBps ?: 0, mine, d, stock),
             )
@@ -283,22 +284,23 @@ private fun dealColumns(now: Int): List<GridColumn<DealRow>> = listOf(
     GridColumn("type", "What", 84.dp, numeric = false, text = { it.type }, tone = { Palette.secondary }, topic = "About"),
     GridColumn("kind", "Kind", 100.dp, numeric = false, text = { it.kind }, tone = { Palette.secondary }, topic = "About"),
     GridColumn("state", "Where it stands", 130.dp, numeric = false, text = { if (it.state == "held") DASH else dealStateText(it.state) }, tone = { if (terminal(it.state)) Palette.secondary else Palette.primaryText }, topic = "About"),
-    GridColumn("shares", "Shares", 84.dp, text = { if (it.shares > 0) Format.count(it.shares) else DASH }, sort = { it.shares }, total = true, topic = "Stake"),
+    GridColumn("shares", "Shares", 84.dp, text = { if (it.shares > 0) Format.count(it.shares) else DASH }, sort = { it.shares }, topic = "Stake"),
     GridColumn("stake", "Stake", 64.dp, text = { if (it.stakeBps > 0) "%.1f%%".format(it.stakeBps / 100.0) else DASH }, sort = { it.stakeBps }, bar = { it.stakeBps / 10_000f }, scale = 100.0, topic = "Stake", tip = "The share of the company (or of its votes, for a stake in you)."),
     GridColumn("price", "Price", 74.dp, text = { if (it.priceCents > 0) Format.price(it.priceCents) else DASH }, sort = { it.priceCents }, scale = 100.0, topic = "Money", tip = "The share price, or the offer per share for a deal."),
     GridColumn("value", "Value", 84.dp, text = { if (it.valueCents > 0) Format.compact(it.valueCents) else DASH }, sort = { it.valueCents }, fmt = { Format.compact(it) }, scale = 100.0, total = true, topic = "Money"),
-    GridColumn("escrow", "In escrow", 84.dp, text = { if (it.escrowCents > 0) Format.compact(it.escrowCents) else "" }, sort = { it.escrowCents }, scale = 100.0, total = true, topic = "Money"),
+    GridColumn("escrow", "In escrow", 84.dp, text = { if (it.escrowCents > 0) Format.compact(it.escrowCents) else "" }, sort = { it.escrowCents }, scale = 100.0, topic = "Money"),
     GridColumn("quarter", "Quarter", 66.dp, text = { if (it.stock != null) changeText(it.changeQuarterBps) else DASH }, sort = { it.changeQuarterBps }, tone = { changeTint(it.changeQuarterBps) }, scale = 100.0, topic = "Money"),
     GridColumn("left", "Weeks left", 80.dp, text = { r -> r.deadline?.let { "${(it - now).coerceAtLeast(0)}" } ?: "" }, sort = { r -> r.deadline?.let { (it - now).coerceAtLeast(0).toLong() } ?: Long.MAX_VALUE }, topic = "Time"),
 )
 
 private fun dealScopes(): List<ScopeOption<DealRow>> =
-    listOf("Deal", "You hold", "Holds you").map { t -> ScopeOption<DealRow>("type:$t", t, "What") { it.type == t } }
+    listOf("Deal", "Finished deal", "You hold", "Holds you").map { t -> ScopeOption<DealRow>("type:$t", t, "What") { it.type == t } }
 
 internal val DealViews = listOf(
     ViewState("Open deals", cols("name", "kind", "state", "price", "shares", "escrow", "left"), sort = "left", descending = false, filters = listOf(Filter(FilterOp.Is, "type", "Deal"))),
     ViewState("Stakes I hold", cols("name", "shares", "stake", "price", "value", "quarter"), sort = "value", filters = listOf(Filter(FilterOp.Is, "type", "You hold"))),
     ViewState("Stakes in me", cols("name", "shares", "stake", "value"), sort = "stake", filters = listOf(Filter(FilterOp.Is, "type", "Holds you"))),
     ViewState("Tender offers", cols("name", "state", "price", "shares", "stake", "escrow", "left"), sort = "left", descending = false, filters = listOf(Filter(FilterOp.Is, "kind", "Share offer"))),
+    ViewState("Finished deals", cols("name", "kind", "state", "price", "shares"), sort = "name", descending = false, filters = listOf(Filter(FilterOp.Is, "type", "Finished deal"))),
     ViewState("Everything", cols("name", "type", "kind", "state", "shares", "stake", "value"), sort = "value"),
 )

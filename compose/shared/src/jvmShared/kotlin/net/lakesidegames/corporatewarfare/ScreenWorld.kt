@@ -81,7 +81,7 @@ fun PoliticsScreen(store: GameStore) {
                 )
                 DataGrid(
                     "National laws", lawRows(e.laws, e.pendingLaws), lawColumns(e.pendingLaws != null), key = { it.name },
-                    modifier = Modifier.fillMaxWidth().height(gridNaturalHeight(10)), initialSort = null,
+                    modifier = Modifier.fillMaxWidth().height(gridNaturalHeight(10)), initialSort = null, phoneBelow = 200.dp,
                 )
                 if (e.pendingLaws != null && e.pendingEffectiveWeek > 0u) Text("The change takes effect in week ${e.pendingEffectiveWeek}.", color = Palette.secondary, fontSize = 11.sp)
             }
@@ -100,7 +100,7 @@ fun PoliticsScreen(store: GameStore) {
                 }
             }
             if (tender != null) {
-                Text("${tender.kindLabel} in ${tender.place}: budget ${Format.compact(tender.budgetCents)}, ${tender.bids} bids" + (if (tender.status == "open") ", closes ${ResultBuckets.weekLabel(tender.closesWeek.toInt())}" else ", ${tender.status}") + ".", color = Palette.primaryText, fontSize = 12.sp)
+                Text("${tender.kindLabel.replaceFirstChar { it.uppercase() }} in ${tender.place}: budget ${Format.compact(tender.budgetCents)}, ${tender.bids} bids" + (if (tender.status == "open") ", closes ${ResultBuckets.weekLabel(tender.closesWeek.toInt())}" else ", ${tender.status}") + ".", color = Palette.primaryText, fontSize = 12.sp)
                 if (tender.status == "open") {
                     GoldButton(if (tender.yourPriceCents > 0) "Change your bid" else "Bid on this tender") {
                         act("BidOnTender", buildMap {
@@ -179,10 +179,10 @@ private fun tenderColumns(now: Int): List<GridColumn<PublicTenderDto>> = listOf(
 )
 
 internal val TenderViews = listOf(
+    ViewState("All", cols("name", "state", "status", "budget", "bids", "winner", "closes"), sort = "closes", descending = false),
     ViewState("Open", cols("name", "state", "budget", "bids", "yours", "closes"), sort = "closes", descending = false, filters = listOf(Filter(FilterOp.Is, "status", "Open"))),
     ViewState("My bids", cols("name", "budget", "yours", "bids", "winner", "closes"), sort = "yours", filters = listOf(Filter(FilterOp.Mine))),
     ViewState("Under way", cols("name", "state", "winner", "budget", "progress"), sort = "progress"),
-    ViewState("All", cols("name", "state", "status", "budget", "bids", "winner", "closes"), sort = "closes", descending = false),
 )
 
 // MARK: Timeline
@@ -245,9 +245,9 @@ private fun eventScopes(rows: List<EventRow>): List<ScopeOption<EventRow>> =
     rows.map { it.year }.distinct().sorted().map { y -> ScopeOption<EventRow>("year:$y", "$y", "Year") { it.year == y } }
 
 internal val TimelineViews = listOf(
+    ViewState("Everything", cols("name", "status", "when", "away", "paper"), sort = "when"),
     ViewState("Coming", cols("name", "when", "away"), sort = "when", descending = false, filters = listOf(Filter(FilterOp.Is, "status", "Coming"))),
     ViewState("Happened", cols("name", "when", "away", "paper"), sort = "when", filters = listOf(Filter(FilterOp.Is, "status", "Happened"))),
-    ViewState("Everything", cols("name", "status", "when", "away", "paper"), sort = "when"),
 )
 
 // MARK: Letters
