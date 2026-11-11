@@ -378,6 +378,32 @@ pub struct Career {
     /// Every firm known at week 0: (handle, operative at end, valuation at end). Used by a later
     /// run to compare against this one.
     pub final_firms: Vec<(u64, bool, i64)>,
+    /// The career frame's result, when the run was started with `--start` or `--ambition`.
+    #[serde(default)]
+    pub career: Option<CareerResult>,
+}
+
+/// One career judged by the engine's career frame (2.0).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct CareerResult {
+    pub start: String,
+    pub playing: String,
+    pub helm_firm: Option<u64>,
+    pub helm_name: Option<String>,
+    pub helm_rank: Option<u32>,
+    pub helm_fortune_scaled: bool,
+    /// `running`, `completed`, `won`, `no_company`, `removed` or `taken_over`.
+    pub ending: String,
+    pub end_week: Option<u32>,
+    pub lost: bool,
+    pub board_warned: bool,
+    pub sentence: String,
+    /// The medal each ambition would earn in this same career.
+    pub medals: BTreeMap<String, String>,
+    pub final_company_value_cents: i64,
+    /// The helm firm's value at the end of the same seed played with no player (its AI).
+    pub ai_value_cents: Option<i64>,
+    pub beats_ai: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -452,6 +478,26 @@ pub struct Aggregate {
     /// Influence less the floor, in percentage points: what the player moved beyond chaos.
     pub influence_net_pct_median: Option<f64>,
     pub ms_per_week_mean: f64,
+    /// Career frame: shares of careers by medal for the playing ambition, and per ambition.
+    #[serde(default)]
+    pub career_no_medal_share: Option<f64>,
+    #[serde(default)]
+    pub career_bronze_plus_share: Option<f64>,
+    #[serde(default)]
+    pub career_silver_plus_share: Option<f64>,
+    #[serde(default)]
+    pub career_gold_share: Option<f64>,
+    #[serde(default)]
+    pub career_lost_share: Option<f64>,
+    #[serde(default)]
+    pub career_removed_or_warned_share: Option<f64>,
+    #[serde(default)]
+    pub helm_beats_ai_share: Option<f64>,
+    /// Ambition -> [none, bronze, silver, gold] counts.
+    #[serde(default)]
+    pub career_medals: BTreeMap<String, [u32; 4]>,
+    #[serde(default)]
+    pub career_endings: BTreeMap<String, u32>,
     /// Capacity: medians per decade over careers.
     #[serde(default)]
     pub rival_plants_built_per_decade_median: Option<f64>,
@@ -1433,7 +1479,159 @@ fn finish_career(
         },
         year_ends: observer.year_ends,
         final_firms,
+        career: career_result(session),
     }
+}
+
+/// Medal rank: none 0, bronze 1, silver 2, gold 3.
+fn medal_level(key: &str) -> usize {
+    match key {
+        "bronze" => 1,
+        "silver" => 2,
+        "gold" => 3,
+        _ => 0,
+    }
+}
+
+fn career_result(session: &Session) -> Option<CareerResult> {
+    use cw_sim::economy::career as c;
+    let world = &session.world;
+    let state = world.career.as_ref()?;
+    let lost = state.ending.as_ref().is_some_and(|e| e.kind.lost());
+    let mut medals = BTreeMap::new();
+    for ambition in c::Ambition::ALL {
+        let medal = if lost {
+            c::Medal::None
+        } else if state.ambition == Some(ambition)
+            && let Some(e) = &state.ending
+        {
+            e.medal
+        } else {
+            let mut other = state.clone();
+            other.ambition = Some(ambition);
+            c::standing(world, &other)
+        };
+        medals.insert(ambition.key().to_owned(), medal.key().to_owned());
+    }
+    let helm = state.helm.as_ref();
+    let final_value = helm
+        .map(|h| h.firm)
+        .or(world.investor.primary_group)
+        .and_then(|h| world.firm(h))
+        .filter(|f| f.status.operative())
+        .map(c::company_value)
+        .unwrap_or(0);
+    Some(CareerResult {
+        start: match state.start {
+            c::Start::Founder => "founder",
+            c::Start::Helm => "helm",
+        }
+        .to_owned(),
+        playing: state.ambition.map(|a| a.key()).unwrap_or("none").to_owned(),
+        helm_firm: helm.map(|h| h.firm.0),
+        helm_name: helm.map(|h| h.name.clone()),
+        helm_rank: helm.map(|h| h.rank),
+        helm_fortune_scaled: helm.is_some_and(|h| h.fortune_cents != h.standard_fortune_cents),
+        ending: state
+            .ending
+            .as_ref()
+            .map(|e| e.kind.key())
+            .unwrap_or("running")
+            .to_owned(),
+        end_week: state.ending.as_ref().map(|e| e.week),
+        lost,
+        board_warned: state.events.iter().any(|e| e.key == "board_warning"),
+        sentence: state
+            .ending
+            .as_ref()
+            .map(|e| e.sentence.clone())
+            .unwrap_or_default(),
+        medals,
+        final_company_value_cents: final_value,
+        ai_value_cents: None,
+        beats_ai: None,
+    })
+}
+
+/// The career option of this `arc` run (`--start`, `--ambition`, `--years`).
+#[derive(Clone, Debug)]
+struct CareerOpt {
+    helm: bool,
+    band: Option<(u32, u32)>,
+    ambition: cw_sim::economy::career::Ambition,
+    years: u32,
+}
+
+static CAREER_OPT: std::sync::Mutex<Option<CareerOpt>> = std::sync::Mutex::new(None);
+
+fn career_opt_from(arguments: &[String]) -> Option<CareerOpt> {
+    let start = flag(arguments, "--start");
+    let ambition = flag(arguments, "--ambition");
+    if start.is_none() && ambition.is_none() {
+        return None;
+    }
+    let start = start.unwrap_or_else(|| "founder".into());
+    let (helm, band) = if start == "founder" {
+        (false, None)
+    } else if start == "helm" {
+        (true, None)
+    } else if let Some(rank) = start.strip_prefix("helm:") {
+        let r: u32 = rank.parse().unwrap_or_else(|_| {
+            eprintln!("--start helm:RANK needs a number");
+            std::process::exit(1);
+        });
+        (true, Some((r, r + 4)))
+    } else {
+        eprintln!("--start is founder, helm or helm:RANK");
+        std::process::exit(1);
+    };
+    let ambition = ambition
+        .as_deref()
+        .map(|a| {
+            cw_sim::economy::career::Ambition::from_key(a).unwrap_or_else(|| {
+                eprintln!("--ambition is richest, biggest, dominant or survivor");
+                std::process::exit(1);
+            })
+        })
+        .unwrap_or(cw_sim::economy::career::Ambition::Biggest);
+    let years: u32 = flag(arguments, "--years")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    Some(CareerOpt {
+        helm,
+        band,
+        ambition,
+        years,
+    })
+}
+
+/// Start the run's career on a fresh session: the helm start takes the first company the
+/// engine offers in the band (rank order, different sectors first).
+fn begin_career(session: &mut Session, opt: &CareerOpt) -> Result<(), String> {
+    use cw_sim::economy::career as c;
+    let helm_firm = if opt.helm {
+        let offers = c::helm_offers_in(&session.world, opt.band);
+        Some(
+            offers
+                .first()
+                .ok_or_else(|| "no company on offer for the helm start".to_owned())?
+                .firm
+                .0,
+        )
+    } else {
+        None
+    };
+    let setup = c::CareerSetup {
+        start: if opt.helm {
+            c::Start::Helm
+        } else {
+            c::Start::Founder
+        },
+        helm_firm,
+        ambition: Some(opt.ambition),
+        years: opt.years,
+    };
+    c::begin(&mut session.world, &session.dataset, &setup)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1492,6 +1690,11 @@ fn play(
     let mut session = Session::create(arc_config(seed, scenario_id, difficulty))
         .map_err(|e| format!("seed {seed}: session failed: {e:?}"))?;
     apply_markets_override(&mut session)?;
+    // The comparison run with no player plays the world without a career.
+    let opt = CAREER_OPT.lock().ok().and_then(|o| o.clone());
+    if let Some(opt) = opt.filter(|_| policy != ReferencePolicy::None) {
+        begin_career(&mut session, &opt).map_err(|e| format!("seed {seed}: career: {e}"))?;
+    }
     let check = scenario_check(&session, scenario_id);
     let mut runner = PolicyRunner::new(policy, VERBOSE.load(std::sync::atomic::Ordering::Relaxed));
     let mut observer = Observer::new();
@@ -1558,6 +1761,21 @@ fn share(part: usize, whole: usize) -> Option<f64> {
 
 fn med(values: Vec<f64>) -> Option<f64> {
     median_f64(&values)
+}
+
+fn playing_medal(r: &CareerResult) -> &str {
+    r.medals
+        .get(&r.playing)
+        .map(String::as_str)
+        .unwrap_or("none")
+}
+
+fn career_share(careers: &[Career], test: impl Fn(&CareerResult) -> bool) -> Option<f64> {
+    let judged: Vec<&CareerResult> = careers.iter().filter_map(|c| c.career.as_ref()).collect();
+    if judged.is_empty() {
+        return None;
+    }
+    Some(judged.iter().filter(|r| test(r)).count() as f64 / judged.len() as f64)
 }
 
 pub fn aggregate(careers: &[Career]) -> Aggregate {
@@ -1785,6 +2003,41 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         } else {
             careers.iter().map(|c| c.ms_per_week).sum::<f64>() / careers.len() as f64
         },
+        career_no_medal_share: career_share(careers, |r| medal_level(playing_medal(r)) == 0),
+        career_bronze_plus_share: career_share(careers, |r| medal_level(playing_medal(r)) >= 1),
+        career_silver_plus_share: career_share(careers, |r| medal_level(playing_medal(r)) >= 2),
+        career_gold_share: career_share(careers, |r| medal_level(playing_medal(r)) >= 3),
+        career_lost_share: career_share(careers, |r| r.lost),
+        career_removed_or_warned_share: career_share(careers, |r| {
+            r.ending == "removed" || r.board_warned
+        }),
+        helm_beats_ai_share: {
+            let judged: Vec<bool> = careers
+                .iter()
+                .filter_map(|c| c.career.as_ref().and_then(|r| r.beats_ai))
+                .collect();
+            if judged.is_empty() {
+                None
+            } else {
+                Some(judged.iter().filter(|b| **b).count() as f64 / judged.len() as f64)
+            }
+        },
+        career_medals: {
+            let mut m: BTreeMap<String, [u32; 4]> = BTreeMap::new();
+            for r in careers.iter().filter_map(|c| c.career.as_ref()) {
+                for (a, medal) in &r.medals {
+                    m.entry(a.clone()).or_default()[medal_level(medal)] += 1;
+                }
+            }
+            m
+        },
+        career_endings: {
+            let mut m: BTreeMap<String, u32> = BTreeMap::new();
+            for r in careers.iter().filter_map(|c| c.career.as_ref()) {
+                *m.entry(r.ending.clone()).or_default() += 1;
+            }
+            m
+        },
         rival_plants_built_per_decade_median: med(careers
             .iter()
             .map(|c| per_decade(c.capacity.rival_plants_built, c.weeks_played))
@@ -1881,11 +2134,22 @@ struct GateSpec {
     min: Option<f64>,
     max: Option<f64>,
     max_exclusive: Option<f64>,
+    /// `founder` or `helm`: the gate applies only to runs with that career start. None applies
+    /// to every run.
+    #[serde(default)]
+    start: Option<String>,
 }
 
 fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
     match metric {
         "bottom_half_share" => aggregate.bottom_half_share,
+        "career_no_medal_share" => aggregate.career_no_medal_share,
+        "career_bronze_plus_share" => aggregate.career_bronze_plus_share,
+        "career_silver_plus_share" => aggregate.career_silver_plus_share,
+        "career_gold_share" => aggregate.career_gold_share,
+        "career_lost_share" => aggregate.career_lost_share,
+        "career_removed_or_warned_share" => aggregate.career_removed_or_warned_share,
+        "helm_beats_ai_share" => aggregate.helm_beats_ai_share,
         "bust_share" => aggregate.bust_share,
         "first_place_share" => aggregate.first_place_share,
         "leader_changes_per_decade_median" => aggregate.leader_changes_per_decade_median,
@@ -1908,9 +2172,20 @@ fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
     }
 }
 
+#[cfg(test)]
 pub fn evaluate_gates(
     gates_json: &str,
     policy: &str,
+    aggregate: &Aggregate,
+) -> Result<Vec<GateResult>, String> {
+    evaluate_gates_for(gates_json, policy, "founder", aggregate)
+}
+
+/// As `evaluate_gates`, for a run whose career started as `start` (`founder` or `helm`).
+pub fn evaluate_gates_for(
+    gates_json: &str,
+    policy: &str,
+    start: &str,
     aggregate: &Aggregate,
 ) -> Result<Vec<GateResult>, String> {
     let file: GateFile = serde_json::from_str(gates_json).map_err(|e| format!("gates: {e}"))?;
@@ -1918,7 +2193,8 @@ pub fn evaluate_gates(
         .gates
         .iter()
         .map(|gate| {
-            let applies = gate.policy == "any" || gate.policy == policy;
+            let applies = (gate.policy == "any" || gate.policy == policy)
+                && gate.start.as_deref().is_none_or(|s| s == start);
             let value = metric_value(aggregate, &gate.metric);
             let result = match (applies, value) {
                 (false, _) | (true, None) => "n/a",
@@ -2160,6 +2436,19 @@ pub fn run(arguments: &[String]) {
     load_markets_override(arguments);
     let difficulty = cw_data::Difficulty::from_key(&difficulty_key);
     let policy = crate::policy_flag(arguments);
+    let career_opt = career_opt_from(arguments);
+    let start_key = career_opt
+        .as_ref()
+        .map(|o| if o.helm { "helm" } else { "founder" })
+        .unwrap_or("founder");
+    // A career without an explicit horizon plays its own length.
+    let weeks = match (&career_opt, flag(arguments, "--weeks")) {
+        (Some(o), None) => o.years * 52,
+        _ => weeks,
+    };
+    if let Ok(mut slot) = CAREER_OPT.lock() {
+        *slot = career_opt.clone();
+    }
     let gates_json = match flag(arguments, "--gates") {
         Some(path) => fs::read_to_string(&path).unwrap_or_else(|e| {
             eprintln!("cannot read {path}: {e}");
@@ -2208,6 +2497,17 @@ pub fn run(arguments: &[String]) {
                             .ok(),
                     };
                     career.influence = none.as_ref().map(|n| compare(n, &career.final_firms));
+                    if let (Some(n), Some(result)) = (none.as_ref(), career.career.as_mut())
+                        && let Some(firm) = result.helm_firm
+                    {
+                        let ai = n
+                            .iter()
+                            .find(|(h, _, _)| *h == firm)
+                            .map(|(_, alive, v)| if *alive { *v } else { 0 })
+                            .unwrap_or(0);
+                        result.ai_value_cents = Some(ai);
+                        result.beats_ai = Some(result.final_company_value_cents > ai);
+                    }
                     if !policy.is_noise()
                         && let (Some(n), Some(noise)) = (none.as_ref(), noise_cache.get(&seed))
                     {
@@ -2229,6 +2529,22 @@ pub fn run(arguments: &[String]) {
                     career.hostile.total,
                     career.ms_per_week
                 );
+                if let Some(r) = &career.career {
+                    println!(
+                        "  career start={} helm={:?} rank={:?} ending={} lost={} warned={} medals={:?} value={} ai={:?} beats_ai={:?} | {}",
+                        r.start,
+                        r.helm_name,
+                        r.helm_rank,
+                        r.ending,
+                        r.lost,
+                        r.board_warned,
+                        r.medals,
+                        r.final_company_value_cents,
+                        r.ai_value_cents,
+                        r.beats_ai,
+                        r.sentence
+                    );
+                }
                 careers.push(career);
             }
             Err(error) => {
@@ -2239,10 +2555,11 @@ pub fn run(arguments: &[String]) {
     }
 
     let aggregate = aggregate(&careers);
-    let gates = evaluate_gates(&gates_json, policy.key(), &aggregate).unwrap_or_else(|e| {
-        eprintln!("{e}");
-        Vec::new()
-    });
+    let gates = evaluate_gates_for(&gates_json, policy.key(), start_key, &aggregate)
+        .unwrap_or_else(|e| {
+            eprintln!("{e}");
+            Vec::new()
+        });
     let report = ArcReport {
         schema: "cw-arc/1".to_owned(),
         engine_version: cw_core::ENGINE_VERSION.to_owned(),
@@ -2289,6 +2606,25 @@ pub fn run(arguments: &[String]) {
         a.price_swings_per_year_mean,
         a.ms_per_week_mean
     );
+    if !a.career_medals.is_empty() {
+        println!(
+            "career start={start_key} playing_no_medal={:?} bronze_plus={:?} silver_plus={:?} gold={:?} lost={:?} removed_or_warned={:?} helm_beats_ai={:?} endings={:?}",
+            a.career_no_medal_share,
+            a.career_bronze_plus_share,
+            a.career_silver_plus_share,
+            a.career_gold_share,
+            a.career_lost_share,
+            a.career_removed_or_warned_share,
+            a.helm_beats_ai_share,
+            a.career_endings
+        );
+        for (ambition, counts) in &a.career_medals {
+            println!(
+                "career medals {ambition}: none {} bronze {} silver {} gold {}",
+                counts[0], counts[1], counts[2], counts[3]
+            );
+        }
+    }
     for gate in &report.gates {
         println!(
             "gate {:<22} {:<5} value={:?}  {}",

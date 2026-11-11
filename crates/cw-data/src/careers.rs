@@ -55,6 +55,9 @@ pub struct Board {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Dominant {
     pub quarters: u32,
+    /// An industry counts only in a quarter in which at least this many companies (groups
+    /// counted once) made its output, so a near monopoly at the start is not dominance won.
+    pub min_producers: u32,
     pub bronze_bps: i64,
     pub silver_bps: i64,
     pub gold_bps: i64,

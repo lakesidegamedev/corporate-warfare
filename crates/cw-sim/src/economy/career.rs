@@ -148,6 +148,7 @@ pub struct Rules {
     pub rank_silver: u32,
     pub rank_gold: u32,
     pub dominant_quarters: u32,
+    pub dominant_min_producers: u32,
     pub dominant_bronze_bps: i64,
     pub dominant_silver_bps: i64,
     pub dominant_gold_bps: i64,
@@ -168,6 +169,7 @@ impl Rules {
             rank_silver: t.ranks.silver,
             rank_gold: t.ranks.gold,
             dominant_quarters: t.dominant.quarters,
+            dominant_min_producers: t.dominant.min_producers,
             dominant_bronze_bps: t.dominant.bronze_bps,
             dominant_silver_bps: t.dominant.silver_bps,
             dominant_gold_bps: t.dominant.gold_bps,
@@ -236,6 +238,9 @@ pub struct Tracking {
     pub past_due: BTreeSet<Handle>,
     /// Lots made this quarter by industry: (the player's group, everyone).
     pub quarter_lots: BTreeMap<u8, (i64, i64)>,
+    /// The top-level owners (the player's group as one) that made each industry's output this
+    /// quarter.
+    pub quarter_producers: BTreeMap<u8, BTreeSet<u64>>,
     /// Quarters in a row each industry's share has been at or above each medal's line.
     pub streaks: BTreeMap<u8, [u32; 3]>,
     /// Best Dominant medal reached so far, its industry and share.
@@ -852,8 +857,25 @@ fn step(world: &mut World, ds: &Dataset, state: &mut CareerState) {
         let lots = plant.last_output.0;
         let entry = state.tracking.quarter_lots.entry(industry).or_default();
         entry.1 += lots;
-        if groups.contains(&plant.firm) {
+        let ours = groups.contains(&plant.firm);
+        if ours {
             entry.0 += lots;
+        }
+        if lots > 0 {
+            let owner = if ours {
+                u64::MAX
+            } else {
+                match ultimate_controller(world, plant.firm) {
+                    Some(HolderId::Firm(h)) => h.0,
+                    _ => plant.firm.0,
+                }
+            };
+            state
+                .tracking
+                .quarter_producers
+                .entry(industry)
+                .or_default()
+                .insert(owner);
         }
     }
 
@@ -1005,12 +1027,19 @@ fn quarter(world: &mut World, state: &mut CareerState) {
         r.dominant_gold_bps,
     ];
     let lots = std::mem::take(&mut state.tracking.quarter_lots);
+    let producers = std::mem::take(&mut state.tracking.quarter_producers);
     let mut best: Option<(u8, i64)> = None;
     for (industry, (ours, all)) in &lots {
         if *all <= 0 {
             continue;
         }
-        let share = (*ours as i128 * 10_000 / *all as i128) as i64;
+        let makers = producers.get(industry).map_or(0, |p| p.len() as u32);
+        // A thin industry is not a contest: its share counts as nothing this quarter.
+        let share = if makers < r.dominant_min_producers {
+            0
+        } else {
+            (*ours as i128 * 10_000 / *all as i128) as i64
+        };
         if best.is_none_or(|(_, s)| share > s) {
             best = Some((*industry, share));
         }

@@ -33,6 +33,22 @@
     { "id": "unmet_local_falls", "policy": "any", "metric": "unmet_local_fall_pct_median", "min": 5.0,
       "text": "household demand for services and retail that goes without falls at least 5 points over the decade (median)" },
     { "id": "raid_warning", "policy": "any", "metric": "raid_warning_weeks_median", "min": 4.0,
-      "text": "raids on the player are announced at least 4 weeks before they resolve (median; n/a until raid warnings exist)" }
+      "text": "raids on the player are announced at least 4 weeks before they resolve (median; n/a until raid warnings exist)" },
+    { "id": "career_passive_no_medal", "policy": "passive", "start": "founder", "metric": "career_no_medal_share", "min": 0.80,
+      "text": "career (run with --ambition): passive founder earns no medal in at least 80 percent of careers" },
+    { "id": "career_passive_sidelined", "policy": "passive", "start": "founder", "metric": "career_removed_or_warned_share", "min": 0.01,
+      "text": "career: the board warns or removes a passive founder in some careers" },
+    { "id": "career_skilled_bronze", "policy": "skilled", "start": "founder", "metric": "career_bronze_plus_share", "min": 0.50,
+      "text": "career: careful skilled founder earns at least bronze in half the careers" },
+    { "id": "career_skilled_gold_cap", "policy": "skilled", "start": "founder", "metric": "career_gold_share", "max": 0.334,
+      "text": "career: careful skilled founder earns gold in no more than a third of careers" },
+    { "id": "career_helm_silver", "policy": "skilled", "start": "helm", "metric": "career_silver_plus_share", "min": 0.333,
+      "text": "career: careful skilled at the helm earns at least silver in a third of careers" },
+    { "id": "career_helm_gold_some", "policy": "skilled", "start": "helm", "metric": "career_gold_share", "min": 0.01, "max_exclusive": 0.50,
+      "text": "career: careful skilled at the helm earns gold in some careers but under half" },
+    { "id": "career_helm_beats_ai", "policy": "skilled", "start": "helm", "metric": "helm_beats_ai_share", "min": 0.51,
+      "text": "career: the helm company ends worth more than the same company left to its AI (cw-cli helm) in most careers" },
+    { "id": "career_reckless_loses", "policy": "reckless", "start": "founder", "metric": "career_lost_share", "min": 0.51,
+      "text": "career: a reckless founder loses (no company left, removed by the board or taken over) in most careers" }
   ]
 }

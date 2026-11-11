@@ -19,6 +19,7 @@
   },
   "dominant": {
     "quarters": 4,
+    "min_producers": 5,
     "bronze_bps": 2000,
     "silver_bps": 3000,
     "gold_bps": 4000
