@@ -400,6 +400,11 @@ pub fn liquidate(world: &mut World, firm: Handle, dataset: &Dataset) {
         }
         entity.status = FirmStatus::Liquidating;
     }
+    // Goods still in transit to the firm were paid for and booked to its inventory account at
+    // dispatch, so the sale above sold them too: they go to the outside buyers, not into the
+    // estate's warehouse, where they would draw storage fees from the creditors' money while
+    // the plants are at auction.
+    world.shipments.retain(|shipment| shipment.buyer != firm);
     pay_creditors(world, firm);
     if world.investor.primary_group == Some(firm) {
         world.investor.primary_group = None;
