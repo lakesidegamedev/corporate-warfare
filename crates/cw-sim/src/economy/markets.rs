@@ -157,7 +157,7 @@ fn ceil_cost(price_cents: i64, milli_lots: i64) -> i64 {
 pub fn clear_week(world: &mut World, dataset: &Dataset) {
     // Roll the gateway volume signal: last week's imports feed the smoothed average.
     for gateway in &mut world.gateways {
-        grow_export_room(gateway);
+        adapt_gateway_room(gateway, &dataset.markets);
         gateway.smoothed_import_lots =
             (gateway.smoothed_import_lots * 3 + gateway.last_import_lots) / 4;
         gateway.last_import_lots = 0;
@@ -201,18 +201,43 @@ fn resell_exports_abroad(world: &mut World) {
     );
 }
 
-/// Room a gateway adds after a week its exports filled it, in basis points of its capacity.
+/// Room a gateway adds after a week its exports filled it, in basis points of its capacity,
+/// under the default rules. Content sets its own (`MarketRules::room_growth_bps`).
 pub const EXPORT_ROOM_GROWTH_BPS: i64 = 100;
 
-/// A gateway is sized at the start to the plants then running. When sellers fill its export room
-/// the port and rail behind it are used to the limit, and like any used infrastructure it is
-/// extended: a full week adds one percent of room, at least one lot. Growth stops as soon as a
-/// week leaves room unused, so it follows sustained use, never a single spike, and the outside
-/// account's paced cash still limits what the room can pay for.
-fn grow_export_room(gateway: &mut crate::state::Gateway) {
-    if gateway.last_export_lots > 0 && gateway.last_export_lots >= gateway.capacity_lots {
-        let added = (gateway.capacity_lots * EXPORT_ROOM_GROWTH_BPS / 10_000).max(1);
-        gateway.capacity_lots = gateway.capacity_lots.saturating_add(added);
+/// A gateway is sized at the start to the plants then running. When the corridor's trade runs
+/// past its first step (exports fill it, or imports reach the dear steps) the port and rail
+/// behind it are used to the limit, and like any used infrastructure they are extended: a full
+/// week adds the content's growth share of room, at least one lot. When its busier direction
+/// uses less than the content's shrink threshold the room slowly falls back toward what is
+/// used, so the next plant to open or close spills into the steps again. A gateway that moved
+/// nothing at all keeps its room. Both moves are slow, so a glut or a shortage lasts months, and
+/// the outside account's paced cash still limits what the room can pay for.
+fn adapt_gateway_room(gateway: &mut crate::state::Gateway, rules: &cw_data::MarketRules) {
+    let room = gateway.capacity_lots;
+    let import_first = (room.max(0) * rules.import_first_step_bps / 10_000).max(1);
+    let exports_full = gateway.last_export_lots > 0 && gateway.last_export_lots >= room;
+    let imports_deep = rules.gateway_steps > 1
+        && gateway.sell_price_cents > 0
+        && gateway.last_import_lots > import_first;
+    if exports_full || imports_deep {
+        let added = (room * rules.room_growth_bps / 10_000).max(1);
+        gateway.capacity_lots = room.saturating_add(added);
+        return;
+    }
+    // Each direction is read against its own first step, so the room settles between "the
+    // first step is full" (grow) and "the first step is under three quarters used" (shrink) and
+    // never flips week to week around one line.
+    let export_first = (room.max(0) * rules.export_first_step_bps / 10_000).max(1);
+    let (imported, exported) = (gateway.last_import_lots, gateway.last_export_lots);
+    let below = |used: i64, first: i64| used * 10_000 < first * rules.room_shrink_below_bps;
+    if rules.room_shrink_bps > 0
+        && imported.max(exported) > 0
+        && below(imported, import_first)
+        && below(exported, export_first)
+    {
+        let cut = (room * rules.room_shrink_bps / 10_000).max(1);
+        gateway.capacity_lots = (room - cut).max(imported.max(exported)).max(1);
     }
 }
 
@@ -589,7 +614,8 @@ fn clear_goods_exchange(
         /// The buying firm's own stock in another region, moved to its plants at cost: the firm
         /// pays only the freight, and the goods keep their carrying cost.
         Own(u8),
-        Gateway(usize),
+        /// One volume step of a gateway's imports: each further step costs more.
+        Gateway(usize, i64),
         /// The strategic reserve's stock in one region, sold in that region only.
         Reserve(u8),
     }
@@ -645,20 +671,27 @@ fn clear_goods_exchange(
             ));
         }
         for (index, gateway) in world.gateways.iter().enumerate() {
-            if gateway.region == to
-                && gateway.product == product
-                && gateway.sell_price_cents > 0
-                && caps
-                    .get(buyer_key)
-                    .is_none_or(|cap| gateway.sell_price_cents <= *cap)
-            {
-                pairs.push((
+            if gateway.region != to || gateway.product != product || gateway.sell_price_cents <= 0 {
+                continue;
+            }
+            // A gateway's imports come in volume steps, each dearer than the last: a corridor
+            // that leans on imports pays more for the last lots it brings in.
+            for step in 0..dataset.markets.gateway_steps.max(1) {
+                let price = crate::economy::pricing::import_step_price(
+                    dataset,
                     gateway.sell_price_cents,
-                    // Each gateway is its own source, after every firm seller at equal price.
-                    u64::MAX - index as u64,
+                    step,
+                );
+                if caps.get(buyer_key).is_some_and(|cap| price > *cap) {
+                    break;
+                }
+                pairs.push((
+                    price,
+                    // Each gateway step is its own source, after every firm seller at equal price.
+                    u64::MAX - (index as u64) * 64 - step as u64,
                     buyer.0 ^ ((to as u64) << 56),
                     *buyer_key,
-                    Source::Gateway(index),
+                    Source::Gateway(index, step),
                 ));
             }
         }
@@ -673,7 +706,7 @@ fn clear_goods_exchange(
             *buyer,
         )
     });
-    let mut import_left: BTreeMap<usize, i64> = BTreeMap::new();
+    let mut import_left: BTreeMap<(usize, i64), i64> = BTreeMap::new();
     // Work through the pairings one price tier and source at a time. Buyers tied on the same
     // source at the same delivered price share it in proportion to what each still wants and
     // can pay for, so a large buyer cannot starve a small one by handle order.
@@ -691,9 +724,14 @@ fn clear_goods_exchange(
         let available = match source {
             Source::Firm(seller, from) => supply.get(&(seller, from)).copied().unwrap_or(0),
             Source::Own(from) => supply.get(&(tier[0].0.0, from)).copied().unwrap_or(0),
-            Source::Gateway(gate) => *import_left
-                .entry(gate)
-                .or_insert(world.gateways[gate].capacity_lots * 1_000),
+            Source::Gateway(gate, step) => *import_left.entry((gate, step)).or_insert(
+                crate::economy::pricing::step_lots(
+                    dataset,
+                    world.gateways[gate].capacity_lots,
+                    step,
+                    true,
+                ) * 1_000,
+            ),
             Source::Reserve(region) => reserve_left.get(&region).copied().unwrap_or(0),
         };
         if available <= 0 {
@@ -860,7 +898,7 @@ fn clear_goods_exchange(
                     entry.0 -= qty;
                     entry.1 -= paid + freight;
                 }
-                Source::Gateway(gate) => {
+                Source::Gateway(gate, step) => {
                     let paid = qty_lots.value_at(Cents(delivered)).unwrap_or(Cents::ZERO).0;
                     if paid <= 0 {
                         continue;
@@ -888,7 +926,7 @@ fn clear_goods_exchange(
                             .debit(Account::Cash, received, "export receipt")
                             .credit(Account::Revenue, received, "export receipt"),
                     );
-                    *import_left.get_mut(&gate).unwrap() -= qty;
+                    *import_left.get_mut(&(gate, step)).unwrap() -= qty;
                     let entry = demand.get_mut(&buyer_key).unwrap();
                     entry.0 -= qty;
                     entry.1 -= paid;
@@ -969,18 +1007,16 @@ fn sell_surplus_to_gateway_from(
     if gateway.buy_price_cents <= 0 {
         return;
     }
-    let mut remaining = MilliLots::from_lots(
-        gateway
-            .capacity_lots
-            .max(coproduct_room(world, dataset, region, product)),
-    );
-    if remaining.0 <= 0 {
-        return;
-    }
+    // The gateway's room in volume steps, each paying less than the last. A co-product's room
+    // is never smaller than what the plants making it throw off.
+    let base_room = gateway
+        .capacity_lots
+        .max(coproduct_room(world, dataset, region, product));
+    let steps = dataset.markets.gateway_steps.max(1);
+    // What each seller can export: its stock beyond its own plants' input cover and its active
+    // sell contracts.
+    let mut offered: Vec<(Handle, i64)> = Vec::new();
     for seller in sellers {
-        if remaining.0 <= 0 {
-            break;
-        }
         let Some(firm) = world.firms.get(seller) else {
             continue;
         };
@@ -999,25 +1035,71 @@ fn sell_surplus_to_gateway_from(
             .sum();
         let available = firm.stock(product, region).lots();
         let exportable = (available - own_need - committed).max(0);
-        if exportable <= 0 {
+        if exportable > 0 {
+            offered.push((seller, exportable));
+        }
+    }
+    let total: i64 = offered.iter().map(|(_, lots)| *lots).sum();
+    if total <= 0 {
+        return;
+    }
+    // The value of the first `lots` of the week's exports, walking down the steps.
+    let value_of = |lots: i64| -> i64 {
+        let mut left = lots;
+        let mut value = 0i64;
+        for step in 0..steps {
+            let here = left.min(crate::economy::pricing::step_lots(
+                dataset, base_room, step, false,
+            ));
+            if here <= 0 {
+                break;
+            }
+            value += here
+                * crate::economy::pricing::export_step_price(
+                    dataset,
+                    gateway.buy_price_cents,
+                    step,
+                );
+            left -= here;
+        }
+        value
+    };
+    let mut take = total.min(crate::economy::pricing::room_lots(
+        dataset, base_room, false,
+    ));
+    // The gateway buys only what its paced cash pays for in full; a seller never hands over
+    // goods for part of their price.
+    let spendable = world.outside.gateway_spendable();
+    while take > 0
+        && crate::economy::fx::region_to_numeraire(world, dataset, region, value_of(take))
+            > spendable
+    {
+        take = take * 9 / 10;
+    }
+    if take <= 0 {
+        return;
+    }
+    let value = value_of(take);
+    // Every seller exports the same share of what it offered and is paid the week's average
+    // price, so no seller gets the dear steps by being first in line.
+    let shares = allocate_cents(
+        Cents(take),
+        &offered
+            .iter()
+            .map(|(seller, lots)| (seller.0, *lots))
+            .collect::<Vec<_>>(),
+    );
+    for ((seller, _), (_, share)) in offered.iter().zip(shares) {
+        let lots = share.0;
+        if lots <= 0 {
             continue;
         }
-        // The gateway buys only what its paced cash pays for in full; a seller never hands
-        // over goods for part of their price.
-        let price = gateway.buy_price_cents.max(1);
-        let price_numeraire =
-            crate::economy::fx::region_to_numeraire(world, dataset, region, price).max(1);
-        let affordable = world.outside.gateway_spendable() / price_numeraire * 1_000;
-        let qty = MilliLots::from_lots(exportable)
-            .min(remaining)
-            .min(MilliLots(affordable));
-        if qty.0 <= 0 {
-            break;
-        }
-        let paid = qty.value_at(Cents(price)).unwrap_or(Cents::ZERO).0;
+        let qty = MilliLots::from_lots(lots);
+        let paid = (value as i128 * lots as i128 / take as i128) as i64;
         if paid <= 0 {
-            break;
+            continue;
         }
+        let seller = *seller;
         let (removed, carrying) = remove_stock(world, seller, product, region, qty);
         if !removed {
             continue;
@@ -1040,8 +1122,7 @@ fn sell_surplus_to_gateway_from(
                 .credit(Account::Cash, spent, "export purchase")
                 .debit(Account::Inventory, spent, "export purchase"),
         );
-        world.gateways[index].last_export_lots += qty.lots();
-        remaining = MilliLots(remaining.0 - qty.0);
+        world.gateways[index].last_export_lots += lots;
     }
 }
 
@@ -1071,7 +1152,7 @@ fn statewide(dataset: &Dataset, product: u16) -> bool {
 }
 
 /// Regions whose stock can be offered in `region`'s market, the market's own region first.
-fn supply_regions(dataset: &Dataset, region: u8, product: u16) -> Vec<u8> {
+pub(crate) fn supply_regions(dataset: &Dataset, region: u8, product: u16) -> Vec<u8> {
     if !statewide(dataset, product) {
         return vec![region];
     }
@@ -2111,7 +2192,7 @@ mod tests {
             (0, 0, 0),
         ] {
             let mut g = gateway(capacity, exported);
-            grow_export_room(&mut g);
+            adapt_gateway_room(&mut g, &cw_data::MarketRules::default());
             assert_eq!(
                 g.capacity_lots, expected,
                 "{capacity} lots, {exported} exported"
@@ -2121,9 +2202,62 @@ mod tests {
         let mut g = gateway(100, 0);
         for _ in 0..12 {
             g.last_export_lots = g.capacity_lots;
-            grow_export_room(&mut g);
+            adapt_gateway_room(&mut g, &cw_data::MarketRules::default());
         }
         assert_eq!(g.capacity_lots, 112);
+    }
+
+    #[test]
+    fn gateway_room_follows_use_slowly_both_ways() {
+        let rules = cw_data::MarketRules {
+            import_first_step_bps: 5_000,
+            gateway_steps: 5,
+            room_growth_bps: 25,
+            room_shrink_bps: 25,
+            room_shrink_below_bps: 7_500,
+            ..cw_data::MarketRules::default()
+        };
+        let gateway = |capacity_lots: i64, imported: i64, exported: i64| crate::state::Gateway {
+            region: 0,
+            product: 0,
+            capacity_lots,
+            sell_price_cents: 115,
+            buy_price_cents: 85,
+            last_import_lots: imported,
+            last_export_lots: exported,
+            smoothed_import_lots: 0,
+        };
+        // Worked by hand, room 4,000: the first import step is 2,000 lots, the first export
+        // step all 4,000. Imports of 2,001 reach the dear steps: grow a quarter percent, 10 lots.
+        // Imports of 2,000 fill the first step: hold. 1,500 is exactly three quarters of it:
+        // hold. 1,499 is under: shrink 10 lots. Exports of 4,000 fill the room: grow 10 lots.
+        // 3,000 is three quarters of the export step: hold. Nothing moved: hold. Use of 10
+        // lots: shrink, never under the use.
+        for (imported, exported, expected) in [
+            (2_001, 0, 4_010),
+            (2_000, 0, 4_000),
+            (1_500, 0, 4_000),
+            (1_499, 0, 3_990),
+            (0, 4_000, 4_010),
+            (0, 3_000, 4_000),
+            (0, 0, 4_000),
+            (10, 0, 3_990),
+        ] {
+            let mut g = gateway(4_000, imported, exported);
+            adapt_gateway_room(&mut g, &rules);
+            assert_eq!(g.capacity_lots, expected, "{imported} in, {exported} out");
+        }
+        // A year of quarter use takes the room down about 12 percent, not to the use at once.
+        let mut g = gateway(4_000, 1_000, 0);
+        for _ in 0..52 {
+            g.last_import_lots = 1_000;
+            adapt_gateway_room(&mut g, &rules);
+        }
+        assert!(
+            (3_500..3_560).contains(&g.capacity_lots),
+            "{}",
+            g.capacity_lots
+        );
     }
 
     #[test]

@@ -5,6 +5,7 @@
 
 mod arc;
 mod policy;
+mod trace;
 
 use std::collections::BTreeMap;
 use std::env;
@@ -25,6 +26,7 @@ fn main() {
         Some("report") => report(&arguments[1..]),
         Some("bench") => bench(&arguments[1..]),
         Some("arc") => arc::run(&arguments[1..]),
+        Some("market-trace") => trace::run(&arguments[1..]),
         Some("probe") => policy::skilled::probe_all(&arguments[1..]),
         Some("opps") => policy::skilled::explore(&arguments[1..]),
         _ => {
@@ -154,7 +156,7 @@ fn prices_flag(arguments: &[String]) -> cw_session::PriceSetup {
     }
 }
 
-fn policy_flag(arguments: &[String]) -> ReferencePolicy {
+pub(crate) fn policy_flag(arguments: &[String]) -> ReferencePolicy {
     let name = flag(arguments, "--policy").unwrap_or_else(|| "none".to_owned());
     match ReferencePolicy::parse(&name) {
         Some(policy) => policy,

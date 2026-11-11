@@ -266,6 +266,9 @@ pub struct DealCounts {
 pub struct GoodPrice {
     pub good: String,
     pub reference_cents: i64,
+    /// Whether the good has a gateway (traded) or not (services and retail goods: local).
+    #[serde(default)]
+    pub traded: bool,
     /// Median over years of (max - min) / reference, in percent.
     pub median_year_range_pct: f64,
     pub years: u32,
@@ -369,6 +372,15 @@ pub struct Aggregate {
     pub stressed_share: Option<f64>,
     pub worst_zombies: Vec<ZombieFirm>,
     pub price_range_pct_median: Option<f64>,
+    /// The same median over goods with a gateway only, and over goods without one (services and
+    /// retail goods).
+    #[serde(default)]
+    pub price_range_traded_pct_median: Option<f64>,
+    #[serde(default)]
+    pub price_range_local_pct_median: Option<f64>,
+    /// Per good: (good, traded, median range in percent over seeds).
+    #[serde(default)]
+    pub price_range_by_good: Vec<(String, bool, f64)>,
     pub weeks_at_cap_share_pct_median: Option<f64>,
     pub weeks_at_floor_share_pct_median: Option<f64>,
     pub hostile_total_median: Option<f64>,
@@ -439,8 +451,8 @@ struct Life {
 
 #[derive(Default)]
 struct PriceTrack {
-    /// (good, year) -> (min, max, observations)
-    windows: BTreeMap<(u16, u32), (i64, i64, u32)>,
+    /// (good, year) -> (min, max, observations, sum of the week's price anchor)
+    windows: BTreeMap<(u16, u32), (i64, i64, u32, i128)>,
     weeks: BTreeMap<u16, (u64, u64, u64)>,
     last_week: u32,
 }
@@ -857,14 +869,16 @@ impl Observer {
                 }
             }
             for (good, price) in &point.goods {
+                let anchor = cw_sim::economy::pricing::price_anchor(world, &session.dataset, *good);
                 let window =
                     self.prices
                         .windows
                         .entry((*good, year))
-                        .or_insert((i64::MAX, i64::MIN, 0));
+                        .or_insert((i64::MAX, i64::MIN, 0, 0));
                 window.0 = window.0.min(*price);
                 window.1 = window.1.max(*price);
                 window.2 += 1;
+                window.3 += anchor as i128;
                 let counts = self.prices.weeks.entry(*good).or_default();
                 counts.0 += 1;
                 if sell.get(good).is_some_and(|cap| *price >= *cap) {
@@ -1004,11 +1018,14 @@ fn finish_career(
     // Prices.
     let mut goods = Vec::new();
     let mut by_good: BTreeMap<u16, Vec<f64>> = BTreeMap::new();
-    for ((good, _year), (min, max, count)) in &observer.prices.windows {
+    for ((good, _year), (min, max, count, anchor_sum)) in &observer.prices.windows {
         if *count < 13 {
             continue;
         }
-        let reference = session.dataset.reference_price(*good);
+        // Range against the year's mean anchor: the outside middle quote for a traded good, the
+        // price-level reference for a service, the catalogue price otherwise. A world price
+        // path that drifts is not counted as range.
+        let reference = (*anchor_sum / *count as i128).max(1) as i64;
         if let Some(range) = range_pct_x100(*min, *max, reference) {
             by_good.entry(*good).or_default().push(range as f64 / 100.0);
         }
@@ -1018,6 +1035,10 @@ fn finish_career(
         goods.push(GoodPrice {
             good: session.dataset.products[*good as usize].id.clone(),
             reference_cents: session.dataset.reference_price(*good),
+            traded: !session.dataset.products[*good as usize].kind.is_service()
+                && session.world.gateways.iter().any(|g| {
+                    g.product == *good && (g.sell_price_cents > 0 || g.buy_price_cents > 0)
+                }),
             median_year_range_pct: median_f64(ranges).unwrap_or(0.0),
             years: ranges.len() as u32,
             weeks_at_cap_share_pct: share_x100(cap, weeks) as f64 / 100.0,
@@ -1090,7 +1111,11 @@ pub fn arc_config_pub(seed: u64, scenario_id: &str) -> ScenarioConfig {
     arc_config(seed, scenario_id, cw_data::Difficulty::Standard)
 }
 
-fn arc_config(seed: u64, scenario_id: &str, difficulty: cw_data::Difficulty) -> ScenarioConfig {
+pub(crate) fn arc_config(
+    seed: u64,
+    scenario_id: &str,
+    difficulty: cw_data::Difficulty,
+) -> ScenarioConfig {
     // The new-game screen's own path: founder, sandbox, the scenario named in the price setup
     // (which loads that scenario's dataset: regions, firms, logistics, currencies).
     ScenarioConfig {
@@ -1133,6 +1158,7 @@ fn play(
 ) -> Result<(Career, ScenarioCheck), String> {
     let mut session = Session::create(arc_config(seed, scenario_id, difficulty))
         .map_err(|e| format!("seed {seed}: session failed: {e:?}"))?;
+    apply_markets_override(&mut session)?;
     let check = scenario_check(&session, scenario_id);
     let mut runner = PolicyRunner::new(policy, VERBOSE.load(std::sync::atomic::Ordering::Relaxed));
     let mut observer = Observer::new();
@@ -1271,8 +1297,10 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
     // Prices: per good, median over seeds of the career median range; then the median over goods.
     type GoodSeries = (Vec<f64>, Vec<f64>, Vec<f64>);
     let mut per_good: BTreeMap<String, GoodSeries> = BTreeMap::new();
+    let mut traded_goods: BTreeMap<String, bool> = BTreeMap::new();
     for c in careers {
         for g in &c.goods {
+            *traded_goods.entry(g.good.clone()).or_default() |= g.traded;
             let slot = per_good.entry(g.good.clone()).or_default();
             slot.0.push(g.median_year_range_pct);
             slot.1.push(g.weeks_at_cap_share_pct);
@@ -1280,6 +1308,18 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         }
     }
     let good_range: Vec<f64> = per_good.values().filter_map(|v| median_f64(&v.0)).collect();
+    let by_good: Vec<(String, bool, f64)> = per_good
+        .iter()
+        .filter_map(|(good, v)| median_f64(&v.0).map(|r| (good.clone(), traded_goods[good], r)))
+        .collect();
+    let class_range = |traded: bool| -> Vec<f64> {
+        by_good
+            .iter()
+            .filter(|(_, t, _)| *t == traded)
+            .map(|(_, _, r)| *r)
+            .collect()
+    };
+    let (traded_range, local_range) = (class_range(true), class_range(false));
     let good_cap: Vec<f64> = per_good.values().filter_map(|v| median_f64(&v.1)).collect();
     let good_floor: Vec<f64> = per_good.values().filter_map(|v| median_f64(&v.2)).collect();
 
@@ -1350,6 +1390,9 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         stressed_share: (firm_weeks > 0).then(|| stressed as f64 / firm_weeks as f64),
         worst_zombies: worst,
         price_range_pct_median: median_f64(&good_range),
+        price_range_traded_pct_median: median_f64(&traded_range),
+        price_range_local_pct_median: median_f64(&local_range),
+        price_range_by_good: by_good,
         weeks_at_cap_share_pct_median: median_f64(&good_cap),
         weeks_at_floor_share_pct_median: median_f64(&good_floor),
         hostile_total_median: med(careers
@@ -1411,6 +1454,8 @@ fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
         "exits_per_decade_median" => aggregate.exits_per_decade_median,
         "entries_per_decade_median" => aggregate.entries_per_decade_median,
         "price_range_pct_median" => aggregate.price_range_pct_median,
+        "price_range_traded_pct_median" => aggregate.price_range_traded_pct_median,
+        "price_range_local_pct_median" => aggregate.price_range_local_pct_median,
         "hostile_top3_median" => aggregate.hostile_top3_median,
         _ => None,
     }
@@ -1518,7 +1563,7 @@ fn definitions() -> BTreeMap<String, String> {
         ),
         (
             "price_range",
-            "per good and year (max - min) of weekly closing price over reference price, median over years then seeds then goods",
+            "per good and year (max - min) of weekly closing price over the year's mean price anchor (outside middle quote for a good with a gateway, price-level reference for a service, catalogue price otherwise), median over years then seeds then goods; split into traded (has a gateway) and local (services and goods with none)",
         ),
         (
             "cap_floor",
@@ -1549,6 +1594,35 @@ fn flag(arguments: &[String], name: &str) -> Option<String> {
 /// Print every policy command as it is accepted or rejected (`--verbose`).
 static VERBOSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// `--markets-json PATH`: market rule fields that replace the content's for this run (developer
+/// experiments only; the career's dataset hash is not changed, so such a run is not a replay).
+static MARKETS_OVERRIDE: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+
+pub(crate) fn load_markets_override(arguments: &[String]) {
+    if let Some(path) = flag(arguments, "--markets-json") {
+        let text = std::fs::read_to_string(&path).expect("--markets-json file");
+        let value: serde_json::Value = serde_json::from_str(&text).expect("--markets-json JSON");
+        let _ = MARKETS_OVERRIDE.set(value);
+    }
+}
+
+pub(crate) fn apply_markets_override(session: &mut Session) -> Result<(), String> {
+    let Some(overlay) = MARKETS_OVERRIDE.get() else {
+        return Ok(());
+    };
+    let mut rules = serde_json::to_value(&session.dataset.markets).map_err(|e| e.to_string())?;
+    if let (Some(rules), Some(overlay)) = (rules.as_object_mut(), overlay.as_object()) {
+        for (key, value) in overlay {
+            if !rules.contains_key(key) {
+                return Err(format!("--markets-json: unknown market rule {key}"));
+            }
+            rules.insert(key.clone(), value.clone());
+        }
+    }
+    session.dataset.markets = serde_json::from_value(rules).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn run(arguments: &[String]) {
     VERBOSE.store(
         arguments.iter().any(|a| a == "--verbose"),
@@ -1569,6 +1643,7 @@ pub fn run(arguments: &[String]) {
         .unwrap_or(520);
     let scenario_id = flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".into());
     let difficulty_key = flag(arguments, "--difficulty").unwrap_or_else(|| "standard".into());
+    load_markets_override(arguments);
     let difficulty = cw_data::Difficulty::from_key(&difficulty_key);
     let policy = crate::policy_flag(arguments);
     let gates_json = match flag(arguments, "--gates") {
@@ -1680,7 +1755,7 @@ pub fn run(arguments: &[String]) {
     }
     let a = &report.aggregate;
     println!(
-        "arc scenario={} loaded={} policy={} seeds={} weeks={} companies={} bust={:?} first={:?} bottom_half={:?} zombie={:?} price_range_pct={:?} ms/wk={:.1}",
+        "arc scenario={} loaded={} policy={} seeds={} weeks={} companies={} bust={:?} first={:?} bottom_half={:?} zombie={:?} price_range_pct={:?} traded={:?} local={:?} ms/wk={:.1}",
         report.scenario.requested,
         report.scenario.loaded,
         report.policy,
@@ -1692,6 +1767,8 @@ pub fn run(arguments: &[String]) {
         a.bottom_half_share,
         a.zombie_share,
         a.price_range_pct_median,
+        a.price_range_traded_pct_median,
+        a.price_range_local_pct_median,
         a.ms_per_week_mean
     );
     for gate in &report.gates {

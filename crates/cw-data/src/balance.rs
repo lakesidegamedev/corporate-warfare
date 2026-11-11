@@ -258,6 +258,107 @@ pub struct Balance {
     pub financial_businesses: Vec<String>,
     pub maintenance_annual_bps: i32,
     pub fixture_land_rent_cents_weekly: i64,
+    /// How gateways and sellers respond to trade volume (2.0). Absent in older content files,
+    /// which then get the defaults.
+    #[serde(default)]
+    pub markets: MarketRules,
+}
+
+/// How the outside world's gateways and the corridor's sellers respond to trade volume. Shared by
+/// every scenario: a scenario supplies its own gateways, prices and plants, never its own rules.
+///
+/// A gateway's weekly room is split into steps. The first step trades at the gateway's quote;
+/// each further step costs more to import and pays less to export, so a large shortage or glut
+/// moves the price paid at the margin instead of hitting a hard pin. Sellers read last week's
+/// marginal step: imports in the dear steps mean the corridor is short and home prices rise,
+/// exports in the cheap steps mean it is glutted and home prices fall.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MarketRules {
+    /// The first import step, traded at the quote, as a share of a gateway's weekly room, in
+    /// basis points.
+    pub import_first_step_bps: i64,
+    /// The first export step, paid at the quote, as a share of a gateway's weekly room. A
+    /// gateway's room grows to what the corridor exports, so this is normally all of it.
+    pub export_first_step_bps: i64,
+    /// Every further step's size as a share of a gateway's weekly room, in basis points.
+    pub gateway_step_bps: i64,
+    /// Steps a gateway trades in a week, each way. Volume beyond the last step is not traded.
+    pub gateway_steps: i64,
+    /// How much dearer each further import step is than the quote, in basis points of it.
+    pub import_step_premium_bps: i64,
+    /// How much less each further export step pays than the quote, in basis points of it.
+    pub export_step_discount_bps: i64,
+    /// The least an export step pays, in basis points of the quote.
+    pub export_floor_bps: i64,
+    /// Share of last week's marginal import premium or export discount a home seller passes into
+    /// the price it wants, in basis points.
+    pub trade_pressure_pass_bps: i64,
+    /// Whether a good is priced against the outside world's middle quote (halfway between the
+    /// gateway's import and export prices) rather than its fixed opening catalogue price, so home
+    /// prices follow world prices and inflation the way the gateways do.
+    pub anchor_to_outside: bool,
+    /// Share of the outside middle quote's move away from the catalogue price that the anchor
+    /// follows, in basis points (10,000 follows it fully). Plant building costs do not follow
+    /// world prices, so a full pass-through turned a world boom into a windfall for whoever
+    /// built new plants in it, and a bust into a loss.
+    pub anchor_pass_bps: i64,
+    /// Room a gateway adds in a week its trade ran past the first step (exports filled it, or
+    /// imports reached the dear steps), in basis points of its room. Ports and rail are extended
+    /// slowly, so a glut or shortage lasts months, not weeks.
+    pub room_growth_bps: i64,
+    /// Room a gateway gives up in a week its busier direction used less than
+    /// `room_shrink_below_bps` of it, in basis points of its room. A gateway that moved nothing
+    /// keeps its room: there is no use to read.
+    pub room_shrink_bps: i64,
+    /// Use below this share of a gateway's room, in basis points, lets the room shrink.
+    pub room_shrink_below_bps: i64,
+    /// Points of capacity, in basis points, a plant's run rate moves in a week toward what its
+    /// good sells. A slow ramp keeps a new plant's surplus, or a closed plant's gap, in the
+    /// market for months.
+    pub plan_step_bps: i32,
+    /// The share of its full capacity a service seller sells at the reference price, in basis
+    /// points. Selling more asks more, selling less asks less.
+    pub service_balance_bps: i64,
+    /// Basis points of price a service seller adds for every basis point of capacity sold over
+    /// the balance point (and takes off under it), in hundredths: 60 is 0.6.
+    pub service_slope_pct: i64,
+    /// The least and most a service seller asks, in basis points of reference.
+    pub service_min_bps: i64,
+    pub service_max_bps: i64,
+    /// Whether households that found no service count as demand on top of what sold, so a
+    /// region short of capacity reads as more than full.
+    pub service_counts_unmet: bool,
+    /// The highest price a good with no import, or a service, may ask, in basis points of its
+    /// reference. A good with an import is held under the import instead.
+    pub local_ceiling_bps: i64,
+}
+
+impl Default for MarketRules {
+    fn default() -> Self {
+        MarketRules {
+            import_first_step_bps: 10_000,
+            export_first_step_bps: 10_000,
+            gateway_step_bps: 10_000,
+            gateway_steps: 1,
+            import_step_premium_bps: 0,
+            export_step_discount_bps: 0,
+            export_floor_bps: 10_000,
+            trade_pressure_pass_bps: 0,
+            anchor_to_outside: false,
+            anchor_pass_bps: 10_000,
+            room_growth_bps: 100,
+            room_shrink_bps: 0,
+            room_shrink_below_bps: 0,
+            plan_step_bps: 1_500,
+            service_balance_bps: 8_500,
+            service_slope_pct: 60,
+            service_min_bps: 8_000,
+            service_max_bps: 11_500,
+            service_counts_unmet: false,
+            local_ceiling_bps: 11_500,
+        }
+    }
 }
 
 /// A scenario's starting balance on top of the shared products and strategies: the wage level
