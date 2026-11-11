@@ -2331,6 +2331,10 @@ pub fn run(arguments: &[String]) {
         arguments.iter().any(|a| a == "--legacy-cards"),
         std::sync::atomic::Ordering::Relaxed,
     );
+    crate::policy::NO_PLANT_BIDS.store(
+        arguments.iter().any(|a| a == "--no-plant-bids"),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     let seeds: u64 = flag(arguments, "--seeds")
         .and_then(|v| v.parse().ok())
         .unwrap_or(10);

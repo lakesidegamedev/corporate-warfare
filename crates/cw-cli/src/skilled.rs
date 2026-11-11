@@ -81,6 +81,9 @@ pub(super) struct SkilledState {
     pub cuts: u32,
     /// Bids placed for plants on offer.
     pub bids: u32,
+    /// Plants bid for whose lot has not been seen closing yet: one won while mothballed is
+    /// reopened.
+    bid_plants: Vec<u64>,
 }
 
 impl Default for SkilledState {
@@ -99,6 +102,7 @@ impl Default for SkilledState {
             builds: 0,
             cuts: 0,
             bids: 0,
+            bid_plants: Vec::new(),
         }
     }
 }
@@ -148,6 +152,7 @@ impl PolicyRunner {
             self.skilled_acquire(session, &controlled);
         }
         if self.policy == ReferencePolicy::Skilled
+            && !crate::policy::NO_PLANT_BIDS.load(std::sync::atomic::Ordering::Relaxed)
             && let Some(primary) = session.world.investor.primary_group
         {
             self.skilled_bid(session, primary.0);
@@ -169,6 +174,29 @@ impl PolicyRunner {
             return;
         }
         let lots = session.plant_lots();
+        // A plant won at auction keeps its status: one that was mothballed is reopened, since
+        // the bid was for what it earns running. Forget lots that closed either way.
+        let mut waiting = Vec::new();
+        for facility in std::mem::take(&mut self.skilled.bid_plants) {
+            let ours = session
+                .world
+                .facilities
+                .get(Handle(facility))
+                .filter(|plant| plant.firm == handle);
+            if let Some(plant) = ours {
+                if plant.status == cw_sim::state::FacilityStatus::Mothballed {
+                    self.submit(
+                        session,
+                        CommandIntent::ReopenFacility {
+                            facility: Handle(facility),
+                        },
+                    );
+                }
+            } else if lots.iter().any(|lot| lot.facility == facility) {
+                waiting.push(facility);
+            }
+        }
+        self.skilled.bid_plants = waiting;
         if lots.iter().any(|lot| lot.player_bid_cents > 0) {
             return;
         }
@@ -231,6 +259,10 @@ impl PolicyRunner {
         let Some((_, lot, price)) = best else {
             return;
         };
+        let facility = lots
+            .iter()
+            .find(|candidate| candidate.lot == lot)
+            .map_or(0, |candidate| candidate.facility);
         if self.submit(
             session,
             CommandIntent::BidForPlant {
@@ -240,6 +272,7 @@ impl PolicyRunner {
             },
         ) {
             self.skilled.bids += 1;
+            self.skilled.bid_plants.push(facility);
             if self.verbose_skilled {
                 println!("w{now} BID lot {lot} price {price} trust {trust}");
             }
