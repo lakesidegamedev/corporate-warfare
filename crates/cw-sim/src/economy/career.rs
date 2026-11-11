@@ -729,7 +729,6 @@ fn step(world: &mut World, ds: &Dataset, state: &mut CareerState) {
     let week = world.tick.0;
     let elapsed = week.saturating_sub(state.start_week);
     let groups = group(world);
-    let primary = live_primary(world);
 
     // Firsts and companies bought.
     let plants = groups
@@ -911,8 +910,16 @@ fn step(world: &mut World, ds: &Dataset, state: &mut CareerState) {
         }
     }
 
-    // The board.
-    board(world, state, primary, elapsed);
+    // The board reads the company the player runs: the primary company while no one else
+    // controls it, so a player who sold below half still answers to it.
+    let led = world.investor.primary_group.filter(|p| {
+        world.firms.get(*p).is_some_and(|f| f.status.operative())
+            && matches!(
+                ultimate_controller(world, *p),
+                Some(HolderId::Investor) | None
+            )
+    });
+    board(world, state, led, elapsed);
     if state.ending.is_some() {
         return;
     }
@@ -991,6 +998,41 @@ fn step(world: &mut World, ds: &Dataset, state: &mut CareerState) {
     }
 }
 
+/// The votes the player commands in `firm`: shares held directly and through every company
+/// the player controls, against the company's eligible votes.
+pub fn player_votes(world: &World, firm: Handle) -> (i64, i64) {
+    let Some(f) = world.firms.get(firm) else {
+        return (0, 0);
+    };
+    let ours: i64 = f
+        .shares
+        .holders
+        .iter()
+        .filter(|(h, _)| match h {
+            HolderId::Investor => true,
+            HolderId::Firm(owner) => ultimate_controller(world, *owner) == Some(HolderId::Investor),
+            _ => false,
+        })
+        .map(|(_, l)| l.qty)
+        .sum();
+    (ours, f.shares.eligible_votes())
+}
+
+/// Whether the player holds half or more of the company's eligible votes. A board the player
+/// controls cannot remove the player; it only warns. The same holds for rivals: a rival's
+/// board replaces a hired chief executive, and rival chiefs hold no shares (`economy::cast`).
+pub fn holds_majority(world: &World, firm: Handle) -> bool {
+    let (ours, eligible) = player_votes(world, firm);
+    eligible > 0 && ours.saturating_mul(2) >= eligible
+}
+
+/// The warning to an owner the board cannot remove, with the consequences the engine applies.
+fn majority_warning(name: &str, weeks: u32) -> String {
+    format!(
+        "The board of {name} has lost confidence after {weeks} weeks of losses, and the outside shareholders with it. You hold the majority of the votes, so the board cannot remove you; the market can. Losses weaken the credit grade and the terms lenders offer, a long slump far under the share price's peak invites an activist shareholder, unpaid debt ends in default, and if you sell below half the board can remove you and the outside float can be bought from under you."
+    )
+}
+
 fn board(world: &mut World, state: &mut CareerState, primary: Option<Handle>, elapsed: u32) {
     let Some(p) = primary else {
         return;
@@ -1023,11 +1065,15 @@ fn board(world: &mut World, state: &mut CareerState, primary: Option<Handle>, el
             if recent.len() >= periods && recent.iter().all(|n| *n < 0) {
                 state.tracking.warned_week = Some(week);
                 state.tracking.board_confidence = Some(false);
-                let text = format!(
-                    "The board of {name} has lost confidence after {} weeks of losses. A profitable four-week period within {} weeks restores it; otherwise the board removes you.",
-                    periods as u32 * PERIOD_WEEKS,
-                    state.rules.board_warning_weeks
-                );
+                let text = if holds_majority(world, p) {
+                    majority_warning(&name, periods as u32 * PERIOD_WEEKS)
+                } else {
+                    format!(
+                        "The board of {name} has lost confidence after {} weeks of losses. A profitable four-week period within {} weeks restores it; otherwise the board removes you.",
+                        periods as u32 * PERIOD_WEEKS,
+                        state.rules.board_warning_weeks
+                    )
+                };
                 push_event(state, week, "board_warning", text.clone(), 30_000_000_000);
                 alert(world, "career.board_warning", text);
                 world.pending_pause = Some("career_board_warning".into());
@@ -1040,6 +1086,13 @@ fn board(world: &mut World, state: &mut CareerState, primary: Option<Handle>, el
                 let text = format!("The board of {name} is satisfied again: the losses stopped.");
                 push_event(state, week, "board_restored", text.clone(), 25_000_000_000);
                 alert(world, "career.board_restored", text);
+            } else if week >= warned + state.rules.board_warning_weeks && holds_majority(world, p) {
+                // A board the player controls cannot remove the player: the warning stands
+                // and is read again, and the discipline is the market's.
+                state.tracking.warned_week = Some(week);
+                let text = majority_warning(&name, (week - warned) + periods as u32 * PERIOD_WEEKS);
+                push_event(state, week, "board_warning", text.clone(), 10_000_000_000);
+                alert(world, "career.board_warning", text);
             } else if week >= warned + state.rules.board_warning_weeks {
                 let text = format!(
                     "The board of {name} removed you after {} more weeks of losses.",
@@ -1377,5 +1430,102 @@ mod tests {
         assert_eq!(ending.kind, EndKind::NoCompany);
         assert_eq!(ending.medal, Medal::None);
         assert_eq!(w.pending_pause.as_deref(), Some("career_end"));
+    }
+    fn losing_helm(w: &mut World, ds: &Dataset) -> Handle {
+        let offer = helm_offers(w).remove(0);
+        begin(
+            w,
+            ds,
+            &CareerSetup {
+                start: Start::Helm,
+                helm_firm: Some(offer.firm.0),
+                ambition: Some(Ambition::Biggest),
+                years: 10,
+            },
+        )
+        .unwrap();
+        let periods = career_table().board.loss_periods;
+        let history: Vec<crate::state::PeriodClose> = (0..periods + 20)
+            .map(|i| crate::state::PeriodClose {
+                first_week: i * PERIOD_WEEKS,
+                net_income: -1_000_00,
+                ..Default::default()
+            })
+            .collect();
+        w.firm_history.insert(offer.firm, history);
+        offer.firm
+    }
+
+    fn read_board_at(w: &mut World, week: u32) {
+        w.tick = cw_core::calendar::Tick(week);
+        let mut state = w.career.take().unwrap();
+        let led = w.investor.primary_group;
+        board(w, &mut state, led, week);
+        w.career = Some(state);
+    }
+
+    #[test]
+    fn a_board_the_player_controls_warns_but_never_removes() {
+        let (mut w, ds) = world();
+        let firm = losing_helm(&mut w, &ds);
+        assert!(holds_majority(&w, firm));
+        let t = career_table();
+        let first = t.board.grace_weeks.next_multiple_of(PERIOD_WEEKS);
+        read_board_at(&mut w, first);
+        let state = w.career.as_ref().unwrap();
+        assert_eq!(state.tracking.warned_week, Some(first));
+        assert!(
+            state
+                .events
+                .last()
+                .unwrap()
+                .text
+                .contains("cannot remove you")
+        );
+        // Long past the warning: still warned, never removed.
+        for k in 1..=3 {
+            read_board_at(
+                &mut w,
+                first + k * t.board.warning_weeks.next_multiple_of(PERIOD_WEEKS),
+            );
+        }
+        let state = w.career.as_ref().unwrap();
+        assert!(state.ending.is_none());
+        assert!(state.tracking.warned_week.is_some());
+    }
+
+    #[test]
+    fn a_minority_owner_is_removed_after_the_warning() {
+        let (mut w, ds) = world();
+        let firm = losing_helm(&mut w, &ds);
+        // Sell down below half to an outside holder.
+        let (ours, eligible) = player_votes(&w, firm);
+        let sell = ours - eligible / 2 + 1;
+        w.firms.get_mut(firm).unwrap().shares.transfer(
+            HolderId::Investor,
+            HolderId::Outside(0),
+            sell,
+            0,
+        );
+        assert!(!holds_majority(&w, firm));
+        let t = career_table();
+        let first = t.board.grace_weeks.next_multiple_of(PERIOD_WEEKS);
+        read_board_at(&mut w, first);
+        assert!(
+            w.career
+                .as_ref()
+                .unwrap()
+                .events
+                .last()
+                .unwrap()
+                .text
+                .contains("removes you")
+        );
+        read_board_at(
+            &mut w,
+            first + t.board.warning_weeks.next_multiple_of(PERIOD_WEEKS),
+        );
+        let ending = w.career.as_ref().unwrap().ending.clone().unwrap();
+        assert_eq!(ending.kind, EndKind::Removed);
     }
 }

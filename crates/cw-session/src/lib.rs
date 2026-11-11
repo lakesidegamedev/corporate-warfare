@@ -620,8 +620,14 @@ impl Session {
             "career_board_warning" => proceed(
                 "warning",
                 "The board has lost confidence".to_owned(),
-                "Your company has made losses for months. Turn a profit in a four-week period before the warning runs out, or the board removes you."
-                    .to_owned(),
+                if self.world.investor.primary_group.is_some_and(|p| {
+                    cw_sim::economy::career::holds_majority(&self.world, p)
+                }) {
+                    "Your company has made losses for months. You hold the majority of the votes, so the board cannot remove you, but lenders, the share price and activist shareholders will feel it. Selling below half would let the board act."
+                } else {
+                    "Your company has made losses for months. Turn a profit in a four-week period before the warning runs out, or the board removes you."
+                }
+                .to_owned(),
                 self.world.investor.primary_group.map(|h| h.0),
             ),
             "five_year_score" => proceed(

@@ -698,8 +698,18 @@ five-year game started with a career and no length plays five years, and its sco
   after `board.grace_weeks` (52), `board.loss_periods` (6) four-week periods of losses in a row
   draw the board's warning (an alert, a pause the player may waive, the chair's letter). One
   profitable four-week period within `board.warning_weeks` (26) restores its confidence;
-  otherwise the board removes the player. The rival rule replaces a chief with a 25 percent
-  chance each period after the same losses; the player's is certain but announced.
+  otherwise the board removes the player. The board can remove the player only while the
+  player holds less than half of the company's eligible votes (shares held directly and
+  through companies the player controls); it reads the primary company while no one else
+  controls it, so a player who sold below half still answers to it. With half or more the
+  board still warns, and the warning is read again every `board.warning_weeks` while the
+  losses run, but a board the player controls cannot remove the player: the discipline is the
+  market's (the credit grade and lenders' terms, the share price, an activist after a long
+  slump, default on unpaid debt, and, below half, a raid on the outside float). The helm start
+  buys just over half, so a helm player is not removable until it sells down. The rival rule
+  replaces a hired chief with a 25 percent chance each period after the same losses; rival
+  chiefs hold no shares, so the controlling-owner case cannot arise for a rival. The board-named
+  chief after two missed mandates (`executives`, 1.9) is unchanged and does not end a career.
 After any ending the world plays on as a sandbox; the career keeps its ending.
 
 **Telling the player.** Through the chair of the board's letters (`letters::career_letters`):
