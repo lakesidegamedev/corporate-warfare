@@ -195,6 +195,110 @@ fn shaped_bps(family: &FamilyState, week: i64) -> i32 {
     (BASE_BPS as i64 + deviation * family.depth_pct as i64 / 100).max(1_500) as i32
 }
 
+/// Longest window of past weekly shocks a disturbance sums, in weeks.
+const TEXTURE_MAX_WINDOW: i64 = 208;
+/// A disturbance never strays further than this many of its swings from the path.
+const TEXTURE_LIMIT_SWINGS: i64 = 3;
+
+fn mix64(mut z: u64) -> u64 {
+    z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
+}
+
+/// One week's shock for a family, in thousandths of a standard deviation: the sum of four
+/// uniform draws, close to normal, from the seed, the family and the week alone.
+fn texture_shock(seed: u64, family: &str, week: i64) -> i64 {
+    let bits = mix64(seed ^ fnv(family) ^ (week as u64).wrapping_mul(0xd6e8_feb8_6659_fd93));
+    let sum: i64 = (0..4).map(|i| ((bits >> (16 * i)) & 0xffff) as i64).sum();
+    // Each draw has variance 65536^2/12, so the sum's deviation is 65536/sqrt(3), about 37,837.
+    (sum - 131_070) * 1_000 / 37_837
+}
+
+/// The weekly fade of a disturbance with this half-life, in 1/65536ths: the smallest factor whose
+/// power over the half-life is at least one half. Integer only, so every platform agrees.
+fn texture_fade_q16(half_life_weeks: i64) -> i64 {
+    let weeks = half_life_weeks.clamp(1, 520);
+    let (mut low, mut high) = (0i64, 65_536i64);
+    while high - low > 1 {
+        let mid = (low + high) / 2;
+        let mut power = 65_536i64;
+        for _ in 0..weeks {
+            power = power * mid >> 16;
+        }
+        if power >= 32_768 {
+            high = mid;
+        } else {
+            low = mid;
+        }
+    }
+    high
+}
+
+/// A family's disturbance this week, in basis points of its authored path, and the week of the
+/// single shock that contributes most to it (the cause the paper names). Each past weekly shock
+/// is smoothed twice by the family's fade (its weight by age is `(age + 1) * fade^age`), so a
+/// shock builds over weeks and fades over months: the world drifts and turns, it does not
+/// jitter. The sum is scaled so its spread is the content's swing. Shocks before the game began
+/// count as nothing, so day one sits on the path. Derived from the seed and the week alone:
+/// nothing is saved.
+pub fn texture_at(seed: u64, texture: &cw_data::balance::FamilyTexture, week: i64) -> (i64, i64) {
+    if texture.swing_bps <= 0 || week <= 0 {
+        return (0, week);
+    }
+    let fade = texture_fade_q16(texture.half_life_weeks);
+    let window = (texture.half_life_weeks.max(1) * 8).min(TEXTURE_MAX_WINDOW);
+    let (mut power, mut squares, mut sum) = (65_536i64, 0i64, 0i64);
+    let (mut top, mut top_week) = (0i64, week);
+    for age in 0..window {
+        let weight = power * (age + 1) >> 4;
+        squares += weight * weight >> 16;
+        let at = week - age;
+        if at >= 1 {
+            let part = weight * texture_shock(seed, &texture.family, at);
+            sum += part;
+            if part.abs() > top.abs() {
+                (top, top_week) = (part, at);
+            }
+        }
+        power = power * fade >> 16;
+    }
+    // squares is in 1/65536ths of the weights squared; its root is in 1/256ths, so scale back.
+    let spread = ((squares as u64).isqrt() as i64 * 256).max(1);
+    let bps = (sum / 1_000).saturating_mul(texture.swing_bps) / spread;
+    let limit = texture.swing_bps * TEXTURE_LIMIT_SWINGS;
+    (bps.clamp(-limit, limit), top_week)
+}
+
+/// A named world event behind a family's price this week, if its disturbance is past the
+/// content's threshold: the push in basis points and the cause to print.
+pub fn world_event<'a>(
+    world: &World,
+    dataset: &'a cw_data::Dataset,
+    family: &FamilyState,
+) -> Option<(i64, &'a str)> {
+    let rules = &dataset.texture;
+    if rules.named_bps <= 0 || family.mode != PriceMode::HistoricalVariance {
+        return None;
+    }
+    let texture = rules.families.iter().find(|t| t.family == family.key)?;
+    let (bps, top_week) = texture_at(world.seed, texture, world.tick.0 as i64);
+    if bps.abs() < rules.named_bps {
+        return None;
+    }
+    let causes = if bps > 0 {
+        &texture.causes_up
+    } else {
+        &texture.causes_down
+    };
+    if causes.is_empty() {
+        return None;
+    }
+    let pick = mix64(world.seed ^ fnv(&family.key) ^ top_week as u64) as usize % causes.len();
+    Some((bps, causes[pick].as_str()))
+}
+
 /// Set up world prices for a new career. Products named in the content that do not exist in
 /// this dataset are ignored; families with no existing product are left out.
 pub fn init(
@@ -239,10 +343,21 @@ pub fn init(
                     .collect()
             })
             .unwrap_or_default();
-        let mode = if requested.follows_history() && anchors.is_empty() {
-            PriceMode::Random
+        // A family with no authored path runs the random walk in a historical game; in a game
+        // with variance, a family with a texture holds a flat path and strays by its texture.
+        let textured = dataset
+            .texture
+            .families
+            .iter()
+            .any(|t| t.family == **key && t.swing_bps > 0);
+        let (mode, anchors) = if requested.follows_history() && anchors.is_empty() {
+            if requested == PriceMode::HistoricalVariance && textured {
+                (requested, vec![(0, BASE_BPS)])
+            } else {
+                (PriceMode::Random, anchors)
+            }
         } else {
-            requested
+            (requested, anchors)
         };
         let mut rng = Rng::stream(seed ^ fnv(key), TAG_PRICES);
         let shift = global_shift + rng.uniform_inclusive(-10, 10) as i32;
@@ -295,7 +410,7 @@ pub fn init(
 
 /// Advance every family one week, tilt it by the cycle, move the gateways and feed the cycle.
 /// Runs just before the business cycle's own weekly step.
-pub fn weekly(world: &mut World) {
+pub fn weekly(world: &mut World, dataset: &cw_data::Dataset) {
     if world.world_prices.mode == PriceMode::Off || world.world_prices.families.is_empty() {
         return;
     }
@@ -307,11 +422,27 @@ pub fn weekly(world: &mut World) {
     let (mut weighted, mut weights) = (0i64, 0i64);
     for (index, family) in state.families.iter_mut().enumerate() {
         before.push(family.index_bps);
-        family.raw_bps = match family.mode {
+        // In a variance game the world strays from the path by the family's texture; the cycle
+        // is fed by the path, not by the weather, so the texture is kept out of the feed below.
+        let rule = dataset
+            .texture
+            .families
+            .iter()
+            .find(|t| t.family == family.key && t.swing_bps > 0)
+            .filter(|_| family.mode == PriceMode::HistoricalVariance);
+        let textured = rule.is_some();
+        let texture = rule.map(|t| texture_at(world.seed, t, week).0).unwrap_or(0);
+        let path_bps = match family.mode {
             PriceMode::Historical => interpolate_bps(&family.anchors, week),
             PriceMode::HistoricalVariance => {
-                let noise =
-                    family.noise_bps * 85 / 100 + family.rng.uniform_inclusive(-80, 80) as i32;
+                // The old weekly noise reversed the world quote about ten times a year; where the
+                // family has a texture, the texture replaces it and what is left of it fades.
+                let fresh = if textured {
+                    0
+                } else {
+                    family.rng.uniform_inclusive(-80, 80) as i32
+                };
+                let noise = family.noise_bps * 85 / 100 + fresh;
                 family.noise_bps = noise;
                 let shaped = shaped_bps(family, week) as i64;
                 (shaped * BASE_BPS as i64 / family.start_bps.max(1) as i64
@@ -328,11 +459,16 @@ pub fn weekly(world: &mut World) {
                     .clamp(RANDOM_BAND_BPS.0, RANDOM_BAND_BPS.1)
             }
         };
+        family.raw_bps = if texture == 0 {
+            path_bps
+        } else {
+            (path_bps as i64 * (BASE_BPS as i64 + texture) / BASE_BPS as i64).max(1) as i32
+        };
         // A timeline shock is a world price move like any other: it feeds the cycle with the
         // path and is tilted with it, but is never written into the path itself.
         let shock = crate::economy::timeline::price_shock_bps(world, index as u16) as i64;
         if family.mode.follows_history() {
-            weighted += family.raw_bps as i64 * (BASE_BPS as i64 + shock).max(1) / BASE_BPS as i64
+            weighted += path_bps as i64 * (BASE_BPS as i64 + shock).max(1) / BASE_BPS as i64
                 * family.weight as i64;
             weights += family.weight as i64;
         }
@@ -391,6 +527,15 @@ mod tests {
     use crate::state::{ScenarioKind, ScenarioMode};
     use cw_core::calendar::Tick;
 
+    fn content() -> &'static cw_data::Dataset {
+        static DATA: std::sync::OnceLock<cw_data::Dataset> = std::sync::OnceLock::new();
+        DATA.get_or_init(|| cw_data::Dataset::load().unwrap())
+    }
+
+    fn step(world: &mut World) {
+        weekly(world, content());
+    }
+
     fn setup(seed_value: u64, scenario: &str, path: PricePath) -> (World, cw_data::Dataset) {
         let dataset = cw_data::Dataset::load().unwrap();
         let mut world = seed::build(
@@ -420,7 +565,7 @@ mod tests {
         let mut series = Vec::new();
         for week in 0..weeks {
             world.tick = Tick(week);
-            weekly(world);
+            step(world);
             series.push(world.world_prices.families[oil].index_bps);
         }
         series
@@ -537,8 +682,11 @@ mod tests {
                 "buy"
             );
         }
-        let unmapped = dataset.product_index["goods"];
+        // Manufactures joined a family in the prices round; a service has no world price.
+        let unmapped = dataset.product_index["software"];
         assert!(world.world_prices.family_of(unmapped).is_none());
+        let goods = dataset.product_index["goods"];
+        assert!(world.world_prices.family_of(goods).is_some());
     }
 
     #[test]
@@ -549,8 +697,8 @@ mod tests {
         for week in 0..(40 * 13) {
             hist.tick = Tick(week);
             rand.tick = Tick(week);
-            weekly(&mut hist);
-            weekly(&mut rand);
+            step(&mut hist);
+            step(&mut rand);
             lowest_shadow = lowest_shadow.min(hist.world_prices.shadow_gap_bps);
             assert_eq!(
                 rand.world_prices.shadow_gap_bps, 0,
@@ -573,7 +721,7 @@ mod tests {
             .iter()
             .map(|f| f.raw_bps)
             .collect();
-        weekly(&mut hist);
+        step(&mut hist);
         for (family, _) in hist.world_prices.families.iter().zip(before) {
             assert_eq!(
                 family.index_bps,
@@ -583,7 +731,7 @@ mod tests {
         // An unexplained gap tilts cyclical families down, and grain least.
         hist.world_prices.shadow_gap_bps = 0;
         hist.tick = Tick(6);
-        weekly(&mut hist);
+        step(&mut hist);
         let oil = hist
             .world_prices
             .families
@@ -615,8 +763,8 @@ mod tests {
         for week in 120..300 {
             world.tick = Tick(week);
             copy.tick = Tick(week);
-            weekly(&mut world);
-            weekly(&mut copy);
+            step(&mut world);
+            step(&mut copy);
         }
         assert_eq!(world.world_prices.families, copy.world_prices.families);
         assert_eq!(
@@ -661,7 +809,7 @@ mod tests {
             let mut worst = i64::MAX;
             for week in 1..=260u32 {
                 world.tick = Tick(week);
-                weekly(&mut world);
+                step(&mut world);
                 crate::economy::macro_cycle::weekly(&mut world, &dataset);
                 let bid = world
                     .gateways
@@ -677,5 +825,126 @@ mod tests {
                 "{scenario}: the real grain bid fell to {worst} percent of day one"
             );
         }
+    }
+
+    fn grain_texture(swing: i64) -> cw_data::balance::FamilyTexture {
+        cw_data::balance::FamilyTexture {
+            family: "grain".into(),
+            swing_bps: swing,
+            half_life_weeks: 12,
+            causes_up: vec!["a drought cuts the harvest".into()],
+            causes_down: vec!["a bumper harvest fills the silos".into()],
+        }
+    }
+
+    #[test]
+    fn texture_comes_from_the_seed_and_the_week_alone() {
+        let t = grain_texture(1_000);
+        assert_eq!(texture_at(7, &t, 0).0, 0, "day one sits on the path");
+        let a: Vec<i64> = (1..300).map(|w| texture_at(7, &t, w).0).collect();
+        let b: Vec<i64> = (1..300).map(|w| texture_at(7, &t, w).0).collect();
+        let c: Vec<i64> = (1..300).map(|w| texture_at(8, &t, w).0).collect();
+        assert_eq!(a, b, "same seed, same world");
+        assert_ne!(a, c, "another seed, another world");
+    }
+
+    #[test]
+    fn texture_strays_by_its_swing_and_drifts_rather_than_jitters() {
+        // Hand-worked: one swing is one standard deviation across many games at a late week, and
+        // a smoothed disturbance moves a small part of its swing in a week.
+        let t = grain_texture(1_000);
+        let late: Vec<i64> = (1..=400).map(|seed| texture_at(seed, &t, 300).0).collect();
+        let mean = late.iter().sum::<i64>() / late.len() as i64;
+        let var = late.iter().map(|v| (v - mean) * (v - mean)).sum::<i64>() / late.len() as i64;
+        let sd = (var as u64).isqrt() as i64;
+        assert!(
+            (750..=1_250).contains(&sd),
+            "spread {sd} against swing 1000"
+        );
+        assert!(mean.abs() < 200, "centred on the path: {mean}");
+        let steps: Vec<i64> = (100..400)
+            .map(|w| (texture_at(3, &t, w + 1).0 - texture_at(3, &t, w).0).abs())
+            .collect();
+        let step = steps.iter().sum::<i64>() / steps.len() as i64;
+        assert!(step < 120, "weekly step {step} is a drift, not jitter");
+        assert!(
+            late.iter().all(|v| v.abs() <= 3_000),
+            "bounded at three swings"
+        );
+    }
+
+    #[test]
+    fn the_fade_halves_over_the_half_life() {
+        for weeks in [4i64, 12, 26] {
+            let fade = texture_fade_q16(weeks);
+            let mut power = 65_536i64;
+            for _ in 0..weeks {
+                power = power * fade >> 16;
+            }
+            assert!((32_768..=33_200).contains(&power), "{weeks}: {power}");
+        }
+    }
+
+    #[test]
+    fn texture_keeps_texas_oil_collapse_in_every_variance_game() {
+        for seed in 1..=10u64 {
+            let (mut w, _) = setup(seed, "texas-1981", PricePath::HistoricalVariance);
+            let oil = run(&mut w, 400);
+            let early = *oil[..156].iter().max().unwrap();
+            let slump = *oil[230..380].iter().min().unwrap();
+            assert!(slump < early * 7 / 10, "seed {seed}: {early} to {slump}");
+        }
+    }
+
+    #[test]
+    fn plain_history_keeps_the_smooth_path_and_variance_adds_texture() {
+        let (mut plain, _) = setup(5, "great-lakes-2000", PricePath::Historical);
+        let (mut varied, _) = setup(5, "great-lakes-2000", PricePath::HistoricalVariance);
+        let smooth = run(&mut plain, 200);
+        let textured = run(&mut varied, 200);
+        let reversals = |series: &[i32]| {
+            let mut last = 0i64;
+            let mut count = 0;
+            for pair in series.windows(2) {
+                let d = (pair[1] - pair[0]) as i64;
+                if d.abs() * 200 >= pair[0] as i64 {
+                    if last != 0 && d.signum() != last {
+                        count += 1;
+                    }
+                    last = d.signum();
+                }
+            }
+            count
+        };
+        assert_ne!(smooth, textured);
+        assert!(reversals(&textured) <= 12, "{}", reversals(&textured));
+    }
+
+    #[test]
+    fn a_big_disturbance_names_its_cause_from_the_table() {
+        let (mut world, dataset) = setup(1, "great-lakes-2000", PricePath::HistoricalVariance);
+        let mut named = 0;
+        for week in 1..520u32 {
+            world.tick = Tick(week);
+            for family in &world.world_prices.families {
+                if let Some((bps, cause)) = world_event(&world, &dataset, family) {
+                    let rule = dataset
+                        .texture
+                        .families
+                        .iter()
+                        .find(|t| t.family == family.key)
+                        .unwrap();
+                    let table = if bps > 0 {
+                        &rule.causes_up
+                    } else {
+                        &rule.causes_down
+                    };
+                    assert!(table.iter().any(|c| c == cause));
+                    assert!(bps.abs() >= dataset.texture.named_bps);
+                    named += 1;
+                }
+            }
+        }
+        assert!(named > 0, "a decade of world prices has some named events");
     }
 }

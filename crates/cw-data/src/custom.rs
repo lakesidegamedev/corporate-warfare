@@ -150,7 +150,7 @@ impl CustomScenario {
                 })
                 .collect(),
             laws: None,
-            price_path: PricePath::Historical,
+            price_path: PricePath::HistoricalVariance,
         }
     }
 

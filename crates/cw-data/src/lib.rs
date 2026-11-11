@@ -237,6 +237,8 @@ pub struct Dataset {
     /// Build prices, rival building and closing, payouts and raid warnings (2.0).
     pub capacity: balance::CapacityRules,
     pub demand: balance::DemandRules,
+    /// The world price's weekly texture (2.0 prices round).
+    pub texture: balance::TextureRules,
     pub geometry_note: String,
     /// Freight modes, public terminals and sea systems.
     pub logistics: LogisticsData,
@@ -293,6 +295,7 @@ impl Dataset {
                     || dataset.pre_household_hash() == hash
                     || dataset.pre_raid_warning_hash() == hash
                     || dataset.pre_demand_hash() == hash
+                    || dataset.pre_prices_hash() == hash
             })
     }
 
@@ -427,6 +430,7 @@ impl Dataset {
             markets: balance.markets.clone(),
             capacity: balance.capacity.clone(),
             demand: balance.demand.clone(),
+            texture: balance.texture.clone(),
             geometry_note,
             logistics,
             km_matrix,
@@ -966,9 +970,23 @@ impl Dataset {
     /// The hash this dataset had before the demand rules joined it (2.0, after raids were
     /// announced ahead): a save written then names it and loads against the current dataset.
     pub fn pre_demand_hash(&self) -> String {
-        let mut plain = self.clone();
+        let mut plain = self.before_prices();
         plain.demand = balance::DemandRules::default();
         plain.hash_with(self.cast.len(), true)
+    }
+
+    /// The hash this dataset had before the prices round (2.0, after the demand rules): no world
+    /// texture, shops pricing on their own shelves. A save written then names it and loads
+    /// against the current dataset.
+    pub fn pre_prices_hash(&self) -> String {
+        self.before_prices().hash_with(self.cast.len(), true)
+    }
+
+    fn before_prices(&self) -> Dataset {
+        let mut plain = self.clone();
+        plain.texture = balance::TextureRules::default();
+        plain.demand.retail_reads_street = false;
+        plain
     }
 
     fn before_households(&self) -> Dataset {
@@ -988,7 +1006,7 @@ impl Dataset {
     }
 
     fn before_raid_warning(&self) -> Dataset {
-        let mut plain = self.clone();
+        let mut plain = self.before_prices();
         plain.demand = balance::DemandRules::default();
         plain.capacity.raid_warning_weeks = 0;
         plain
@@ -1216,6 +1234,21 @@ impl Dataset {
             hasher
                 .i64(d.credit_elasticity_bps)
                 .bool(d.retail_reads_street);
+        }
+        // The world's texture moves every traded good's outside price, so it names the dataset
+        // when it differs from the smooth paths before it.
+        if with_markets && self.texture != balance::TextureRules::default() {
+            let t = &self.texture;
+            hasher.string("cw-texture-v1").i64(t.named_bps);
+            for family in &t.families {
+                hasher
+                    .string(&family.family)
+                    .i64(family.swing_bps)
+                    .i64(family.half_life_weeks);
+                for cause in family.causes_up.iter().chain(&family.causes_down) {
+                    hasher.string(cause);
+                }
+            }
         }
         // The opening macro data is deliberately outside the hash: it only sets where the cycle
         // starts and how opening wages fade, never a row a save indexes into, so saves written

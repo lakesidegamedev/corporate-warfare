@@ -1128,6 +1128,9 @@ pub enum PriceDriver {
     PriceLevel(i64),
     /// The business cycle moving demand for the good: the phase and the move in basis points.
     Cycle(crate::state::CyclePhase, u16, i64),
+    /// A named world event pushing the world price off its usual path: the price family (index
+    /// into the world's families) and the push in basis points.
+    WorldEvent(u16, i64),
 }
 
 /// Why a good's price is where it is this week: its move over the last quarter in basis points
@@ -1213,6 +1216,13 @@ pub fn price_drivers(world: &World, dataset: &Dataset, product: u16) -> (i64, Ve
             },
         ));
     }
+    // A world event past the content's threshold names its cause.
+    if let Some(&index) = world.world_prices.product_family.get(&product)
+        && let Some(family) = world.world_prices.families.get(index as usize)
+        && let Some((bps, _)) = crate::economy::world_prices::world_event(world, dataset, family)
+    {
+        drivers.push((bps.abs(), PriceDriver::WorldEvent(index, bps)));
+    }
     // Demand moved by the business cycle names the phase, under the demand rules.
     if !dataset.demand.cycle_elasticity.is_empty() {
         let (phase, bps) = crate::economy::macro_cycle::cycle_demand(world, dataset, product);
@@ -1270,6 +1280,11 @@ pub fn driver_text(driver: PriceDriver) -> String {
             if bps >= 0 { "up" } else { "down" },
             pct(bps)
         ),
+        PriceDriver::WorldEvent(_, bps) => format!(
+            "A world event has the world price {} {} its usual path.",
+            pct(bps),
+            if bps >= 0 { "over" } else { "under" }
+        ),
         PriceDriver::PriceLevel(bps) => format!(
             "Prices and wages across the economy are {} {} their opening level.",
             pct(bps),
@@ -1298,6 +1313,33 @@ pub fn price_reason(world: &World, dataset: &Dataset, product: u16) -> String {
             if *bps >= 0 { "up" } else { "down" },
             (bps.abs() + 50) / 100
         ),
+        Some(PriceDriver::WorldEvent(index, bps)) => {
+            let cause = world
+                .world_prices
+                .families
+                .get(*index as usize)
+                .and_then(|family| {
+                    crate::economy::world_prices::world_event(world, dataset, family)
+                })
+                .map(|(_, cause)| cause);
+            match cause {
+                Some(cause) => {
+                    let mut letters = cause.chars();
+                    let first = letters.next().map(|c| c.to_uppercase().collect::<String>());
+                    format!(
+                        "{moved} {}{}: the world price is {}% {} its usual path.",
+                        first.unwrap_or_default(),
+                        letters.as_str(),
+                        (bps.abs() + 50) / 100,
+                        if *bps >= 0 { "over" } else { "under" }
+                    )
+                }
+                None => format!(
+                    "{moved} {}",
+                    driver_text(PriceDriver::WorldEvent(*index, *bps))
+                ),
+            }
+        }
         Some(driver) => format!("{moved} {}", driver_text(*driver)),
         None => format!("{moved} Supply and demand are in balance."),
     }

@@ -15,7 +15,7 @@
       "image": "scenario-great-lakes-2000",
       "currency": "US dollar",
       "tagline": "Steel, autos and farms at the turn of the century, on stretched credit.",
-      "default_price_path": "historical"
+      "default_price_path": "historical_variance"
     },
     {
       "id": "texas-1981",
@@ -60,7 +60,7 @@
       "image": "scenario-ruhr-rhine-1991",
       "currency": "Deutsche Mark",
       "tagline": "Reunification, the D-Mark and a hawkish central bank.",
-      "default_price_path": "historical"
+      "default_price_path": "historical_variance"
     }
   ]
 }
