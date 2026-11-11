@@ -1762,7 +1762,7 @@
     "service_balance_bps": 9000,
     "service_slope_pct": 200,
     "service_min_bps": 7500,
-    "service_max_bps": 12500,
+    "service_max_bps": 11000,
     "service_counts_unmet": true,
     "local_ceiling_bps": 13000
   },

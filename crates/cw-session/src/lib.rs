@@ -2205,7 +2205,10 @@ mod tests {
         // other rule this fixture exercises. In 2.0 it moved from a08ddca2... when the content
         // gained the market rules (the dataset hash is folded in) and gateways began trading in
         // volume steps, exports settling at one average price for every seller and goods pricing
-        // around the outside world's middle quote. The Swift
+        // around the outside world's middle quote. In 2.0 it moved again from 8440e658... when
+        // the market rules joined the dataset hash (the hash string is in the world) and services
+        // began pricing on capacity against regional demand, plants ramping five points a week.
+        // The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2231,7 +2234,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "8440e658a3d36c81c982b882388fa5365b98178b63be820d33af8bcee6ce0e04"
+            "04e9740b72580258dd3d52e4ecfe19a1a41104ef99327d84ed85cd04f4986e99"
         );
     }
 
