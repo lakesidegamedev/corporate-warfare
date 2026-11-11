@@ -1595,9 +1595,10 @@ pub struct World {
     /// Construction lots already committed to build orders this week, by contractor.
     #[serde(default)]
     pub construction_orders: BTreeMap<Handle, i64>,
-    /// The most recent market raids, newest last, bounded.
+    /// The most recent market raids, newest last, bounded, and the raid campaigns announced and
+    /// not yet resolved. Reads as the log (`Deref`), so `world.raids.iter()` is the raid history.
     #[serde(default)]
-    pub raids: Vec<RaidRecord>,
+    pub raids: Raids,
     /// The board's current quarterly objective for the player's primary company.
     #[serde(default)]
     pub objective: Option<crate::economy::objectives::Objective>,
@@ -1940,6 +1941,53 @@ pub struct RaidRecord {
     pub success: bool,
     pub blocks: u8,
     pub price_cents: i64,
+}
+
+/// A raid campaign announced and not yet resolved (2.0). The budget sits in the raider's
+/// restricted cash from the announcement; at `resolves` it is spent on the campaign's advertising
+/// and the raid is decided against the defence the defender has by then. A raider that abandons
+/// it loses the budget all the same.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RaidCampaign {
+    pub attacker: Handle,
+    pub defender: Handle,
+    pub region: u8,
+    pub industry: u8,
+    pub budget_cents: i64,
+    pub announced: u32,
+    pub resolves: u32,
+}
+
+/// The raid log and the campaigns in progress.
+///
+/// Part of the save layout: a field change bumps `legacy::LAYOUT` (see `crate::legacy`). Layouts
+/// before 4 wrote only the log, as a plain list, which `legacy::RaidsV3` reads.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(remote = "Self")]
+pub struct Raids {
+    pub log: Vec<RaidRecord>,
+    pub campaigns: Vec<RaidCampaign>,
+}
+
+impl std::ops::Deref for Raids {
+    type Target = Vec<RaidRecord>;
+    fn deref(&self) -> &Vec<RaidRecord> {
+        &self.log
+    }
+}
+
+impl std::ops::DerefMut for Raids {
+    fn deref_mut(&mut self) -> &mut Vec<RaidRecord> {
+        &mut self.log
+    }
+}
+
+impl<'a> IntoIterator for &'a Raids {
+    type Item = &'a RaidRecord;
+    type IntoIter = std::slice::Iter<'a, RaidRecord>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.log.iter()
+    }
 }
 
 impl World {

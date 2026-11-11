@@ -7,6 +7,10 @@
 //!
 //! `fixtures/schema2-texas-guided-week6.cwsave` was written by the 1.9 preview 1 engine (schema 2,
 //! before the scenario timeline): a guided Texas 1981 career, seed 11, played six weeks.
+//!
+//! `fixtures/schema3-guided-week6.cwsave` was written by the 2.0 preview engine (schema 3, before
+//! raid campaigns): a guided career, seed 23, played six weeks, with one raid record added to the
+//! log by hand before saving so the old plain raid log is exercised.
 
 use cw_session::Session;
 use cw_session::save::{self, SCHEMA_VERSION};
@@ -61,7 +65,8 @@ fn the_migrated_world_is_the_old_payload_plus_one_empty_byte_per_new_field() {
     // each of which postcard writes as the single byte 0. So the current encoding of the
     // migrated world is exactly the old payload grown by one byte per new field per instance:
     // one per plant (cut), one per firm (lock) and two per region (wanted, unmet), plus the four
-    // bytes of the empty timeline schema 3 added (mode, events, shocks, squeezes). This checks
+    // bytes of the empty timeline schema 3 added (mode, events, shocks, squeezes) and the one byte
+    // of the empty raid campaign list schema 4 added. This checks
     // the frozen layout consumed every old byte in the right frame without trusting the decoder.
     let (_, _, declared) = header(PREVIEW2);
     let (world, career) = save::decode(PREVIEW2).unwrap();
@@ -71,7 +76,7 @@ fn the_migrated_world_is_the_old_payload_plus_one_empty_byte_per_new_field() {
     let now = postcard::to_allocvec(&world).unwrap();
     assert_eq!(
         now.len() as u64,
-        declared + plants as u64 + firms as u64 + 2 * regions as u64 + 4
+        declared + plants as u64 + firms as u64 + 2 * regions as u64 + 4 + 1
     );
     // Written again, it is a current-layout save that round trips to the same world.
     let again = save::encode(&world, career).unwrap();
@@ -157,13 +162,14 @@ fn a_schema_2_career_loads_with_no_timeline_and_the_same_world() {
     assert!(
         timeline.events.is_empty() && timeline.shocks.is_empty() && timeline.squeezes.is_empty()
     );
-    // The only new bytes are the empty timeline: mode, then three empty lists, one byte each.
+    // The only new bytes are the empty timeline (mode, then three empty lists, one byte each)
+    // and the empty raid campaign list of schema 4.
     let now = postcard::to_allocvec(world).unwrap();
-    assert_eq!(now.len() as u64, declared + 4);
+    assert_eq!(now.len() as u64, declared + 4 + 1);
 }
 
 #[test]
-fn a_schema_2_career_keeps_playing_and_resaves_as_schema_3() {
+fn a_schema_2_career_keeps_playing_and_resaves_in_the_current_schema() {
     let mut session = Session::import_save(SCHEMA2).unwrap();
     for _ in 0..60 {
         let result = session.advance(1);
@@ -181,8 +187,8 @@ fn a_schema_2_career_keeps_playing_and_resaves_as_schema_3() {
     // No dated history is invented for a career that never had it, even past the 1982 failure.
     assert!(session.world.systemic.timeline.events.is_empty());
     let bytes = session.export_save().unwrap();
-    assert_eq!(header(&bytes).0, 3);
-    assert_eq!(SCHEMA_VERSION, 3);
+    assert_eq!(header(&bytes).0, 4);
+    assert_eq!(SCHEMA_VERSION, 4);
     let reloaded = Session::import_save(&bytes).unwrap();
     assert_eq!(reloaded.canonical_hash(), session.canonical_hash());
 }
@@ -226,4 +232,51 @@ fn a_career_with_a_timeline_round_trips_in_schema_3() {
         reloaded.world.systemic.timeline,
         session.world.systemic.timeline
     );
+}
+
+const SCHEMA3: &[u8] = include_bytes!("fixtures/schema3-guided-week6.cwsave");
+
+#[test]
+fn a_schema_3_career_loads_its_raid_log_with_no_campaigns() {
+    let (schema, tick, declared) = header(SCHEMA3);
+    assert_eq!((schema, tick), (3, 6));
+    let session = Session::import_save(SCHEMA3).expect("a schema 3 save must load");
+    let world = &session.world;
+    assert_eq!(world.seed, 23);
+    // The hand-added record survives as the whole log; no campaign is invented.
+    assert_eq!(world.raids.len(), 1);
+    let record = &world.raids[0];
+    assert_eq!(
+        (
+            record.tick,
+            record.budget_cents,
+            record.chance_bps,
+            record.success
+        ),
+        (5, 4_000_000, 2_100, false)
+    );
+    assert!(world.raids.campaigns.is_empty());
+    // The only new byte is the empty campaign list.
+    let now = postcard::to_allocvec(world).unwrap();
+    assert_eq!(now.len() as u64, declared + 1);
+}
+
+#[test]
+fn a_schema_3_career_plays_on_and_resaves_as_schema_4() {
+    let mut session = Session::import_save(SCHEMA3).unwrap();
+    for _ in 0..40 {
+        let result = session.advance(1);
+        if result.pause.is_some() {
+            for event in session.world.events.pending.iter_mut() {
+                event.resolved = true;
+            }
+            session.dismiss_pause();
+        }
+    }
+    assert_eq!(session.world.tick.0, 46);
+    let bytes = session.export_save().unwrap();
+    assert_eq!(header(&bytes).0, 4);
+    let reloaded = Session::import_save(&bytes).unwrap();
+    assert_eq!(reloaded.world.raids, session.world.raids);
+    assert_eq!(reloaded.canonical_hash(), session.canonical_hash());
 }

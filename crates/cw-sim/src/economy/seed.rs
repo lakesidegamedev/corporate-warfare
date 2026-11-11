@@ -178,7 +178,7 @@ pub fn build_with(
         pending_pause: None,
         cast: Default::default(),
         construction_orders: BTreeMap::new(),
-        raids: Vec::new(),
+        raids: Default::default(),
         objective: None,
         objective_history: Vec::new(),
         price_history: Vec::new(),
