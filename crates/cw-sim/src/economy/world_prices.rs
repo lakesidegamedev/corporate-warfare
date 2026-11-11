@@ -301,7 +301,8 @@ pub fn world_event<'a>(
     if causes.is_empty() {
         return None;
     }
-    let pick = mix64(texture_seed(world) ^ fnv(&family.key) ^ top_week as u64) as usize % causes.len();
+    let pick =
+        mix64(texture_seed(world) ^ fnv(&family.key) ^ top_week as u64) as usize % causes.len();
     Some((bps, causes[pick].as_str()))
 }
 
@@ -437,7 +438,9 @@ pub fn weekly(world: &mut World, dataset: &cw_data::Dataset) {
             .find(|t| t.family == family.key && t.swing_bps > 0)
             .filter(|_| family.mode == PriceMode::HistoricalVariance);
         let textured = rule.is_some();
-        let texture = rule.map(|t| texture_at(texture_seed(world), t, week).0).unwrap_or(0);
+        let texture = rule
+            .map(|t| texture_at(texture_seed(world), t, week).0)
+            .unwrap_or(0);
         let path_bps = match family.mode {
             PriceMode::Historical => interpolate_bps(&family.anchors, week),
             PriceMode::HistoricalVariance => {
