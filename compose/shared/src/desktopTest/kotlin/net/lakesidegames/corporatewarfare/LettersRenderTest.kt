@@ -60,7 +60,7 @@ class LettersRenderTest {
         return store
     }
 
-    /** The player raids the first rival market the rules allow, then a week passes. */
+    /** The player raids the first rival market the rules allow, then the four week warning passes and the raid is decided. */
     private fun raidARival(h: uniffi.cw_ffi.SessionHandle) {
         val me = h.overview().primaryFirm ?: return
         val plants = h.mapPlants()
@@ -78,7 +78,7 @@ class LettersRenderTest {
             val receipt = h.submitJson(json)
             println("raid receipt accepted=${receipt.accepted} ${receipt.errorKey} ${receipt.errorDetail}")
             if (receipt.accepted) {
-                repeat(3) { h.dismissPause(); h.advance(1u) }
+                repeat(6) { h.dismissPause(); h.advance(1u) }
                 println("raids: ${h.recentRaids().size}")
                 return
             }

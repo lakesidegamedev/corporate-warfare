@@ -541,6 +541,14 @@ pub enum CommandIntent {
         price_cents: i64,
         weeks: u32,
     },
+    /// Give up a raid campaign the firm announced and that has not resolved. The escrowed budget
+    /// is lost all the same (2.0). Last so older journals keep their variant numbers.
+    AbandonRaid {
+        firm: Handle,
+        target: Handle,
+        region: u8,
+        industry: u8,
+    },
 }
 
 fn yes() -> bool {
@@ -630,6 +638,7 @@ impl CommandIntent {
             CommandIntent::GiveGuidance { .. } => "give_guidance",
             CommandIntent::GiveToCandidate { .. } => "give_to_candidate",
             CommandIntent::BidOnTender { .. } => "bid_on_tender",
+            CommandIntent::AbandonRaid { .. } => "abandon_raid",
             CommandIntent::SetTransferPrice { .. } => "set_transfer_price",
             CommandIntent::CarveOutDivision { .. } => "carve_out_division",
             CommandIntent::ListSubsidiary { .. } => "list_subsidiary",
@@ -2817,15 +2826,39 @@ fn apply_intent(
             require_control(world, actor, *firm)?;
             require_region(world, *region)?;
             firm_ref(world, *target)?;
-            sectors::raid(
-                world,
-                dataset,
-                *firm,
-                *target,
-                *region,
-                *industry,
-                *budget_cents,
-            )?;
+            // Under a warning period the raid is announced and resolves weeks later against the
+            // defence the target has by then; without one it resolves at once.
+            if sectors::raid_warning_weeks(dataset) > 0 {
+                sectors::announce_raid(
+                    world,
+                    dataset,
+                    *firm,
+                    *target,
+                    *region,
+                    *industry,
+                    *budget_cents,
+                )?;
+            } else {
+                sectors::raid(
+                    world,
+                    dataset,
+                    *firm,
+                    *target,
+                    *region,
+                    *industry,
+                    *budget_cents,
+                )?;
+            }
+            Ok(())
+        }
+        CommandIntent::AbandonRaid {
+            firm,
+            target,
+            region,
+            industry,
+        } => {
+            require_control(world, actor, *firm)?;
+            sectors::abandon_raid(world, dataset, *firm, *target, *region, *industry)?;
             Ok(())
         }
         CommandIntent::FileLobbyRequest {

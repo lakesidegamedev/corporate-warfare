@@ -260,6 +260,14 @@ pub struct CapacityStats {
     /// Raids announced against the player's group, with the weeks of warning before they resolve.
     pub raids_announced_on_player: u32,
     pub raid_warning_weeks: Vec<u32>,
+    /// Raids decided anywhere in the league, won, and won raids that left the defender with no
+    /// plants at all (a company losing its only business).
+    #[serde(default)]
+    pub raids_all: u32,
+    #[serde(default)]
+    pub raids_won: u32,
+    #[serde(default)]
+    pub raids_emptied_company: u32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -476,6 +484,12 @@ pub struct Aggregate {
     pub raids_announced_on_player_per_decade_median: Option<f64>,
     #[serde(default)]
     pub raid_warning_weeks_median: Option<f64>,
+    #[serde(default)]
+    pub raids_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub raids_won_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub raids_emptied_company_per_decade_median: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -561,6 +575,8 @@ struct Observer {
     best_rank: Option<u32>,
     hostile: Hostile,
     seen_raids: BTreeSet<(u32, u64, u64, u8, u8)>,
+    seen_all_raids: BTreeSet<(u32, u64, u64, u8, u8)>,
+    seen_raid_campaigns: BTreeSet<(u32, u64, u64, u8, u8)>,
     seen_deals: BTreeSet<(u64, u32)>,
     seen_campaigns: BTreeSet<u32>,
     seen_plans: BTreeSet<(u64, u64, u32)>,
@@ -605,6 +621,8 @@ impl Observer {
             best_rank: None,
             hostile: Hostile::default(),
             seen_raids: BTreeSet::new(),
+            seen_all_raids: BTreeSet::new(),
+            seen_raid_campaigns: BTreeSet::new(),
             seen_deals: BTreeSet::new(),
             seen_campaigns: BTreeSet::new(),
             seen_plans: BTreeSet::new(),
@@ -929,6 +947,27 @@ impl Observer {
             .and_then(|p| world.firm(p))
             .map(valuation)
             .unwrap_or(0);
+        // League raids: every raid decided this week, whoever the player is (none careers too).
+        for raid in &world.raids {
+            if self.seen_all_raids.insert((
+                raid.tick,
+                raid.attacker.0,
+                raid.defender.0,
+                raid.region,
+                raid.industry,
+            )) {
+                self.capacity.raids_all += 1;
+                if raid.success {
+                    self.capacity.raids_won += 1;
+                    if world
+                        .firm(raid.defender)
+                        .is_some_and(|f| f.facilities.is_empty())
+                    {
+                        self.capacity.raids_emptied_company += 1;
+                    }
+                }
+            }
+        }
         if !group.is_empty() {
             let mut plan_deals: BTreeSet<u64> = BTreeSet::new();
             for plan in &world.plans.plans {
@@ -953,6 +992,23 @@ impl Observer {
                         player_equity_cents: player_equity,
                         deal: plan.deal.map(|d| d.0),
                     });
+                }
+            }
+            for c in &world.raids.campaigns {
+                if group.contains(&c.defender.0)
+                    && !group.contains(&c.attacker.0)
+                    && self.seen_raid_campaigns.insert((
+                        c.announced,
+                        c.attacker.0,
+                        c.defender.0,
+                        c.region,
+                        c.industry,
+                    ))
+                {
+                    self.capacity.raids_announced_on_player += 1;
+                    self.capacity
+                        .raid_warning_weeks
+                        .push(c.resolves.saturating_sub(c.announced));
                 }
             }
             for raid in &world.raids {
@@ -1792,6 +1848,18 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         raid_warning_weeks_median: med(careers
             .iter()
             .flat_map(|c| c.capacity.raid_warning_weeks.iter().map(|w| *w as f64))
+            .collect()),
+        raids_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.raids_all, c.weeks_played))
+            .collect()),
+        raids_won_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.raids_won, c.weeks_played))
+            .collect()),
+        raids_emptied_company_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.raids_emptied_company, c.weeks_played))
             .collect()),
     }
 }

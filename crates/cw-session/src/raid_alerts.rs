@@ -1,9 +1,9 @@
-//! Raid alerts. A raid is resolved in one step inside the rival's turn, so there is no
-//! announcement before it: the player's first chance to know is after. These alerts therefore do
-//! three jobs, all read from the world and never stored: say plainly what a recent raid on the
-//! player did and what defence costs; say plainly when a raid took the last block of the
-//! player's only business and which ways on exist; and warn, before any raid, that a one block
-//! business can be lost whole.
+//! Raid alerts, all read from the world and never stored. Under 2.0 a raid is announced weeks
+//! before it resolves (`raid_warning_weeks` in content), so the first job is to say plainly that
+//! a campaign is coming: who, against which business, what is at stake, the chance today, the
+//! weeks left and what defence would cost and do. Then: what a recent raid on the player did and
+//! what defence costs; when a raid took the last block of the player's only business and which
+//! ways on exist; and, before any raid, that a one block business is exposed.
 
 use cw_data::Dataset;
 use cw_sim::economy::events_engine::player_side;
@@ -70,7 +70,50 @@ fn defence_line(
     ))
 }
 
+/// One `alert.raid_announced` per campaign announced against the player's companies.
+fn announced(world: &World, dataset: &Dataset, alerts: &mut Vec<Alert>) {
+    for view in crate::campaigns(world, dataset) {
+        if view.role != crate::dto::CampaignRole::AgainstPlayer {
+            continue;
+        }
+        let weeks = view.weeks_left;
+        let defence = defence_line(
+            world,
+            dataset,
+            cw_core::ids::Handle(view.defender),
+            view.region,
+            view.industry,
+            view.attack_cents,
+        )
+        .map(|line| format!(" {line}"))
+        .unwrap_or_default();
+        alerts.push(Alert {
+            key: "alert.raid_announced".to_owned(),
+            subject: view.defender_name.clone(),
+            severity: 2,
+            detail: format!(
+                "{} has announced a raid on {}'s {} business in {}, with {} behind it. At stake: {} of your {}. Their chance today is {} percent; it is decided in {} week{}, against the defence you have then.{defence}",
+                view.attacker_name,
+                view.defender_name,
+                view.industry_name,
+                view.region_name,
+                paper::money(world, dataset, cw_core::ids::Handle(view.defender), view.budget_cents),
+                blocks(view.blocks_at_stake as u32),
+                blocks(view.division_blocks),
+                pct(view.chance_bps as i64),
+                weeks,
+                if weeks == 1 { "" } else { "s" },
+            ),
+        });
+    }
+}
+
+fn blocks(n: u32) -> String {
+    format!("{n} block{}", if n == 1 { "" } else { "s" })
+}
+
 pub fn raid_alerts(world: &World, dataset: &Dataset, alerts: &mut Vec<Alert>) {
+    announced(world, dataset, alerts);
     let now = world.tick.0;
     for raid in world.raids.iter() {
         if !player_side(world, raid.defender) || player_side(world, raid.attacker) {
