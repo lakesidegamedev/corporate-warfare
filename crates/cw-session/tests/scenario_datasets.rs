@@ -79,6 +79,10 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// against real holders), so the fixture path moves from the first week. In 1.9 float trades also
 /// settle at once along a price curve (rival long plans buy this way from week one of a plan), which
 /// moves the great-lakes seeds 1 to 4 pins; the fixture path of seed 5 and the Swift pin are unchanged.
+/// In 2.0 every pin here moved when gateways began trading in volume steps (dearer imports and
+/// cheaper exports past the normal room, exports settling at one average price for every seller)
+/// and goods began pricing around the outside world's middle quote. The content's dataset hash is
+/// unchanged: the new market rules block is not part of the hashed content.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -90,15 +94,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "9e2ff9a758bf1fcdaea02b2fad118c91f1e752d8870f812e868fea13e35cf007",
+            "73f2a64ac0d0fdd5feed8b1d4b8d5b41b3e70bd561c64ff445253499979bc384",
         ),
         (
             2,
-            "86e1fd48466e8018124ab5662f53e0e31ff6376a5f568888f9d6e2062dd338d9",
+            "884ba3cf3f7ffa91e0f2d0dda894f7679eb996bf0f3f9f6084a2631a5e44aaa5",
         ),
         (
             3,
-            "2ed035714f65fd3f1442c4cc345990f0e067b4cac207362ccd39011cbb477e2d",
+            "e1a284b7127a33e9475ce9dc81688a4dc94a33cec3b2ca88e8820a303fd3e64b",
         ),
     ];
     for (seed, hash) in pins {
@@ -110,12 +114,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "0903cef2c5aec63802a01bdad265aa1f89c9e207020aea1d3200c03bcc28fe66"
+        "0603636476410311e9586dafa716e987984e96cfc74c8093b4d7a869148d6d5f"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "ad658f44de7b5e19362029eb7996a204c533a4a4ad7c19a882019007701bd204"
+        "5bdd054b3ebc4b8ab2483a4c16baabac5d2957eff7b4011fdeb98f7edf4ff3c4"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
