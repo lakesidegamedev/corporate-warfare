@@ -296,3 +296,75 @@ fn a_listed_plant_runs_until_its_owner_accepts_a_bid_or_withdraws() {
     assert_eq!(world.facilities.get(other).unwrap().firm, firm);
     assert_eq!(world.auctions.totals.listings_withdrawn, 2);
 }
+
+#[test]
+fn a_rival_folds_in_a_company_it_holds_at_ninety_percent() {
+    use cw_sim::commands::{CommandEnvelope, CommandIntent, apply};
+    let (mut world, dataset) = built(ScenarioKind::Guided);
+    let rivals = rivals(&world);
+    let (buyer, target) = (rivals[0], rivals[1]);
+    // The buyer comes to hold 92 percent of the target, bought from its other holders.
+    let holders: Vec<(HolderId, i64)> = world
+        .firm(target)
+        .unwrap()
+        .shares
+        .holders
+        .iter()
+        .filter(|(h, lot)| !h.is_treasury() && lot.qty > 0)
+        .map(|(h, lot)| (*h, lot.qty))
+        .collect();
+    let issued: i64 = holders.iter().map(|(_, q)| *q).sum();
+    let mut wanted = issued * 92 / 100;
+    for (holder, qty) in holders {
+        let take = qty.min(wanted);
+        if take > 0 {
+            world.firms.get_mut(target).unwrap().shares.transfer(
+                holder,
+                HolderId::Firm(buyer),
+                take,
+                0,
+            );
+            wanted -= take;
+        }
+    }
+    fund(&mut world, buyer, 50_000_000_000);
+    let plants = world.firm(target).unwrap().facilities.clone();
+    let cost = cw_sim::economy::deals::minority_cost(&world, buyer, target, 0);
+    assert!(cost > 0, "minorities remain");
+    let cash = world.firm(buyer).unwrap().book.cash() + world.firm(target).unwrap().book.cash();
+    let envelope = CommandEnvelope {
+        command_id_high: 0,
+        command_id_low: 1,
+        actor: buyer.0,
+        expected_revision: world.revision,
+        submitted_tick: world.tick.0,
+        intent: CommandIntent::FoldInCompany { buyer, target },
+    };
+    apply(&mut world, &dataset, &envelope).unwrap();
+    assert_eq!(
+        world.firm(target).unwrap().status,
+        FirmStatus::Merged { into: buyer }
+    );
+    for plant in plants {
+        assert_eq!(world.facilities.get(plant).unwrap().firm, buyer);
+    }
+    assert_eq!(world.firm(buyer).unwrap().book.cash(), cash - cost);
+    let record = world.auctions.mergers.last().unwrap();
+    assert_eq!(
+        (record.buyer, record.target, record.minority_cents),
+        (buyer, target, cost)
+    );
+    assert!(world.auctions.merged_lately(buyer, world.tick));
+    // A company the buyer does not hold at 90 percent is refused.
+    let other = rivals[2];
+    let envelope = CommandEnvelope {
+        command_id_low: 2,
+        expected_revision: world.revision,
+        intent: CommandIntent::FoldInCompany {
+            buyer,
+            target: other,
+        },
+        ..envelope
+    };
+    assert!(apply(&mut world, &dataset, &envelope).is_err());
+}
