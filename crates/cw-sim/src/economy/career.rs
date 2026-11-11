@@ -504,7 +504,11 @@ fn push_event(state: &mut CareerState, week: u32, key: &str, text: String, weigh
 /// cannot be played (a helm pick that is not on offer).
 pub fn begin(world: &mut World, ds: &Dataset, setup: &CareerSetup) -> Result<(), String> {
     let table = career_table();
-    let years = if setup.years == 0 {
+    // The five-year score mode is the five-year length of a career: a five-year game started
+    // with a career and no length plays five years, and its score sheet is unchanged.
+    let years = if setup.years == 0 && world.mode == crate::state::ScenarioMode::FiveYear {
+        5
+    } else if setup.years == 0 {
         table.default_years
     } else {
         setup.years
@@ -760,6 +764,23 @@ fn step(world: &mut World, ds: &Dataset, state: &mut CareerState) {
                 value,
             );
         }
+    }
+    for h in state.tracking.group_seen.clone() {
+        if groups.contains(&h) {
+            continue;
+        }
+        let Some(f) = world.firms.get(h) else {
+            continue;
+        };
+        let (key, text) = match f.status {
+            FirmStatus::Liquidating | FirmStatus::Dissolved => (
+                "company_failed",
+                format!("{} failed and was wound up.", f.name),
+            ),
+            FirmStatus::Merged { .. } => ("company_merged", format!("{} was merged away.", f.name)),
+            _ => ("company_lost", format!("{} left your control.", f.name)),
+        };
+        push_event(state, week, key, text, 40_000_000_000);
     }
     if !groups.is_empty() {
         state.tracking.had_company = true;

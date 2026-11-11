@@ -48,7 +48,7 @@
       "text": "career: careful skilled at the helm earns gold in some careers but under half" },
     { "id": "career_helm_beats_ai", "policy": "skilled", "start": "helm", "metric": "helm_beats_ai_share", "min": 0.51,
       "text": "career: the helm company ends worth more than the same company left to its AI (cw-cli helm) in most careers" },
-    { "id": "career_reckless_loses", "policy": "reckless", "start": "founder", "metric": "career_lost_share", "min": 0.51,
-      "text": "career: a reckless founder loses (no company left, removed by the board or taken over) in most careers" }
+    { "id": "career_reckless_loses", "policy": "reckless", "start": "founder", "metric": "career_lost_or_bust_share", "min": 0.51,
+      "text": "career: a reckless founder loses (its company goes bust, or the career is lost: no company and too little to found one, removed by the board or taken over) in most careers" }
   ]
 }

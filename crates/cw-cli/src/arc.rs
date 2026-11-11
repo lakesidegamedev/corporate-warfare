@@ -494,6 +494,10 @@ pub struct Aggregate {
     pub career_lost_share: Option<f64>,
     #[serde(default)]
     pub career_removed_or_warned_share: Option<f64>,
+    /// Careers lost by the engine's rules or whose company went bust (the arc's `bust`), even
+    /// when the player kept enough money to found again.
+    #[serde(default)]
+    pub career_lost_or_bust_share: Option<f64>,
     #[serde(default)]
     pub helm_beats_ai_share: Option<f64>,
     /// Ambition -> [none, bronze, silver, gold] counts.
@@ -2011,6 +2015,18 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         career_silver_plus_share: career_share(careers, |r| medal_level(playing_medal(r)) >= 2),
         career_gold_share: career_share(careers, |r| medal_level(playing_medal(r)) >= 3),
         career_lost_share: career_share(careers, |r| r.lost),
+        career_lost_or_bust_share: {
+            let judged: Vec<&Career> = careers.iter().filter(|c| c.career.is_some()).collect();
+            if judged.is_empty() {
+                None
+            } else {
+                let n = judged
+                    .iter()
+                    .filter(|c| c.bust || c.career.as_ref().is_some_and(|r| r.lost))
+                    .count();
+                Some(n as f64 / judged.len() as f64)
+            }
+        },
         career_removed_or_warned_share: career_share(careers, |r| {
             r.ending == "removed" || r.board_warned
         }),
@@ -2151,6 +2167,7 @@ fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
         "career_silver_plus_share" => aggregate.career_silver_plus_share,
         "career_gold_share" => aggregate.career_gold_share,
         "career_lost_share" => aggregate.career_lost_share,
+        "career_lost_or_bust_share" => aggregate.career_lost_or_bust_share,
         "career_removed_or_warned_share" => aggregate.career_removed_or_warned_share,
         "helm_beats_ai_share" => aggregate.helm_beats_ai_share,
         "bust_share" => aggregate.bust_share,
@@ -2613,12 +2630,13 @@ pub fn run(arguments: &[String]) {
     );
     if !a.career_medals.is_empty() {
         println!(
-            "career start={start_key} playing_no_medal={:?} bronze_plus={:?} silver_plus={:?} gold={:?} lost={:?} removed_or_warned={:?} helm_beats_ai={:?} endings={:?}",
+            "career start={start_key} playing_no_medal={:?} bronze_plus={:?} silver_plus={:?} gold={:?} lost={:?} lost_or_bust={:?} removed_or_warned={:?} helm_beats_ai={:?} endings={:?}",
             a.career_no_medal_share,
             a.career_bronze_plus_share,
             a.career_silver_plus_share,
             a.career_gold_share,
             a.career_lost_share,
+            a.career_lost_or_bust_share,
             a.career_removed_or_warned_share,
             a.helm_beats_ai_share,
             a.career_endings
