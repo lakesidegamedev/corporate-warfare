@@ -79,6 +79,11 @@ pub(super) struct SkilledState {
     defend_until: u32,
     pub builds: u32,
     pub cuts: u32,
+    /// Bids placed for plants on offer.
+    pub bids: u32,
+    /// Plants bid for whose lot has not been seen closing yet: one won while mothballed is
+    /// reopened.
+    bid_plants: Vec<u64>,
 }
 
 impl Default for SkilledState {
@@ -96,6 +101,8 @@ impl Default for SkilledState {
             defend_until: 0,
             builds: 0,
             cuts: 0,
+            bids: 0,
+            bid_plants: Vec::new(),
         }
     }
 }
@@ -143,6 +150,132 @@ impl PolicyRunner {
         }
         if self.policy == ReferencePolicy::Skilled && self.skilled.passed >= 2 {
             self.skilled_acquire(session, &controlled);
+        }
+        if self.policy == ReferencePolicy::Skilled
+            && !crate::policy::NO_PLANT_BIDS.load(std::sync::atomic::Ordering::Relaxed)
+            && let Some(primary) = session.world.investor.primary_group
+        {
+            self.skilled_bid(session, primary.0);
+        }
+    }
+
+    /// Bid for a plant on offer (2.0) when the engine's opening figures for it pass the same
+    /// test a build must: the weekly contribution, discounted by the script's trust in the
+    /// opening signal, repays the price within `MAX_PAYBACK_WEEKS`, and the price leaves the
+    /// build reserve in cash. The bid is the most that test allows, capped at the cost of
+    /// building the same blocks today scaled to the share not yet written off, and never under a
+    /// break-up lot's scrap price. One open bid at a time; places and recipes that failed their
+    /// quarter, and divisions that lose money, are skipped as for a build.
+    fn skilled_bid(&mut self, session: &mut Session, firm: u64) {
+        use cw_sim::economy::sectors;
+        let now = session.world.tick.0;
+        let handle = Handle(firm);
+        if session.world.pending_pause.is_some() || now < SETTLING_WEEKS {
+            return;
+        }
+        let lots = session.plant_lots();
+        // A plant won at auction keeps its status: one that was mothballed is reopened, since
+        // the bid was for what it earns running. Forget lots that closed either way.
+        let mut waiting = Vec::new();
+        for facility in std::mem::take(&mut self.skilled.bid_plants) {
+            let ours = session
+                .world
+                .facilities
+                .get(Handle(facility))
+                .filter(|plant| plant.firm == handle);
+            if let Some(plant) = ours {
+                if plant.status == cw_sim::state::FacilityStatus::Mothballed {
+                    self.submit(
+                        session,
+                        CommandIntent::ReopenFacility {
+                            facility: Handle(facility),
+                        },
+                    );
+                }
+            } else if lots.iter().any(|lot| lot.facility == facility) {
+                waiting.push(facility);
+            }
+        }
+        self.skilled.bid_plants = waiting;
+        if lots.iter().any(|lot| lot.player_bid_cents > 0) {
+            return;
+        }
+        let fin = finance(session, firm);
+        let Some(entity) = session.world.firm(handle) else {
+            return;
+        };
+        if fin.ebitda_trailing_cents <= 0 {
+            return;
+        }
+        let plants = entity.facilities.len() as i64;
+        let outflow = cw_sim::economy::insolvency::mandatory_weekly_outflow(&session.world, handle);
+        let reserve = outflow
+            .saturating_mul(RESERVE_WEEKS)
+            .saturating_mul(plants + 1)
+            / plants.max(1);
+        let spare = entity.book.cash() - reserve;
+        let trust = self.skilled.trust_bps;
+        let mut best: Option<(i64, u32, i64)> = None;
+        for lot in &lots {
+            if lot.yours || lot.weeks_left == 0 || !lot.bids.is_empty() || lot.weekly_cents <= 0 {
+                continue;
+            }
+            let Some(plant) = session.world.facilities.get(Handle(lot.facility)) else {
+                continue;
+            };
+            let recipe = plant.recipe;
+            let industry = sectors::recipe_industry(&session.dataset, recipe);
+            if self.skilled.failed_places.contains(&(recipe, lot.region))
+                || self
+                    .skilled
+                    .failed_recipes
+                    .get(&recipe)
+                    .is_some_and(|n| *n >= 2)
+                || self
+                    .skilled_division_profit(
+                        session,
+                        firm,
+                        (lot.region, industry),
+                        now.saturating_sub(26),
+                    )
+                    .is_some_and(|(p, r)| r > 0 && p < 0)
+            {
+                continue;
+            }
+            let discounted = lot.weekly_cents * trust / 10_000;
+            let price = discounted
+                .saturating_mul(MAX_PAYBACK_WEEKS)
+                .min(lot.replacement_cents)
+                .min(spare);
+            if price <= 0 || price < lot.reserve_cents {
+                continue;
+            }
+            // Quickest payback first.
+            let score = discounted * 10_000 / price;
+            if best.is_none_or(|(b, ..)| score > b) {
+                best = Some((score, lot.lot, price));
+            }
+        }
+        let Some((_, lot, price)) = best else {
+            return;
+        };
+        let facility = lots
+            .iter()
+            .find(|candidate| candidate.lot == lot)
+            .map_or(0, |candidate| candidate.facility);
+        if self.submit(
+            session,
+            CommandIntent::BidForPlant {
+                firm: handle,
+                lot,
+                price_cents: price,
+            },
+        ) {
+            self.skilled.bids += 1;
+            self.skilled.bid_plants.push(facility);
+            if self.verbose_skilled {
+                println!("w{now} BID lot {lot} price {price} trust {trust}");
+            }
         }
     }
 

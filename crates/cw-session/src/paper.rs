@@ -431,6 +431,7 @@ fn collect(world: &World, dataset: &Dataset, week: u32) -> Vec<Candidate> {
     let mut found: Vec<Candidate> = Vec::new();
     raids(world, dataset, week, &mut found);
     campaigns(world, dataset, week, &mut found);
+    mergers_and_lots(world, dataset, week, &mut found);
     rival_moves(world, dataset, week, &mut found);
     deals(world, dataset, week, &mut found);
     labour_and_news(world, week, &mut found);
@@ -621,6 +622,74 @@ fn campaigns(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidat
             false,
             5,
             c.budget_cents,
+        ));
+    }
+}
+
+/// Companies folded into their 90 percent owner, and plants a failed company's auction sold
+/// (2.0).
+fn mergers_and_lots(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) {
+    for m in world
+        .auctions
+        .mergers
+        .iter()
+        .filter(|m| in_window(m.tick.0, week))
+    {
+        let (Some(buyer), Some(target)) = (firm_name(world, m.buyer), firm_name(world, m.target))
+        else {
+            continue;
+        };
+        out.push(candidate(
+            format!("merger:{}:{}:{}", m.tick.0, m.buyer.0, m.target.0),
+            m.tick.0,
+            &format!("{buyer} absorbs {target}"),
+            format!(
+                "{buyer}, which held nine tenths of {target}, has folded it in, paying the last outside shareholders {}. {target} leaves the league.",
+                money(world, dataset, m.buyer, m.minority_cents),
+            ),
+            "Business desk",
+            PaperLink::company(m.buyer),
+            false,
+            5,
+            m.minority_cents,
+        ));
+    }
+    use cw_sim::economy::auctions::{LotOutcome, LotRoute};
+    for c in world.auctions.closed.iter().filter(|c| {
+        in_window(c.closed.0, week)
+            && c.lot.route == LotRoute::BreakUp
+            && matches!(c.outcome, LotOutcome::Sold { .. })
+    }) {
+        let LotOutcome::Sold {
+            buyer, price_cents, ..
+        } = c.outcome
+        else {
+            continue;
+        };
+        let (Some(buyer_name), Some(seller)) =
+            (firm_name(world, buyer), firm_name(world, c.lot.seller))
+        else {
+            continue;
+        };
+        let plant = dataset
+            .recipes
+            .get(c.lot.recipe as usize)
+            .map(|r| r.name.to_lowercase())
+            .unwrap_or_else(|| "plant".to_owned());
+        out.push(candidate(
+            format!("lot-sold:{}", c.lot.id),
+            c.closed.0,
+            &format!("{buyer_name} buys a {seller} plant"),
+            format!(
+                "{buyer_name} paid {} at the liquidator's auction for {seller}'s {plant} plant in {}, which keeps running with its staff.",
+                money(world, dataset, c.lot.seller, price_cents),
+                region_name(world, c.lot.region),
+            ),
+            "Business desk",
+            PaperLink::company(buyer),
+            false,
+            4,
+            price_cents,
         ));
     }
 }

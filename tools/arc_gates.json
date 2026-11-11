@@ -33,6 +33,10 @@
     { "id": "unmet_local_falls", "policy": "any", "metric": "unmet_local_fall_pct_median", "min": 5.0,
       "text": "household demand for services and retail that goes without falls at least 5 points over the decade (median)" },
     { "id": "raid_warning", "policy": "any", "metric": "raid_warning_weeks_median", "min": 4.0,
-      "text": "raids on the player are announced at least 4 weeks before they resolve (median; n/a until raid warnings exist)" }
+      "text": "raids on the player are announced at least 4 weeks before they resolve (median; n/a until raid warnings exist)" },
+    { "id": "plants_change_hands", "policy": "any", "metric": "plants_changing_hands_per_decade_per_ten_firms_median", "min": 1.0,
+      "text": "at least one plant changes hands a decade for every ten companies (median, every route: auction, listing, direct sale)" },
+    { "id": "mergers", "policy": "any", "metric": "careers_with_merger_share", "min": 0.5,
+      "text": "a company is folded into its 90 percent owner in most careers" }
   ]
 }

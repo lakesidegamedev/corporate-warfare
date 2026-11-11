@@ -4,6 +4,7 @@
 //! weekly advances. It exposes immutable read models, a versioned save envelope and a replay log.
 //! Swift keeps file I/O and lifecycle; it never computes a financial identity.
 
+pub mod auction_alerts;
 pub mod brief;
 pub mod cfo;
 pub mod dto;
@@ -1016,6 +1017,37 @@ impl Session {
         campaigns(&self.world, &self.dataset)
     }
 
+    /// The bids a plant would draw if it were put up for sale now (2.0). None when there is no
+    /// such plant.
+    pub fn plant_sale(&self, facility: u64) -> Option<dto::PlantSaleView> {
+        let handle = Handle(facility);
+        let plant = self.world.facilities.get(handle)?;
+        let bids = cw_sim::economy::disposal::plant_bids(&self.world, &self.dataset, handle)
+            .into_iter()
+            .map(|bid| dto::PlantBidView {
+                bidder: bid.bidder.0,
+                bidder_name: self
+                    .world
+                    .firm(bid.bidder)
+                    .map(|f| f.name.clone())
+                    .unwrap_or_default(),
+                price_cents: bid.price_cents,
+                weekly_cents: bid.weekly_cents,
+                blocks_used: bid.blocks_used,
+            })
+            .collect();
+        Some(dto::PlantSaleView {
+            facility,
+            book_cents: (plant.capex_cents - plant.accumulated_depreciation).max(0),
+            bids,
+        })
+    }
+
+    /// Every plant on offer (2.0), by deadline. See `dto::PlantLotView`.
+    pub fn plant_lots(&self) -> Vec<dto::PlantLotView> {
+        plant_lots(&self.world, &self.dataset)
+    }
+
     pub fn capacity_openings(&self, limit: usize) -> Vec<dto::CapacityOpening> {
         let world = &self.world;
         let dataset = &self.dataset;
@@ -1130,6 +1162,7 @@ impl Session {
         government_alerts(world, &self.dataset, &mut alerts);
         structure_alerts(world, &mut alerts);
         raid_alerts::raid_alerts(world, &self.dataset, &mut alerts);
+        auction_alerts::auction_alerts(world, &self.dataset, &mut alerts);
         for event in dto::events(world, &self.dataset) {
             if event.mandatory {
                 alerts.push(Alert {
@@ -1946,6 +1979,74 @@ fn storage_alerts(
     }
 }
 
+/// Every plant on offer as the player sees it. See `Session::plant_lots`.
+pub fn plant_lots(world: &World, dataset: &Dataset) -> Vec<dto::PlantLotView> {
+    use cw_sim::economy::auctions::LotRoute;
+    use cw_sim::economy::disposal;
+    use cw_sim::economy::events_engine::player_side;
+    let rooms = cw_sim::economy::capacity::input_rooms(world, dataset);
+    let reader = world
+        .investor
+        .primary_group
+        .filter(|firm| world.firm(*firm).is_some_and(|f| f.operative()));
+    let now = world.tick.0;
+    let bid_view = |bid: &disposal::PlantBid| dto::PlantBidView {
+        bidder: bid.bidder.0,
+        bidder_name: world
+            .firm(bid.bidder)
+            .map(|f| f.name.clone())
+            .unwrap_or_default(),
+        price_cents: bid.price_cents,
+        weekly_cents: bid.weekly_cents,
+        blocks_used: bid.blocks_used,
+    };
+    let mut out: Vec<dto::PlantLotView> = world
+        .auctions
+        .lots
+        .iter()
+        .map(|lot| {
+            let reading = reader
+                .and_then(|firm| disposal::appraise(world, dataset, &rooms, firm, lot.facility));
+            let plant_name = dataset
+                .recipes
+                .get(lot.recipe as usize)
+                .map(|r| r.name.clone())
+                .unwrap_or_default();
+            dto::PlantLotView {
+                lot: lot.id,
+                facility: lot.facility.0,
+                route: match lot.route {
+                    LotRoute::BreakUp => "break_up",
+                    LotRoute::Listing => "listing",
+                }
+                .to_owned(),
+                seller: lot.seller.0,
+                seller_name: paper::firm_name(world, lot.seller).unwrap_or_default(),
+                plant_name,
+                region: lot.region,
+                region_name: paper::region_name(world, lot.region),
+                blocks: lot.blocks,
+                book_cents: lot.book_cents,
+                reserve_cents: lot.reserve_cents,
+                opened_week: lot.opened.0,
+                closes_week: lot.closes.0,
+                weeks_left: lot.closes.0.saturating_sub(now),
+                weekly_cents: reading.as_ref().map(|r| r.weekly_cents).unwrap_or(0),
+                blocks_used: reading.as_ref().map(|r| r.blocks_used).unwrap_or(0),
+                earnings_cents: reading.as_ref().map(|r| r.earnings_cents).unwrap_or(0),
+                replacement_cents: reading.as_ref().map(|r| r.replacement_cents).unwrap_or(0),
+                player_bid_cents: lot.player_bid.as_ref().map(|b| b.price_cents).unwrap_or(0),
+                player_bid_firm: lot.player_bid.as_ref().map(|b| b.firm.0).unwrap_or(0),
+                yours: player_side(world, lot.seller),
+                bids: lot.offered.iter().map(bid_view).collect(),
+                answer_by_week: lot.answer_by.0,
+            }
+        })
+        .collect();
+    out.sort_by_key(|view| (view.closes_week, view.lot));
+    out
+}
+
 /// Every pending raid campaign as the player sees it. See `Session::raid_campaigns`.
 pub fn campaigns(world: &World, dataset: &Dataset) -> Vec<dto::RaidCampaignView> {
     use cw_sim::economy::events_engine::player_side;
@@ -2333,7 +2434,8 @@ mod tests {
         // and grow toward their budget where served, demand follows the cycle by product) and a new company began offering at least the going wage, and again
         // when the texture and street rules joined the dataset hash (world prices stray from their
         // paths by a seeded texture, seller markets open near balance, shops and services price on
-        // their street). The Swift
+        // their street), and again in 2.0 when plant auctions joined the dataset hash (four weeks
+        // for a break-up or a listing). The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform

@@ -108,6 +108,12 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// dataset hash), seller markets began opening near balance and shops and services began
 /// pricing on their street, and the worlds moved again when rivals began closing losing plants and
 /// paying out idle cash in live play. A save that names the pre-prices hash still loads.
+/// Every pin here moved again in 2.0 when plant auctions joined the dataset hash (four weeks for a
+/// failed company's break-up and for a listing) and a failed company's plants began going to the
+/// best bid as running plants instead of being sold off at once for scrap; a save that names the
+/// pre-auction hash loads. The founder world (seed 4) moved once more when rivals began listing
+/// plants they had kept mothballed for half a year and folding in companies they hold at 90
+/// percent.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
@@ -116,11 +122,19 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
         data.hash,
         "ef21f23f840364d1ce4367e4eb74e1937bd491cf1c2ab2c2d5badf7f8e776963"
     );
-    // The hash before the prices round (the 2.0 demand pin) still finds this dataset.
-    let before_prices = "3856624d8fe911499f1f62988f0f25b533c4b455404c70bfb0095aee9c5cf110";
+    // The hash before the prices round (the plant auction round's pin) still finds this dataset.
+    let before_prices = "2ef8d9aa0b212e4fa696eda45ea59bef735c30bbf10196acc82d9edeef47ef62";
     assert_eq!(data.pre_prices_hash(), before_prices);
     assert_eq!(
         cw_data::Dataset::for_hash(before_prices).unwrap().hash,
+        data.hash
+    );
+    // The hash before plant auctions joined it (and before the prices round) is the 2.0 demand
+    // round's pin.
+    let pre_auction = "3856624d8fe911499f1f62988f0f25b533c4b455404c70bfb0095aee9c5cf110";
+    assert_eq!(data.pre_auction_hash(), pre_auction);
+    assert_eq!(
+        cw_data::Dataset::for_hash(pre_auction).unwrap().hash,
         data.hash
     );
     // The hash before market rules joined it (the 2.0 round one pin) still finds this dataset,

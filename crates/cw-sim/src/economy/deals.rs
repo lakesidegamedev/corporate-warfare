@@ -951,15 +951,20 @@ fn pay_seller(world: &mut World, holder: HolderId, amount: i64, basis: i64, memo
 
 /// Cash the merger must pay remaining minority holders: max(offer, fair value) per share.
 pub fn minority_buyout_cost(world: &World, deal: &Deal) -> i64 {
-    let Some(target) = world.firm(deal.target) else {
+    minority_cost(world, deal.buyer, deal.target, deal.offer_price_cents)
+}
+
+/// What paying out every holder of `target` other than `buyer` costs at max(offer, fair value).
+pub fn minority_cost(world: &World, buyer: Handle, target: Handle, offer_cents: i64) -> i64 {
+    let Some(target) = world.firm(target) else {
         return 0;
     };
-    let price = deal.offer_price_cents.max(target.shares.fair_cents);
+    let price = offer_cents.max(target.shares.fair_cents);
     target
         .shares
         .holders
         .iter()
-        .filter(|(holder, _)| !holder.is_treasury() && **holder != HolderId::Firm(deal.buyer))
+        .filter(|(holder, _)| !holder.is_treasury() && **holder != HolderId::Firm(buyer))
         .map(|(_, lot)| lot.qty.saturating_mul(price))
         .sum()
 }
@@ -967,38 +972,49 @@ pub fn minority_buyout_cost(world: &World, deal: &Deal) -> i64 {
 /// Before a legal merger retires the target's shares, every remaining minority holder is paid in
 /// cash from the buyer at max(offer, fair value). Fails without posting if the buyer cannot pay.
 pub fn buy_out_minorities(world: &mut World, deal: &Deal) -> DomainResult<()> {
-    let cost = minority_buyout_cost(world, deal);
-    let cash = world.firm(deal.buyer).map(|f| f.book.cash()).unwrap_or(0);
+    buy_out(world, deal.buyer, deal.target, deal.offer_price_cents)
+}
+
+/// `buy_out_minorities` for a buyer, target and offer price, with or without a deal (2.0: a
+/// holder at 90 percent through the market folds its company in at fair value).
+pub fn buy_out(
+    world: &mut World,
+    buyer: Handle,
+    target: Handle,
+    offer_cents: i64,
+) -> DomainResult<()> {
+    let cost = minority_cost(world, buyer, target, offer_cents);
+    let cash = world.firm(buyer).map(|f| f.book.cash()).unwrap_or(0);
     if cash < cost {
         return Err(DomainError::InsufficientCash {
-            entity: deal.buyer.0,
+            entity: buyer.0,
             required: cost,
             available: cash,
         });
     }
-    let Some(target) = world.firm(deal.target) else {
+    let Some(company) = world.firm(target) else {
         return Ok(());
     };
-    let price = deal.offer_price_cents.max(target.shares.fair_cents);
-    let legs: Vec<(HolderId, i64)> = target
+    let price = offer_cents.max(company.shares.fair_cents);
+    let legs: Vec<(HolderId, i64)> = company
         .shares
         .holders
         .iter()
         .filter(|(holder, lot)| {
-            lot.qty > 0 && !holder.is_treasury() && **holder != HolderId::Firm(deal.buyer)
+            lot.qty > 0 && !holder.is_treasury() && **holder != HolderId::Firm(buyer)
         })
         .map(|(holder, lot)| (*holder, lot.qty))
         .collect();
     for (holder, qty) in legs {
         let cash = qty.saturating_mul(price);
-        let basis = lot_basis(world, deal.target, holder, qty);
+        let basis = lot_basis(world, target, holder, qty);
         pay_seller(world, holder, cash, basis, "merger minority payout");
-        if let Some(target) = world.firms.get_mut(deal.target) {
+        if let Some(target) = world.firms.get_mut(target) {
             target
                 .shares
-                .transfer(holder, HolderId::Firm(deal.buyer), qty, cash);
+                .transfer(holder, HolderId::Firm(buyer), qty, cash);
         }
-        if let Some(bidder) = world.firms.get_mut(deal.buyer) {
+        if let Some(bidder) = world.firms.get_mut(buyer) {
             let _ = bidder.book.commit(
                 world.tick,
                 Txn::new()
@@ -1007,7 +1023,7 @@ pub fn buy_out_minorities(world: &mut World, deal: &Deal) -> DomainResult<()> {
             );
         }
     }
-    if world.investor.primary_group == Some(deal.target) {
+    if world.investor.primary_group == Some(target) {
         world.investor.primary_group = None;
     }
     Ok(())

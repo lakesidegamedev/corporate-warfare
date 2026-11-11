@@ -296,6 +296,7 @@ impl Dataset {
                     || dataset.pre_raid_warning_hash() == hash
                     || dataset.pre_demand_hash() == hash
                     || dataset.pre_prices_hash() == hash
+                    || dataset.pre_auction_hash() == hash
             })
     }
 
@@ -970,9 +971,13 @@ impl Dataset {
     /// The hash this dataset had before the demand rules joined it (2.0, after raids were
     /// announced ahead): a save written then names it and loads against the current dataset.
     pub fn pre_demand_hash(&self) -> String {
-        let mut plain = self.before_prices();
+        self.before_demand().hash_with(self.cast.len(), true)
+    }
+
+    fn before_demand(&self) -> Dataset {
+        let mut plain = self.before_auctions();
         plain.demand = balance::DemandRules::default();
-        plain.hash_with(self.cast.len(), true)
+        plain
     }
 
     /// The hash this dataset had before the prices round (2.0, after the demand rules): no world
@@ -1009,9 +1014,22 @@ impl Dataset {
     }
 
     fn before_raid_warning(&self) -> Dataset {
-        let mut plain = self.before_prices();
-        plain.demand = balance::DemandRules::default();
+        let mut plain = self.before_demand();
         plain.capacity.raid_warning_weeks = 0;
+        plain
+    }
+
+    /// The hash this dataset had before a failed company's plants went to auction (2.0, after
+    /// the demand rules joined the hash and before the prices round): the same content with no
+    /// auction weeks and no prices round. A save written then
+    /// names it and loads against the current dataset.
+    pub fn pre_auction_hash(&self) -> String {
+        self.before_auctions().hash_with(self.cast.len(), true)
+    }
+
+    fn before_auctions(&self) -> Dataset {
+        let mut plain = self.before_prices();
+        plain.capacity.plant_auction_weeks = 0;
         plain
     }
 
@@ -1215,6 +1233,13 @@ impl Dataset {
                     .string("cw-households-v1")
                     .i64(c.household_cover_bps)
                     .i64(c.household_unmet_bps);
+            }
+            // Plant auctions came after the household round; named only when on, so a save
+            // written before them still loads.
+            if c.plant_auction_weeks != 0 {
+                hasher
+                    .string("cw-auctions-v1")
+                    .i64(c.plant_auction_weeks as i64);
             }
         }
         // Demand rules change what every household and plant asks for, so they name the dataset
