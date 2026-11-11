@@ -26,11 +26,13 @@ class ProposalAfterRenderTest {
 
     @Test
     fun overviewOfALargeCompany() {
-        // A company with many plants: the tables scroll and nothing is lost to dead space.
-        val (store, settings) = ProposalCareer.openBig()
-        assertTrue(store.divisions.isNotEmpty(), "the large company needs divisions")
-        println("large company: ${store.divisions.size} divisions, ${store.divisions.sumOf { it.blocks.toInt() }} plants, ${store.productLines.size} product lines")
-        ProposalCareer.shoot("after-overview-big", 1920, 1080, settings) { TycoonShell(store, onSettings = {}, start = Place.Overview) }
+        // The test career stays small, so a large company is made from the real rows: 14 divisions and 18
+        // product lines copied under new keys, to show the tables scroll and give room to the results table.
+        val (store, settings) = ProposalCareer.open()
+        val regions = listOf("A", "B", "C", "D", "E", "F", "G")
+        val divisions = (0 until 14).map { i -> store.divisions[i % store.divisions.size].copy(region = regions[i % 7] + i, regionName = "Region ${i + 1}") }
+        val lines = (0 until 18).map { i -> store.productLines[i % store.productLines.size].copy(product = (1000 + i).toUInt(), name = "Product ${i + 1}") }
+        ProposalCareer.shoot("after-overview-large", 1920, 1080, settings) { CompanyOverviewScreen(store, divisions, lines) }
     }
 
     @Test

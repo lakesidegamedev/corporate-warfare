@@ -373,9 +373,9 @@ private fun tint(v: Long): Color = if (v > 0) Palette.positive else if (v < 0) P
  * results by period and the selected division's operations on the right.
  */
 @Composable
-fun CompanyOverviewScreen(store: GameStore) {
+fun CompanyOverviewScreen(store: GameStore, divisionRows: List<DivisionDto> = store.divisions, lineRows: List<ProductLineDto> = store.productLines) {
     val firm = store.selectedFirmDto ?: run { Box(Modifier.fillMaxSize().padding(16.dp)) { FoundCompanyPanel(store) }; return }
-    var division by remember { mutableStateOf(store.divisions.firstOrNull()?.let { it.region + "/" + it.industry }) }
+    var division by remember { mutableStateOf(divisionRows.firstOrNull()?.let { it.region + "/" + it.industry }) }
     var editing by remember { mutableStateOf<ProductLineDto?>(null) }
     val cur = firm.currency
     val last = store.history.lastOrNull()
@@ -388,7 +388,7 @@ fun CompanyOverviewScreen(store: GameStore) {
             Triple("Your votes", "%.1f%%".format(firm.investorVotesBps / 100.0), Palette.gold),
             Triple("Credit", firm.grade, Palette.primaryText),
             Triple("Plants", "${firm.facilities}", Palette.primaryText),
-            Triple("Divisions", "${store.divisions.size}", Palette.primaryText),
+            Triple("Divisions", "${divisionRows.size}", Palette.primaryText),
             Triple("Revenue, last period", Format.compact(last?.revenueCents ?: 0, cur), Palette.primaryText),
             Triple("Net income, last period", Format.compact(last?.netIncomeCents ?: 0, cur), tint(last?.netIncomeCents ?: 0)),
         )
@@ -397,11 +397,11 @@ fun CompanyOverviewScreen(store: GameStore) {
             // room it does not use goes to the results table below, which scrolls when it is long.
             BoxWithConstraints(Modifier.weight(1.3f).fillMaxHeight()) {
                 val cap = maxHeight * 0.38f
-                val divHeight = minOf(gridNaturalHeight(store.divisions.size), cap)
-                val lineHeight = minOf(gridNaturalHeight(store.productLines.size), cap)
+                val divHeight = minOf(gridNaturalHeight(divisionRows.size), cap)
+                val lineHeight = minOf(gridNaturalHeight(lineRows.size), cap)
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     DataGrid(
-                        "Divisions and plants", store.divisions, divisionColumns(), key = { it.region + "/" + it.industry },
+                        "Divisions and plants", divisionRows, divisionColumns(), key = { it.region + "/" + it.industry },
                         modifier = Modifier.fillMaxWidth().height(divHeight),
                         filterText = { "${Sectors.name(it.industry)} ${it.regionName} ${it.strategyName}" },
                         selected = division, onSelect = { division = it.region + "/" + it.industry }, onOpen = { store.showDivision(it) },
@@ -411,7 +411,7 @@ fun CompanyOverviewScreen(store: GameStore) {
                         initialSort = "share",
                     )
                     DataGrid(
-                        "Product lines", store.productLines, productColumns(), key = { it.product },
+                        "Product lines", lineRows, productColumns(), key = { it.product },
                         modifier = Modifier.fillMaxWidth().height(lineHeight),
                         filterText = { it.name }, onSelect = { editing = it }, onOpen = { editing = it },
                         breakdown = { l -> "${l.name}: price ${Format.money(l.priceCents)}, market ${Format.money(l.marketCents)}, normal ${Format.money(l.referenceCents)}, cost ${Format.money(l.unitCostCents)}; made ${Format.count(l.madeLastWeekLots)}, sold ${Format.count(l.soldLastWeekLots)}, in stock ${Format.count(l.stockLots)} lots" },
@@ -428,7 +428,7 @@ fun CompanyOverviewScreen(store: GameStore) {
                 }
             }
             // Right: the picked division's operations take the whole column.
-            val d = store.divisions.firstOrNull { it.region + "/" + it.industry == division }
+            val d = divisionRows.firstOrNull { it.region + "/" + it.industry == division }
             DetailPane(d?.let { "${Sectors.name(it.industry)} · ${it.regionName}" } ?: "Division", Modifier.weight(1f).fillMaxHeight()) {
                 if (d == null) Text("Pick a division on the left.", color = Palette.secondary, fontSize = 12.sp)
                 else {
@@ -509,21 +509,21 @@ fun GoodsScreen(store: GameStore, startPick: UInt? = null) {
 }
 
 private fun goodsColumns(shares: Map<UInt, Long>): List<GridColumn<CommodityDto>> = listOf(
-    GridColumn("name", "Good", null, numeric = false, text = { it.name + if (it.yours) " *" else "" }, tone = { if (it.yours) Palette.gold else Palette.primaryText }, bold = true),
+    GridColumn("name", "Good", null, minWidth = 190.dp, numeric = false, text = { it.name + if (it.yours) " *" else "" }, tone = { if (it.yours) Palette.gold else Palette.primaryText }, bold = true),
     GridColumn("sector", "Sector", 120.dp, numeric = false, text = { if (it.sector == "other") DASH else Sectors.name(it.sector) }, tone = { Palette.secondary }),
     GridColumn("price", "Price", 84.dp, text = { Format.money(it.priceCents) }, sort = { it.priceCents }),
     GridColumn("vsnormal", "Vs normal", 76.dp, text = { if (it.referenceCents > 0) changeText((it.priceCents - it.referenceCents) * 10_000 / it.referenceCents) else "" },
-        sort = { if (it.referenceCents > 0) (it.priceCents - it.referenceCents) * 10_000 / it.referenceCents else 0 }, tone = { tint(it.priceCents - it.referenceCents) }, tip = "The price now against the good's normal price."),
-    GridColumn("week", "Week", 62.dp, text = { changeText(it.changeWeekBps) }, sort = { it.changeWeekBps }, tone = { changeTint(it.changeWeekBps) }),
-    GridColumn("quarter", "Quarter", 66.dp, text = { changeText(it.changeQuarterBps) }, sort = { it.changeQuarterBps }, tone = { changeTint(it.changeQuarterBps) }),
-    GridColumn("trend", "Trend", 90.dp, spark = { it.historyCents }, tip = "The price over recent weeks."),
+        sort = { if (it.referenceCents > 0) (it.priceCents - it.referenceCents) * 10_000 / it.referenceCents else 0 }, tone = { tint(it.priceCents - it.referenceCents) }, tip = "The price now against the good's normal price.", dropOrder = 1),
+    GridColumn("week", "Week", 62.dp, text = { changeText(it.changeWeekBps) }, sort = { it.changeWeekBps }, tone = { changeTint(it.changeWeekBps) }, dropOrder = 2),
+    GridColumn("quarter", "Quarter", 66.dp, text = { changeText(it.changeQuarterBps) }, sort = { it.changeQuarterBps }, tone = { changeTint(it.changeQuarterBps) }, dropOrder = 5),
+    GridColumn("trend", "Trend", 90.dp, spark = { it.historyCents }, tip = "The price over recent weeks.", dropOrder = 3),
     GridColumn("made", "Made", 72.dp, text = { Format.count(it.madeLots) }, sort = { it.madeLots }),
     GridColumn("sold", "Sold", 72.dp, text = { Format.count(it.soldLots) }, sort = { it.soldLots }),
     GridColumn("through", "Sold %", 84.dp, text = { if (it.madeLots > 0) "${it.soldLots * 100 / it.madeLots}%" else "" }, sort = { if (it.madeLots > 0) it.soldLots * 100 / it.madeLots else -1 },
         bar = { if (it.madeLots > 0) (it.soldLots.toFloat() / it.madeLots) else 0f }, tip = "Sold as a share of what was made."),
     GridColumn("stock", "Stock", 70.dp, text = { Format.count(it.stockLots) }, sort = { it.stockLots }),
-    GridColumn("imported", "Imported", 72.dp, text = { if (it.importedLots > 0) Format.count(it.importedLots) else "" }, sort = { it.importedLots }, tone = { Palette.positive }),
-    GridColumn("exported", "Exported", 72.dp, text = { if (it.exportedLots > 0) Format.count(it.exportedLots) else "" }, sort = { it.exportedLots }, tone = { Palette.secondary }),
+    GridColumn("imported", "Imported", 72.dp, text = { if (it.importedLots > 0) Format.count(it.importedLots) else "" }, sort = { it.importedLots }, tone = { Palette.positive }, dropOrder = 4),
+    GridColumn("exported", "Exported", 72.dp, text = { if (it.exportedLots > 0) Format.count(it.exportedLots) else "" }, sort = { it.exportedLots }, tone = { Palette.secondary }, dropOrder = 4),
     GridColumn("yours", "Your share", 80.dp, text = { (shares[it.product] ?: 0L).let { s -> if (s > 0) gridPct(s) else "" } }, sort = { shares[it.product] ?: 0L },
         bar = { (shares[it.product] ?: 0L) / 10_000f }, tone = { Palette.gold }, tip = "Your share of what was sold of this good."),
 )
@@ -576,7 +576,7 @@ fun LeagueScreen(store: GameStore, pick: ULong?, onPick: (ULong) -> Unit) {
 
 private fun leagueColumns(rank: Map<ULong, Int>, maxCap: Long, stocks: Map<ULong, uniffi.cw_ffi.StockDto>): List<GridColumn<RivalRowDto>> = listOf(
     // The company's name leads: its rank and sector badge sit in front of it. Your own company is gold.
-    GridColumn("name", "Company", null, numeric = false, text = { it.name }, tone = { if (it.yours) Palette.gold else Palette.primaryText }, bold = true,
+    GridColumn("name", "Company", null, minWidth = 210.dp, numeric = false, text = { it.name }, tone = { if (it.yours) Palette.gold else Palette.primaryText }, bold = true,
         lead = { r ->
             Text("${rank[r.firm] ?: ""}", color = Palette.secondary, style = GridFigures, textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.width(20.dp), maxLines = 1)
             Spacer(Modifier.width(6.dp))
@@ -585,15 +585,15 @@ private fun leagueColumns(rank: Map<ULong, Int>, maxCap: Long, stocks: Map<ULong
     GridColumn("sector", "Sector", 118.dp, numeric = false, text = { Sectors.name(it.industry) }, tone = { Palette.secondary }),
     GridColumn("revenue", "Revenue", 84.dp, text = { Format.compact(it.revenueCents) }, sort = { it.revenueCents }),
     GridColumn("profit", "Profit", 80.dp, text = { Format.compact(it.profitCents) }, sort = { it.profitCents }, tone = { tint(it.profitCents) }),
-    GridColumn("margin", "Margin", 62.dp, text = { it.netMarginBps?.let(::gridPct) ?: "" }, sort = { it.netMarginBps ?: Long.MIN_VALUE }, tone = { tint(it.netMarginBps ?: 0) }),
-    GridColumn("cash", "Cash", 78.dp, text = { Format.compact(it.cashCents) }, sort = { it.cashCents }),
-    GridColumn("debt", "Debt", 78.dp, text = { Format.compact(it.debtCents) }, sort = { it.debtCents }, tone = { Palette.secondary }),
+    GridColumn("margin", "Margin", 62.dp, text = { it.netMarginBps?.let(::gridPct) ?: "" }, sort = { it.netMarginBps ?: Long.MIN_VALUE }, tone = { tint(it.netMarginBps ?: 0) }, dropOrder = 2),
+    GridColumn("cash", "Cash", 78.dp, text = { Format.compact(it.cashCents) }, sort = { it.cashCents }, dropOrder = 3),
+    GridColumn("debt", "Debt", 78.dp, text = { Format.compact(it.debtCents) }, sort = { it.debtCents }, tone = { Palette.secondary }, dropOrder = 4),
     GridColumn("price", "Share", 72.dp, text = { Format.price(it.sharePriceCents) }, sort = { it.sharePriceCents }),
-    GridColumn("trend", "Trend", 80.dp, spark = { stocks[it.firm]?.historyCents.orEmpty() }, tip = "The share price over recent weeks."),
+    GridColumn("trend", "Trend", 80.dp, spark = { stocks[it.firm]?.historyCents.orEmpty() }, tip = "The share price over recent weeks.", dropOrder = 1),
     GridColumn("week", "Week", 60.dp, text = { stocks[it.firm]?.let { s -> changeText(s.changeWeekBps) } ?: "" }, sort = { stocks[it.firm]?.changeWeekBps ?: 0 }, tone = { changeTint(stocks[it.firm]?.changeWeekBps ?: 0) }),
     GridColumn("cap", "Value", 96.dp, text = { Format.compact(it.marketCapCents) }, sort = { it.marketCapCents }, bar = { it.marketCapCents.toFloat() / maxCap }, tip = "Market value: share price times shares issued."),
-    GridColumn("divisions", "Divs", 44.dp, text = { "${it.divisions}" }, sort = { it.divisions.toLong() }),
-    GridColumn("held", "You hold", 72.dp, text = { stocks[it.firm]?.yourShares?.takeIf { s -> s > 0 }?.let { s -> Format.count(s) } ?: "" }, sort = { stocks[it.firm]?.yourShares ?: 0 }, tone = { Palette.gold }),
+    GridColumn("divisions", "Divs", 44.dp, text = { "${it.divisions}" }, sort = { it.divisions.toLong() }, dropOrder = 5),
+    GridColumn("held", "You hold", 72.dp, text = { stocks[it.firm]?.yourShares?.takeIf { s -> s > 0 }?.let { s -> Format.count(s) } ?: "" }, sort = { stocks[it.firm]?.yourShares ?: 0 }, tone = { Palette.gold }, dropOrder = 6),
 )
 
 private fun headToHeadColumns(): List<GridColumn<HeadToHeadDto>> = listOf(

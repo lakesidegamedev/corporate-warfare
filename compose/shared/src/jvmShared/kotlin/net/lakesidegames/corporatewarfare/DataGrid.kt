@@ -81,6 +81,10 @@ class GridColumn<T>(
     val tip: String? = null,
     val shown: Boolean = true,
     val bold: Boolean = false,
+    /** When the grid is too narrow for every column, the highest numbers go first (ties: the rightmost). The first column never goes. */
+    val dropOrder: Int = 0,
+    /** The least room a pinned first column gets. */
+    val minWidth: Dp? = null,
     /** Something small drawn before the text, such as a logo or a rank. */
     val lead: (@Composable (T) -> Unit)? = null,
 )
@@ -121,10 +125,10 @@ fun <T> DataGrid(
     var descending by remember { mutableStateOf(initialDescending) }
     var filter by remember { mutableStateOf("") }
     var choosing by remember { mutableStateOf(false) }
+    // Columns the player switched on in the chooser stay even when they do not fit (the grid then scrolls sideways).
+    val extra = remember { mutableStateListOf<String>() }
     val hidden = remember { mutableStateListOf<String>().apply { addAll(columns.filter { !it.shown }.map { it.id }) } }
     var hovered by remember { mutableStateOf<Any?>(null) }
-    // The first column is the row's name: pinned, and never hidden by the chooser.
-    val visible = columns.filter { it === columns.first() || it.id !in hidden }
     val sortCol = columns.firstOrNull { it.id == sortId }
     val shown = remember(rows, filter, sortId, descending) {
         val needle = filter.trim().lowercase()
@@ -144,8 +148,32 @@ fun <T> DataGrid(
         val at = shown.indexOfFirst { key(it) == selected }
         if (at >= 0 && (at < list.firstVisibleItemIndex || at > list.firstVisibleItemIndex + list.layoutInfo.visibleItemsInfo.size - 2)) list.scrollToItem((at - 3).coerceAtLeast(0))
     }
+    BoxWithConstraints(modifier) {
+    val gridWidth = maxWidth
+    val phone = gridWidth < phoneBelow
+    // A column is never narrower than its heading, so a heading cannot clip. The first column is
+    // pinned and takes the room that is left; columns that do not fit are left out (the chooser
+    // brings them back) and the rest scroll sideways together only when the player asked for more.
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val headStyle = remember { TextStyle(fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp) }
+    fun headingWidth(c: GridColumn<T>): Dp = with(density) { measurer.measure(AnnotatedString(c.title.uppercase() + " v"), headStyle, maxLines = 1).size.width.toDp() } + 12.dp
+    fun columnWidth(c: GridColumn<T>): Dp = maxOf(c.width ?: 110.dp, headingWidth(c))
+    // The first column is the row's name: pinned, and never hidden by the chooser.
+    val first = columns.first()
+    val wanted = columns.drop(1).filter { it.id !in hidden }
+    val chrome = 14.dp + if (onOpen != null) 18.dp else 0.dp
+    val firstMin = maxOf(first.minWidth ?: 150.dp, first.width ?: 0.dp, headingWidth(first))
+    var rest = wanted
+    if (!phone) {
+        while (rest.isNotEmpty() && firstMin + rest.fold(0.dp) { a, c -> a + columnWidth(c) } > gridWidth - chrome) {
+            val out = rest.filter { it.id !in extra }.maxWithOrNull(compareBy<GridColumn<T>>({ it.dropOrder }, { columns.indexOf(it) })) ?: break
+            rest = rest - out
+        }
+    }
+    val visible = listOf(first) + rest
     Column(
-        modifier.border(1.dp, Palette.stroke).background(Palette.panel)
+        Modifier.fillMaxSize().border(1.dp, Palette.stroke).background(Palette.panel)
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown || shown.isEmpty()) return@onPreviewKeyEvent false
                 val at = shown.indexOfFirst { key(it) == selected }
@@ -171,28 +199,19 @@ fun <T> DataGrid(
         if (choosing) {
             FlowRow(Modifier.fillMaxWidth().background(Palette.ink).padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 columns.drop(1).forEach { c ->
-                    GridButton(c.title, c.id !in hidden) { if (c.id in hidden) hidden.remove(c.id) else hidden.add(c.id) }
+                    val on = rest.any { it.id == c.id }
+                    GridButton(c.title, on) { if (on) { hidden.add(c.id); extra.remove(c.id) } else { hidden.remove(c.id); extra.add(c.id) } }
                 }
             }
         }
-        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-            if (maxWidth < phoneBelow) {
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            if (phone) {
                 TwoLineRows(shown, visible, sortCol, descending, key, selected, onSelect, onOpen, { pickSort(it) })
-                return@BoxWithConstraints
+                return@Box
             }
-            // A column is never narrower than its heading, so a heading cannot clip. The first column is
-            // pinned and takes the room that is left; the rest scroll sideways together when they do not fit.
-            val measurer = rememberTextMeasurer()
-            val density = LocalDensity.current
-            val headStyle = remember { TextStyle(fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp) }
-            fun headingWidth(c: GridColumn<T>): Dp = with(density) { measurer.measure(AnnotatedString(c.title.uppercase() + " v"), headStyle, maxLines = 1).size.width.toDp() } + 12.dp
-            val first = visible.first()
-            val rest = visible.drop(1)
-            val widths = rest.associate { c -> c.id to maxOf(c.width ?: 110.dp, headingWidth(c)) }
+            val widths = rest.associate { c -> c.id to columnWidth(c) }
             val restWidth = widths.values.fold(0.dp) { a, w -> a + w }
-            val chrome = 14.dp + if (onOpen != null) 18.dp else 0.dp
-            val firstMin = maxOf(first.width ?: 0.dp, headingWidth(first), 150.dp)
-            val firstWidth = (maxWidth - chrome - restWidth).coerceAtLeast(firstMin).let { if (first.width != null) maxOf(first.width, headingWidth(first)) else it }
+            val firstWidth = if (first.width != null) maxOf(first.width, headingWidth(first)) else (gridWidth - chrome - restWidth).coerceAtLeast(firstMin)
             val hScroll = rememberScrollState()
             val pad = 6.dp
             Column(Modifier.fillMaxSize()) {
@@ -223,6 +242,7 @@ fun <T> DataGrid(
                 }
             }
         }
+    }
     }
 }
 
