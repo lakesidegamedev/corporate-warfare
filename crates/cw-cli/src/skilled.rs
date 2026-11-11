@@ -166,7 +166,7 @@ impl PolicyRunner {
     /// building the same blocks today scaled to the share not yet written off, and never under a
     /// break-up lot's scrap price. One open bid at a time; places and recipes that failed their
     /// quarter, and divisions that lose money, are skipped as for a build.
-    fn skilled_bid(&mut self, session: &mut Session, firm: u64) {
+    pub(super) fn skilled_bid(&mut self, session: &mut Session, firm: u64) {
         use cw_sim::economy::sectors;
         let now = session.world.tick.0;
         let handle = Handle(firm);
@@ -282,7 +282,7 @@ impl PolicyRunner {
     /// Mean weekly operating profit and revenue of a division over the firm's closed calendar
     /// quarters that began at or after `since` (the open quarter is lumpy and left out).
     /// None when no such quarter has closed.
-    fn skilled_division_profit(
+    pub(super) fn skilled_division_profit(
         &self,
         session: &Session,
         firm: u64,
@@ -311,7 +311,7 @@ impl PolicyRunner {
 
     /// Raid alert naming the company: lift marketing (the division's only defence) for a
     /// quarter.
-    fn skilled_defend(&mut self, session: &mut Session, firm: u64) {
+    pub(super) fn skilled_defend(&mut self, session: &mut Session, firm: u64) {
         let now = session.world.tick.0;
         if session
             .world
@@ -712,7 +712,7 @@ impl PolicyRunner {
         }
     }
 
-    fn skilled_operate(&mut self, session: &mut Session, firm: u64) {
+    pub(super) fn skilled_operate(&mut self, session: &mut Session, firm: u64) {
         let handle = Handle(firm);
         let finance = finance(session, firm);
         if self.last_target.get(&firm) != Some(&10_000) {

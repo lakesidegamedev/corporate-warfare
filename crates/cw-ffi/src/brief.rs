@@ -6,7 +6,7 @@ use crate::SessionHandle;
 
 #[derive(Clone, uniffi::Record)]
 pub struct BriefChangeDto {
-    /// profit, price, rival, event or mandate.
+    /// profit, price, rival, event, mandate or career.
     pub kind: String,
     pub text: String,
 }

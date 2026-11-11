@@ -4,6 +4,7 @@ pub mod achievements;
 pub mod auctions;
 pub mod banking;
 pub mod capacity;
+pub mod career;
 pub mod cast;
 pub mod chapters;
 pub mod civics;

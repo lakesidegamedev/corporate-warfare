@@ -299,6 +299,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
         "score::update",
         crate::economy::score::update(world, dataset)
     );
+    crate::ph!(
+        "career::weekly",
+        crate::economy::career::weekly(world, dataset)
+    );
     WeekOutcome {
         week: world.tick,
         pause: world.pending_pause.clone(),

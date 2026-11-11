@@ -1686,6 +1686,12 @@ pub struct World {
     /// own `CHIE` trailer; a save without it has none and the office seats a default.
     #[serde(skip)]
     pub player_chief: Option<PlayerChief>,
+    /// The career frame (2.0): how the career started, its ambition and length, the facts its
+    /// summary reads and its ending. `None` is the sandbox or five-year game as before. Outside
+    /// the postcard encoding, folded into the hash while set, saved in its own `CARE` trailer; a
+    /// save without it has none. See `economy::career`.
+    #[serde(skip)]
+    pub career: Option<crate::economy::career::CareerState>,
     /// Plants on offer and the plant auction log (2.0): a failed company's break-up lots and plants
     /// their owners listed. A new self-contained list no existing struct reads, so it sits outside
     /// the postcard encoding like the chapter state, folded into the hash while not empty and saved
@@ -2168,6 +2174,12 @@ pub fn canonical_hash(world: &World) -> String {
             if let Some(chief) = &world.player_chief {
                 match postcard::to_allocvec(chief) {
                     Ok(chief) => bytes.extend_from_slice(&chief),
+                    Err(_) => return String::from("unhashable"),
+                }
+            }
+            if let Some(career) = &world.career {
+                match postcard::to_allocvec(career) {
+                    Ok(career) => bytes.extend_from_slice(&career),
                     Err(_) => return String::from("unhashable"),
                 }
             }

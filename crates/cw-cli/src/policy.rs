@@ -33,6 +33,8 @@ use std::collections::BTreeMap;
 
 #[path = "skilled.rs"]
 pub mod skilled;
+#[path = "steward.rs"]
+pub mod steward;
 
 use cw_core::ids::Handle;
 use cw_session::{Detail, FinanceSummary, Query, Session};
@@ -69,6 +71,9 @@ pub enum ReferencePolicy {
     Skilled,
     /// `skilled` without buying other companies: organic growth only.
     SkilledOrganic,
+    /// A careful owner of an established company (helm starts): keeps what earns, closes and
+    /// sells what loses, invests free cash at the company's scale (see `steward.rs`).
+    Steward,
     /// Changes nothing but one random draw in the events stream at week 0: the noise floor for
     /// the influence comparison with `none`.
     Noise,
@@ -80,7 +85,7 @@ impl ReferencePolicy {
     pub const fn is_skilled(self) -> bool {
         matches!(
             self,
-            ReferencePolicy::Skilled | ReferencePolicy::SkilledOrganic
+            ReferencePolicy::Skilled | ReferencePolicy::SkilledOrganic | ReferencePolicy::Steward
         )
     }
 
@@ -99,6 +104,7 @@ impl ReferencePolicy {
             "reckless" => Some(ReferencePolicy::Reckless),
             "skilled" => Some(ReferencePolicy::Skilled),
             "skilled-organic" => Some(ReferencePolicy::SkilledOrganic),
+            "steward" => Some(ReferencePolicy::Steward),
             "noise" => Some(ReferencePolicy::Noise),
             "noise-macro" => Some(ReferencePolicy::NoiseMacro),
             _ => None,
@@ -116,6 +122,7 @@ impl ReferencePolicy {
             ReferencePolicy::Reckless => "reckless",
             ReferencePolicy::Skilled => "skilled",
             ReferencePolicy::SkilledOrganic => "skilled-organic",
+            ReferencePolicy::Steward => "steward",
             ReferencePolicy::Noise => "noise",
             ReferencePolicy::NoiseMacro => "noise-macro",
         }
@@ -130,7 +137,8 @@ impl ReferencePolicy {
             ReferencePolicy::Acquirer => 10,
             ReferencePolicy::Expander
             | ReferencePolicy::Skilled
-            | ReferencePolicy::SkilledOrganic => 8,
+            | ReferencePolicy::SkilledOrganic
+            | ReferencePolicy::Steward => 8,
             ReferencePolicy::Passive | ReferencePolicy::Reckless => 0,
         }
     }
@@ -146,7 +154,8 @@ impl ReferencePolicy {
             ReferencePolicy::Passive
             | ReferencePolicy::Reckless
             | ReferencePolicy::Skilled
-            | ReferencePolicy::SkilledOrganic => 0,
+            | ReferencePolicy::SkilledOrganic
+            | ReferencePolicy::Steward => 0,
         }
     }
 
@@ -260,6 +269,7 @@ pub struct PolicyRunner {
     /// The passive player has founded its company and set its target; it never acts again.
     passive_done: bool,
     skilled: skilled::SkilledState,
+    steward: steward::StewardState,
     verbose_skilled: bool,
     pub stats: PolicyStats,
 }
@@ -302,6 +312,7 @@ impl PolicyRunner {
             last_target: BTreeMap::new(),
             passive_done: false,
             skilled: Default::default(),
+            steward: Default::default(),
             verbose_skilled: verbose,
             stats: PolicyStats::default(),
         }
@@ -347,6 +358,10 @@ impl PolicyRunner {
             if session.world.investor.primary_group.is_none() {
                 return;
             }
+        }
+        if self.policy == ReferencePolicy::Steward {
+            self.act_steward(session);
+            return;
         }
         if self.policy.is_skilled() {
             self.act_skilled(session);
@@ -807,7 +822,7 @@ impl PolicyRunner {
         self.submit(session, CommandIntent::RespondEvent { event, choice })
     }
 
-    fn submit(&mut self, session: &mut Session, intent: CommandIntent) -> bool {
+    pub(crate) fn submit(&mut self, session: &mut Session, intent: CommandIntent) -> bool {
         let key = intent.key().to_owned();
         let envelope = CommandEnvelope {
             command_id_high: PLAYER_COMMAND_HIGH,
