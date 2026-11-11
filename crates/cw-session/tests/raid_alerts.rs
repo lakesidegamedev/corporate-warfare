@@ -136,3 +136,56 @@ fn losing_the_last_block_of_the_only_business_is_said_plainly_with_ways_on() {
         assert!(!t.contains('\u{2014}') && !t.contains('\u{2013}'));
     }
 }
+
+#[test]
+fn an_announced_raid_names_the_raider_the_stake_the_chance_the_weeks_and_the_defence() {
+    let mut s = session();
+    let me = s.world.investor.primary_group.unwrap();
+    let (region, industry) = one_block(&mut s, me);
+    s.world.tick = Tick(40);
+    let attacker = rival(&s, me);
+    let raider = s.world.firm(attacker).unwrap().name.clone();
+    s.world.raids.campaigns.push(cw_sim::state::RaidCampaign {
+        attacker,
+        defender: me,
+        region,
+        industry,
+        budget_cents: 5_000_000,
+        announced: 39,
+        resolves: 43,
+    });
+    let text = detail(&s, "alert.raid_announced").expect("an announcement");
+    assert!(
+        text.contains(&format!("{raider} has announced a raid")),
+        "{text}"
+    );
+    assert!(text.contains("At stake: 1 block of your 1 block"), "{text}");
+    assert!(text.contains("decided in 3 weeks"), "{text}");
+    assert!(text.contains("Raising weekly marketing by"), "{text}");
+    // The figures agree with the session's campaign list.
+    let list = s.raid_campaigns();
+    assert_eq!(list.len(), 1);
+    let view = &list[0];
+    assert_eq!(view.role, cw_session::CampaignRole::AgainstPlayer);
+    assert_eq!((view.weeks_left, view.blocks_at_stake), (3, 1));
+    assert!(text.contains(&format!(
+        "Their chance today is {}.{:02} percent",
+        view.chance_bps / 100,
+        view.chance_bps % 100
+    )));
+    // A company's only block: even an overwhelming campaign stays under the division rule's
+    // ceiling (95 percent base x 0.15 = 14.25 percent), which the whole-business rule lowers.
+    assert!(view.chance_bps < 1_425, "{}", view.chance_bps);
+    // The raider writes to say so, in its own voice.
+    let letters = cw_session::letters::letters(&s.world, &s.dataset, 39);
+    assert!(
+        letters
+            .iter()
+            .any(|l| l.id.starts_with("raid-announced:39:")),
+        "a letter from the raider"
+    );
+    // Once decided it is no longer pending.
+    s.world.raids.campaigns.clear();
+    assert!(detail(&s, "alert.raid_announced").is_none());
+    assert!(s.raid_campaigns().is_empty());
+}

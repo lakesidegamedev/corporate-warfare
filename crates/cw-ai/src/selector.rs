@@ -168,6 +168,19 @@ pub fn marketing_pct(t: Temperament) -> i64 {
     }
 }
 
+/// Percent of a raid's expected loss a firm will pay to defend against an announced campaign
+/// (2.0): a raider fights back hard, the cautious guard what they have, a speculator would
+/// rather let a block go than spend on keeping it.
+pub fn defend_pct(t: Temperament) -> i64 {
+    match t {
+        Temperament::Raider => 150,
+        Temperament::Cautious => 120,
+        Temperament::Builder | Temperament::Integrator => 100,
+        Temperament::Financier => 80,
+        Temperament::Speculator => 50,
+    }
+}
+
 /// Percent aggression: how readily the firm makes hostile moves.
 pub fn aggression_pct(difficulty: Difficulty) -> i64 {
     match difficulty {

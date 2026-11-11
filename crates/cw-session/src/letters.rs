@@ -677,6 +677,53 @@ fn raid_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Lett
     }
 }
 
+/// A rival that announces a raid campaign on one of the player's companies writes to say so, in
+/// its chief's voice (2.0). The facts are the campaign's: business, region, budget, the week it is
+/// decided.
+fn campaign_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
+    for c in world
+        .raids
+        .campaigns
+        .iter()
+        .filter(|c| c.announced >= since)
+    {
+        if !player_side(world, c.defender) || player_side(world, c.attacker) {
+            continue;
+        }
+        let (Some(_), Some(yours)) = (
+            paper::firm_name(world, c.attacker),
+            paper::firm_name(world, c.defender),
+        ) else {
+            continue;
+        };
+        let industry = industry_name(c.industry);
+        let region = paper::region_name(world, c.region);
+        let weeks = c.resolves.saturating_sub(c.announced);
+        let fact = format!(
+            "We have put {} behind a campaign for {yours}'s {industry} business in {region}. It is decided in {weeks} week{}.",
+            paper::money(world, dataset, c.attacker, c.budget_cents),
+            if weeks == 1 { "" } else { "s" },
+        );
+        out.push(finish(
+            world,
+            Draft {
+                id: format!(
+                    "raid-announced:{}:{}:{}",
+                    c.announced, c.attacker.0, c.defender.0
+                ),
+                kind: "rival",
+                week: c.announced,
+                sender: rival_sender(world, dataset, c.attacker, c.announced).felt(Mood::Pleased),
+                tone: Tone::Grudge,
+                addressee: yours.clone(),
+                facts: vec![fact],
+                link: PaperLink::company(c.attacker),
+            },
+            None,
+        ));
+    }
+}
+
 fn ally_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
     for ((a, b), memory) in &world.rivalry.alliances {
         if memory.last < since || memory.score <= 0 {
@@ -1648,6 +1695,7 @@ pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter>
 
     let mut out: Vec<Letter> = Vec::new();
     raid_letters(world, dataset, since, &mut out);
+    campaign_letters(world, dataset, since, &mut out);
     ally_letters(world, dataset, since, &mut out);
     bid_letters(world, dataset, since, &mut out);
     rate_letters(world, dataset, since, &mut out);
@@ -1929,7 +1977,8 @@ mod tests {
         // A failed raid on you is not a letter, and raids between two rivals are not either.
         let mut t = quiet("great-lakes-2000", 30);
         let (a, b) = (rival(&t, 0), rival(&t, 1));
-        t.world.raids.push(raid(a, you(&t), false));
+        let on_you = raid(a, you(&t), false);
+        t.world.raids.push(on_you);
         t.world.raids.push(raid(a, b, true));
         assert!(letters(&t.world, &t.dataset, 25).is_empty());
     }

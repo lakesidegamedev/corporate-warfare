@@ -31,11 +31,74 @@ const SETTLING_WEEKS: u32 = 26;
 /// Marketing as a percent of weekly sales.
 const MARKETING_PERCENT: i64 = 4;
 /// Loan only while liabilities stay under this share of assets, in percent.
-const MAX_LEVERAGE_PCT: i64 = 45;
-/// Size of one loan request, in cents ($500,000).
-const LOAN_STEP_CENTS: i64 = 50_000_000;
+const MAX_LEVERAGE_PCT: i64 = 40;
+/// Weeks a new plant trades before it is judged.
+const PROVING_WEEKS: u32 = 13;
+/// Weeks of mandatory outflow kept in cash after any build.
+const RESERVE_WEEKS: i64 = 26;
+/// A plant must repay its quote within this many weeks of its (trust-discounted) profit.
+const MAX_PAYBACK_WEEKS: i64 = 104;
 /// Cash the founder keeps personally, in cents ($100,000).
 const FOUNDER_KEEPS_CENTS: i64 = 10_000_000;
+
+/// Score, recipe, region, cost, discounted weekly profit, industry, blocks, from the sheet.
+type Candidate = (i64, u16, u8, i64, i64, u8, i64, bool);
+
+/// The plant the careful script last ordered and is waiting to judge.
+#[derive(Clone, Debug)]
+pub(super) struct SkilledBuild {
+    plant: Handle,
+    key: (u8, u8),
+    recipe: u16,
+    region: u8,
+    /// Chosen from the sheet and import room test rather than the opening signal.
+    from_sheet: bool,
+    /// Weekly profit it was expected to add, after the trust discount.
+    expected: i64,
+    /// What its division earned a week before the order.
+    base_profit: i64,
+    capex: i64,
+}
+
+/// What the careful script remembers between cadences.
+#[derive(Clone, Debug)]
+pub(super) struct SkilledState {
+    pending: Option<SkilledBuild>,
+    /// How far to believe the engine's opening signal, in basis points, from its own record.
+    trust_bps: i64,
+    /// The same for the sheet figure plus the import room test (the older signal).
+    sheet_trust_bps: i64,
+    passed: u32,
+    strikes: u32,
+    /// Recipes and (recipe, region) pairs that failed their quarter: never again.
+    failed_recipes: std::collections::BTreeMap<u16, u32>,
+    failed_places: std::collections::BTreeSet<(u16, u8)>,
+    /// Recipes whose plants passed: a little more belief in them.
+    proven_recipes: std::collections::BTreeSet<u16>,
+    pause_until: u32,
+    defend_until: u32,
+    pub builds: u32,
+    pub cuts: u32,
+}
+
+impl Default for SkilledState {
+    fn default() -> Self {
+        SkilledState {
+            pending: None,
+            trust_bps: 5_000,
+            sheet_trust_bps: 5_000,
+            passed: 0,
+            strikes: 0,
+            failed_recipes: Default::default(),
+            failed_places: Default::default(),
+            proven_recipes: Default::default(),
+            pause_until: 0,
+            defend_until: 0,
+            builds: 0,
+            cuts: 0,
+        }
+    }
+}
 
 impl PolicyRunner {
     /// Found the scenario's starting company with all the spare personal cash.
@@ -65,22 +128,454 @@ impl PolicyRunner {
         );
     }
 
-    /// One cadence of the skilled player.
+    /// One cadence of the skilled player: operate, defend, cut what loses, then grow by one
+    /// plant at a time, each only after the last has proved itself.
     pub(super) fn act_skilled(&mut self, session: &mut Session) {
         let controlled = controlled_firms(session);
         for firm in &controlled {
             self.skilled_operate(session, *firm);
         }
         if let Some(primary) = session.world.investor.primary_group {
-            let fin = finance(session, primary.0);
-            self.skilled_borrow(session, primary.0, &fin);
-            // After the first half year, build only while the firm earns an operating profit.
-            if session.world.tick.0 < SETTLING_WEEKS || fin.ebitda_trailing_cents > 0 {
-                self.expand(session, primary.0, false);
+            self.skilled_defend(session, primary.0);
+            self.skilled_judge(session, primary.0);
+            self.skilled_cut(session, primary.0);
+            self.skilled_grow(session, primary.0);
+        }
+        if self.policy == ReferencePolicy::Skilled && self.skilled.passed >= 2 {
+            self.skilled_acquire(session, &controlled);
+        }
+    }
+
+    /// Mean weekly operating profit and revenue of a division over the firm's closed calendar
+    /// quarters that began at or after `since` (the open quarter is lumpy and left out).
+    /// None when no such quarter has closed.
+    fn skilled_division_profit(
+        &self,
+        session: &Session,
+        firm: u64,
+        key: (u8, u8),
+        since: u32,
+    ) -> Option<(i64, i64)> {
+        let quarters = session.world.archive.quarters.get(&Handle(firm))?;
+        let closed = quarters.split_last()?.1;
+        let (mut profit, mut revenue, mut weeks) = (0i64, 0i64, 0i64);
+        for quarter in closed
+            .iter()
+            .filter(|q| q.first_week >= since && q.weeks >= 12)
+        {
+            if let Some(row) = quarter
+                .divisions
+                .iter()
+                .find(|d| (d.region, d.industry) == key)
+            {
+                profit += row.profit;
+                revenue += row.revenue;
+            }
+            weeks += quarter.weeks as i64;
+        }
+        (weeks > 0).then(|| (profit / weeks, revenue / weeks))
+    }
+
+    /// Raid alert naming the company: lift marketing (the division's only defence) for a
+    /// quarter.
+    fn skilled_defend(&mut self, session: &mut Session, firm: u64) {
+        let now = session.world.tick.0;
+        if session
+            .world
+            .raids
+            .iter()
+            .any(|raid| raid.defender.0 == firm && raid.tick + 3 >= now)
+        {
+            self.skilled.defend_until = now + 13;
+        }
+        if now < self.skilled.defend_until {
+            let finance = finance(session, firm);
+            self.submit(
+                session,
+                CommandIntent::SetMarketingBudget {
+                    firm: Handle(firm),
+                    amount_cents: percent_of(weekly_revenue(&finance), MARKETING_PERCENT * 2),
+                },
+            );
+        }
+    }
+
+    /// Judge the plant last ordered once it has traded a quarter: did its division earn the
+    /// plant's expected profit on top of what it earned before? Adjust trust in the engine's
+    /// opening signal by how it actually did.
+    fn skilled_judge(&mut self, session: &mut Session, firm: u64) {
+        let Some(build) = self.skilled.pending.clone() else {
+            return;
+        };
+        let now = session.world.tick.0;
+        let Some(plant) = session.world.facilities.get(build.plant) else {
+            self.skilled.pending = None;
+            return;
+        };
+        if plant.status == cw_sim::state::FacilityStatus::Building
+            || now < plant.completes.0 + PROVING_WEEKS
+        {
+            return;
+        }
+        let since = plant.completes.0;
+        let Some((profit, revenue)) = self.skilled_division_profit(session, firm, build.key, since)
+        else {
+            return;
+        };
+        let realised = profit - build.base_profit;
+        let ratio_bps =
+            (realised.saturating_mul(10_000) / build.expected.max(1)).clamp(-10_000, 20_000);
+        let passed = ratio_bps >= 4_000 && realised * 208 >= build.capex && revenue > 0;
+        let trust = if build.from_sheet {
+            &mut self.skilled.sheet_trust_bps
+        } else {
+            &mut self.skilled.trust_bps
+        };
+        *trust = ((*trust + ratio_bps.max(0)) / 2).clamp(3_000, 10_000);
+        let trust_now = *trust;
+        if self.verbose_skilled {
+            println!(
+                "w{now} JUDGE plant realised {realised} expected {} ratio {ratio_bps} -> {} trust {}",
+                build.expected,
+                if passed { "pass" } else { "fail" },
+                trust_now
+            );
+        }
+        self.skilled.pending = None;
+        if passed {
+            self.skilled.passed += 1;
+            self.skilled.strikes = 0;
+            self.skilled.proven_recipes.insert(build.recipe);
+        } else {
+            self.skilled.strikes += 1;
+            // Selling next to nothing means the signal was wrong for this good: one strike
+            // is enough to drop the recipe; a mere shortfall needs two.
+            *self.skilled.failed_recipes.entry(build.recipe).or_default() +=
+                if realised <= 0 { 2 } else { 1 };
+            self.skilled
+                .failed_places
+                .insert((build.recipe, build.region));
+            // A plant that loses money is mothballed; a failure also pauses building.
+            let operating = session.world.firm(Handle(firm)).map_or(0, |f| {
+                f.facilities
+                    .iter()
+                    .filter(|h| {
+                        session
+                            .world
+                            .facilities
+                            .get(**h)
+                            .is_some_and(|p| p.is_operating())
+                    })
+                    .count()
+            });
+            if realised <= 0 && profit < 0 && operating >= 2 {
+                self.submit(
+                    session,
+                    CommandIntent::MothballFacility {
+                        facility: build.plant,
+                    },
+                );
+            }
+            self.skilled.pause_until = now + 13;
+        }
+    }
+
+    /// Stop and cut: a division that has lost money for a quarter on revenue loses a plant to
+    /// the mothball, newest first, one per cadence.
+    fn skilled_cut(&mut self, session: &mut Session, firm: u64) {
+        use cw_sim::economy::sectors;
+        let now = session.world.tick.0;
+        let mut victim: Option<(i64, Handle)> = None;
+        for division in sectors::divisions_of(&session.world, &session.dataset, Handle(firm)) {
+            let key = (division.region, division.industry);
+            let operating: Vec<Handle> =
+                division
+                    .plants
+                    .iter()
+                    .copied()
+                    .filter(|h| {
+                        session.world.facilities.get(*h).is_some_and(|p| {
+                            p.is_operating() && now >= p.completes.0 + PROVING_WEEKS
+                        })
+                    })
+                    .collect();
+            // Judge only a division whose every plant has traded a quarter.
+            if operating.len() != division.plants.len() || operating.is_empty() {
+                continue;
+            }
+            let newest = session
+                .world
+                .facilities
+                .get(*operating.last().unwrap())
+                .map_or(0, |p| p.completes.0);
+            let Some((profit, revenue)) = self.skilled_division_profit(session, firm, key, newest)
+            else {
+                continue;
+            };
+            if revenue <= 0 || profit >= 0 {
+                continue;
+            }
+            // A division with no sales is a feeder, judged with the firm, not alone.
+            if victim.is_none_or(|(p, _)| profit < p) {
+                victim = operating.last().map(|h| (profit, *h));
             }
         }
-        if self.policy == ReferencePolicy::Skilled {
-            self.skilled_acquire(session, &controlled);
+        let operating_total = session.world.firm(Handle(firm)).map_or(0, |f| {
+            f.facilities
+                .iter()
+                .filter(|h| {
+                    session
+                        .world
+                        .facilities
+                        .get(**h)
+                        .is_some_and(|p| p.is_operating())
+                })
+                .count()
+        });
+        if let Some((_, plant)) = victim.filter(|_| operating_total >= 2)
+            && self.submit(session, CommandIntent::MothballFacility { facility: plant })
+        {
+            self.skilled.cuts += 1;
+            self.skilled.pause_until = self.skilled.pause_until.max(now + 26);
+        }
+    }
+
+    /// One new plant at a time, only on proof, inside the cash reserve and the borrowing rules.
+    fn skilled_grow(&mut self, session: &mut Session, firm: u64) {
+        use cw_sim::economy::sectors;
+        let now = session.world.tick.0;
+        let handle = Handle(firm);
+        if self.skilled.pending.is_some()
+            || now < self.skilled.pause_until
+            || session.world.pending_pause.is_some()
+        {
+            return;
+        }
+        let fin = finance(session, firm);
+        let Some(entity) = session.world.firm(handle) else {
+            return;
+        };
+        // Nothing may be under construction, and the firm must have traded a quarter at a profit.
+        let building = entity.facilities.iter().any(|h| {
+            session
+                .world
+                .facilities
+                .get(*h)
+                .is_some_and(|p| p.status == cw_sim::state::FacilityStatus::Building)
+        });
+        let plants = entity.facilities.len() as i64;
+        if building
+            || now < SETTLING_WEEKS
+            || fin.ebitda_trailing_cents <= 0
+            || fin.net_income_trailing_cents <= 0
+        {
+            return;
+        }
+        let outflow = cw_sim::economy::insolvency::mandatory_weekly_outflow(&session.world, handle);
+        let reserve = outflow
+            .saturating_mul(RESERVE_WEEKS)
+            .saturating_mul(plants + 1)
+            / plants.max(1);
+        let trust = self.skilled.trust_bps;
+        let openings = session.capacity_openings(80);
+        let mut best: Option<Candidate> = None;
+        for open in &openings {
+            let Some(&recipe) = session.dataset.recipe_index.get(&open.recipe_id) else {
+                continue;
+            };
+            let industry = sectors::recipe_industry(&session.dataset, recipe);
+            if self.skilled.failed_places.contains(&(recipe, open.region))
+                || self
+                    .skilled
+                    .failed_recipes
+                    .get(&recipe)
+                    .is_some_and(|n| *n >= 2)
+            {
+                continue;
+            }
+            if sectors::division_strategy(
+                &session.world,
+                &session.dataset,
+                handle,
+                open.region,
+                industry,
+            )
+            .is_some_and(|strategy| strategy != recipe)
+            {
+                continue;
+            }
+            // A division that already loses money gets nothing more.
+            if self
+                .skilled_division_profit(
+                    session,
+                    firm,
+                    (open.region, industry),
+                    now.saturating_sub(26),
+                )
+                .is_some_and(|(p, r)| r > 0 && p < 0)
+            {
+                continue;
+            }
+            // A recipe that has already passed may be built bigger, as far as the room allows.
+            let blocks: i64 = if self.skilled.proven_recipes.contains(&recipe) {
+                (open.room_lots * 4 / 5 / open.block_lots.max(1)).clamp(1, 3)
+            } else {
+                1
+            };
+            let quote = sectors::build_cost(
+                &session.world,
+                &session.dataset,
+                handle,
+                open.region,
+                recipe,
+                blocks as _,
+            );
+            let cost = quote.total_cents();
+            let discounted = open.weekly_contribution_cents * blocks * trust / 10_000;
+            if discounted <= 0 || cost <= 0 || cost > discounted * MAX_PAYBACK_WEEKS {
+                continue;
+            }
+            // Quick payback first.
+            let mut score = discounted * 10_000 / cost;
+            if self.skilled.proven_recipes.contains(&recipe) {
+                score *= 4;
+            }
+            if best.is_none_or(|(b, ..)| score > b) {
+                best = Some((
+                    score,
+                    recipe,
+                    open.region,
+                    cost,
+                    discounted,
+                    industry,
+                    blocks,
+                    false,
+                ));
+            }
+        }
+        // The older signal: the sector sheet with imports already buying the output.
+        let sheet_trust = self.skilled.sheet_trust_bps;
+        for o in scan(session, firm) {
+            let recipe = o.recipe;
+            let industry = sectors::recipe_industry(&session.dataset, recipe);
+            if o.room_pct < 80
+                || o.weekly_cents <= 0
+                || self.skilled.failed_places.contains(&(recipe, o.region))
+                || self
+                    .skilled
+                    .failed_recipes
+                    .get(&recipe)
+                    .is_some_and(|n| *n >= 2)
+                || self
+                    .skilled_division_profit(
+                        session,
+                        firm,
+                        (o.region, industry),
+                        now.saturating_sub(26),
+                    )
+                    .is_some_and(|(p, r)| r > 0 && p < 0)
+            {
+                continue;
+            }
+            let discounted = o.weekly_cents * sheet_trust / 10_000;
+            if discounted <= 0 || o.cost_cents <= 0 || o.cost_cents > discounted * MAX_PAYBACK_WEEKS
+            {
+                continue;
+            }
+            let mut score = discounted * 10_000 / o.cost_cents;
+            if self.skilled.proven_recipes.contains(&recipe) {
+                score *= 4;
+            }
+            if best.is_none_or(|(b, ..)| score > b) {
+                best = Some((
+                    score,
+                    recipe,
+                    o.region,
+                    o.cost_cents,
+                    discounted,
+                    industry,
+                    1,
+                    true,
+                ));
+            }
+        }
+        let Some((_, recipe, region, cost, discounted, industry, blocks, from_sheet)) = best else {
+            return;
+        };
+        let cash = fin.cash_cents;
+        let need = cost + reserve;
+        if cash < need {
+            // Borrow only against proven earnings, only for the shortfall.
+            let proven = self.skilled.passed >= 1;
+            let capacity = cw_sim::economy::credit::secured_capacity(&session.world, handle)
+                + cw_sim::economy::credit::unsecured_capacity(&session.world, handle);
+            let earnings_cap =
+                fin.ebitda_trailing_cents.saturating_mul(4 * 2) - fin.liabilities_cents;
+            let headroom = (fin.assets_cents * MAX_LEVERAGE_PCT / 100 - fin.liabilities_cents)
+                .min(earnings_cap);
+            let amount = (need - cash + 4_999_999) / 5_000_000 * 5_000_000;
+            // Weekly debt service of everything borrowed must stay under half of weekly operating profit.
+            let service = (fin.liabilities_cents + amount) / 104;
+            if !proven
+                || amount > capacity
+                || amount > headroom
+                || service * 2 > fin.ebitda_trailing_cents / 13
+            {
+                return;
+            }
+            if !self.submit(
+                session,
+                CommandIntent::RequestLoan {
+                    firm: handle,
+                    amount_cents: amount,
+                },
+            ) {
+                return;
+            }
+        }
+        let before: std::collections::BTreeSet<u64> = session
+            .world
+            .firm(handle)
+            .map(|f| f.facilities.iter().map(|h| h.0).collect())
+            .unwrap_or_default();
+        if !self.submit(
+            session,
+            CommandIntent::BuildFacility {
+                firm: handle,
+                region,
+                recipe,
+                blocks: blocks as _,
+            },
+        ) {
+            return;
+        }
+        let Some(plant) = session.world.firm(handle).and_then(|f| {
+            f.facilities
+                .iter()
+                .find(|h| !before.contains(&h.0))
+                .copied()
+        }) else {
+            return;
+        };
+        let key = (region, industry);
+        let base_profit = self
+            .skilled_division_profit(session, firm, key, now.saturating_sub(26))
+            .map_or(0, |(p, _)| p);
+        self.skilled.pending = Some(SkilledBuild {
+            plant,
+            key,
+            recipe,
+            region,
+            from_sheet,
+            expected: discounted,
+            base_profit,
+            capex: cost,
+        });
+        self.skilled.builds += 1;
+        if self.verbose_skilled {
+            println!(
+                "w{now} BUILD recipe {recipe} region {region} cost {cost} discounted {discounted} trust {trust}"
+            );
         }
     }
 
@@ -120,33 +615,6 @@ impl PolicyRunner {
                     self.submit(session, intent);
                 }
             }
-        }
-    }
-
-    /// Borrow one step against plant when leverage is modest and the firm is in good standing.
-    fn skilled_borrow(&mut self, session: &mut Session, firm: u64, fin: &FinanceSummary) {
-        // A careful owner does not borrow while the firm is losing money.
-        if fin.assets_cents <= 0
-            || fin.net_income_trailing_cents <= 0
-            || fin.ebitda_trailing_cents <= 0
-        {
-            return;
-        }
-        let capacity = cw_sim::economy::credit::secured_capacity(&session.world, Handle(firm))
-            + cw_sim::economy::credit::unsecured_capacity(&session.world, Handle(firm));
-        // Debt stays under 45 percent of assets and under two years of trailing operating profit.
-        let earnings_cap = fin.ebitda_trailing_cents.saturating_mul(4 * 2) - fin.liabilities_cents;
-        let headroom =
-            (fin.assets_cents * MAX_LEVERAGE_PCT / 100 - fin.liabilities_cents).min(earnings_cap);
-        let amount = LOAN_STEP_CENTS.min(capacity).min(headroom) / 1_000_000 * 1_000_000;
-        if amount > 0 {
-            self.submit(
-                session,
-                CommandIntent::RequestLoan {
-                    firm: Handle(firm),
-                    amount_cents: amount,
-                },
-            );
         }
     }
 
@@ -346,6 +814,143 @@ pub fn explore(arguments: &[String]) {
     }
     let pos = opps.iter().filter(|o| o.weekly_cents > 0).count();
     println!("positive contribution: {pos}");
+}
+
+/// `cw-cli story`: one career, week by week, from the engine's own figures. Prints a line a
+/// week for the primary company (cash, debt, operating profit, plants) and, every `--every`
+/// weeks and whenever a plant appears, each division's real weekly operating profit and input
+/// fill against what the sheet expected when the plant was built.
+pub fn story(arguments: &[String]) {
+    use cw_sim::economy::{division_report, sectors};
+    let scenario =
+        crate::flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".into());
+    let seed: u64 = crate::flag(arguments, "--seed")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1);
+    let weeks: u32 = crate::flag(arguments, "--weeks")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(260);
+    let every: u32 = crate::flag(arguments, "--every")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(13);
+    let policy = crate::flag(arguments, "--policy")
+        .and_then(|name| ReferencePolicy::parse(&name))
+        .unwrap_or(ReferencePolicy::Skilled);
+    let mut session = Session::create(crate::arc::arc_config_pub(seed, &scenario)).unwrap();
+    let mut runner = PolicyRunner::new(policy, false);
+    let mut known: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
+    let mut last_week = u32::MAX;
+    crate::drive_with(&mut session, weeks, &mut runner, &mut |session, _| {
+        let week = session.world.tick.0;
+        if week == last_week {
+            return;
+        }
+        last_week = week;
+        let Some(primary) = session.world.investor.primary_group else {
+            return;
+        };
+        let Some(entity) = session.world.firm(primary) else {
+            return;
+        };
+        let fin = finance(session, primary.0);
+        let mut events = Vec::new();
+        let mut live: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
+        for handle in &entity.facilities {
+            live.insert(handle.0);
+            if !known.insert(handle.0) {
+                continue;
+            }
+            let Some(plant) = session.world.facilities.get(*handle) else {
+                continue;
+            };
+            let expected = plant_contribution(
+                &session.world,
+                &session.dataset,
+                entity,
+                plant.region,
+                plant.recipe,
+            ) * plant.blocks as i64;
+            events.push(format!(
+                "BUILT {} {} x{} capex {} sheet_expected_wk {}",
+                session.dataset.recipes[plant.recipe as usize].id,
+                session.dataset.regions[plant.region as usize].code,
+                plant.blocks,
+                plant.capex_cents / 100,
+                expected / 100
+            ));
+        }
+        known.retain(|handle| live.contains(handle));
+        let last = fin.recent_weeks.last();
+        println!(
+            "w{week:>3} cash {:>9} debt {:>9} assets {:>9} rev {:>8} ebit {:>8} ni {:>8} plants {}",
+            fin.cash_cents / 100,
+            fin.liabilities_cents / 100,
+            fin.assets_cents / 100,
+            last.map_or(0, |w| w.revenue_cents / 100),
+            last.map_or(0, |w| w.ebit_cents / 100),
+            last.map_or(0, |w| w.net_income_cents / 100),
+            entity.facilities.len()
+        );
+        for event in &events {
+            println!("      {event}");
+        }
+        if week % every == 0 || !events.is_empty() {
+            for division in sectors::divisions_of(&session.world, &session.dataset, primary) {
+                if let Some(report) = division_report::report(
+                    &session.world,
+                    &session.dataset,
+                    primary,
+                    division.region,
+                    division.industry,
+                ) {
+                    let short: Vec<String> = report
+                        .inputs
+                        .iter()
+                        .filter(|input| input.need_milli > 0)
+                        .map(|input| {
+                            format!(
+                                "{}:{}%",
+                                session.dataset.products[input.product as usize].id,
+                                input.used_milli * 100 / input.need_milli
+                            )
+                        })
+                        .collect();
+                    let made: Vec<String> = report
+                        .outputs
+                        .iter()
+                        .map(|o| {
+                            format!(
+                                "{}:made {} sold {} price {} market {}",
+                                session.dataset.products[o.product as usize].id,
+                                o.made_milli / 1000,
+                                o.sold_milli / 1000,
+                                o.price_cents,
+                                o.market_cents
+                            )
+                        })
+                        .collect();
+                    println!("      out [{}]", made.join(" "));
+                    println!(
+                        "      div {} {} plants {} blocks {} rev {} opprofit {} shortage {} inputs [{}]",
+                        session.dataset.regions[division.region as usize].code,
+                        session.dataset.recipes[division.strategy as usize].id,
+                        division.plants.len(),
+                        division.blocks,
+                        report.revenue_cents / 100,
+                        report.operating_profit_cents / 100,
+                        report.shortage,
+                        short.join(" ")
+                    );
+                }
+            }
+        }
+    });
+    let overview = session.overview();
+    println!(
+        "END w{} net_worth {}",
+        session.world.tick.0,
+        overview.investor_net_worth_cents / 100
+    );
 }
 
 #[derive(Clone, Debug)]

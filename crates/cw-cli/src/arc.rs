@@ -260,6 +260,14 @@ pub struct CapacityStats {
     /// Raids announced against the player's group, with the weeks of warning before they resolve.
     pub raids_announced_on_player: u32,
     pub raid_warning_weeks: Vec<u32>,
+    /// Raids decided anywhere in the league, won, and won raids that left the defender with no
+    /// plants at all (a company losing its only business).
+    #[serde(default)]
+    pub raids_all: u32,
+    #[serde(default)]
+    pub raids_won: u32,
+    #[serde(default)]
+    pub raids_emptied_company: u32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -454,6 +462,12 @@ pub struct Aggregate {
     pub raids_announced_on_player_per_decade_median: Option<f64>,
     #[serde(default)]
     pub raid_warning_weeks_median: Option<f64>,
+    #[serde(default)]
+    pub raids_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub raids_won_per_decade_median: Option<f64>,
+    #[serde(default)]
+    pub raids_emptied_company_per_decade_median: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -537,6 +551,8 @@ struct Observer {
     best_rank: Option<u32>,
     hostile: Hostile,
     seen_raids: BTreeSet<(u32, u64, u64, u8, u8)>,
+    seen_all_raids: BTreeSet<(u32, u64, u64, u8, u8)>,
+    seen_raid_campaigns: BTreeSet<(u32, u64, u64, u8, u8)>,
     seen_deals: BTreeSet<(u64, u32)>,
     seen_campaigns: BTreeSet<u32>,
     seen_plans: BTreeSet<(u64, u64, u32)>,
@@ -581,6 +597,8 @@ impl Observer {
             best_rank: None,
             hostile: Hostile::default(),
             seen_raids: BTreeSet::new(),
+            seen_all_raids: BTreeSet::new(),
+            seen_raid_campaigns: BTreeSet::new(),
             seen_deals: BTreeSet::new(),
             seen_campaigns: BTreeSet::new(),
             seen_plans: BTreeSet::new(),
@@ -905,6 +923,27 @@ impl Observer {
             .and_then(|p| world.firm(p))
             .map(valuation)
             .unwrap_or(0);
+        // League raids: every raid decided this week, whoever the player is (none careers too).
+        for raid in &world.raids {
+            if self.seen_all_raids.insert((
+                raid.tick,
+                raid.attacker.0,
+                raid.defender.0,
+                raid.region,
+                raid.industry,
+            )) {
+                self.capacity.raids_all += 1;
+                if raid.success {
+                    self.capacity.raids_won += 1;
+                    if world
+                        .firm(raid.defender)
+                        .is_some_and(|f| f.facilities.is_empty())
+                    {
+                        self.capacity.raids_emptied_company += 1;
+                    }
+                }
+            }
+        }
         if !group.is_empty() {
             let mut plan_deals: BTreeSet<u64> = BTreeSet::new();
             for plan in &world.plans.plans {
@@ -929,6 +968,23 @@ impl Observer {
                         player_equity_cents: player_equity,
                         deal: plan.deal.map(|d| d.0),
                     });
+                }
+            }
+            for c in &world.raids.campaigns {
+                if group.contains(&c.defender.0)
+                    && !group.contains(&c.attacker.0)
+                    && self.seen_raid_campaigns.insert((
+                        c.announced,
+                        c.attacker.0,
+                        c.defender.0,
+                        c.region,
+                        c.industry,
+                    ))
+                {
+                    self.capacity.raids_announced_on_player += 1;
+                    self.capacity
+                        .raid_warning_weeks
+                        .push(c.resolves.saturating_sub(c.announced));
                 }
             }
             for raid in &world.raids {
@@ -1708,6 +1764,18 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
             .iter()
             .flat_map(|c| c.capacity.raid_warning_weeks.iter().map(|w| *w as f64))
             .collect()),
+        raids_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.raids_all, c.weeks_played))
+            .collect()),
+        raids_won_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.raids_won, c.weeks_played))
+            .collect()),
+        raids_emptied_company_per_decade_median: med(careers
+            .iter()
+            .map(|c| per_decade(c.capacity.raids_emptied_company, c.weeks_played))
+            .collect()),
     }
 }
 
@@ -1908,6 +1976,73 @@ pub(crate) fn apply_markets_override(session: &mut Session) -> Result<(), String
     }
     session.dataset.markets = serde_json::from_value(rules).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// `cw-cli helm`: a harness-only estimate of what a player who started at the helm of a
+/// mid-table company would face. No rule changes: the firms ranked `--from-rank` to `--to-rank`
+/// (default 10 to 15) at week 0 are simply left to the rival AI, and their final rank in the
+/// league and valuation are reported (median over seeds).
+pub fn helm(arguments: &[String]) {
+    let scenario = flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".into());
+    let seeds: u64 = flag(arguments, "--seeds")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    let weeks: u32 = flag(arguments, "--weeks")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(520);
+    let from: usize = flag(arguments, "--from-rank")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    let to: usize = flag(arguments, "--to-rank")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(15);
+    let mut rows_out = Vec::new();
+    for seed in 1..=seeds {
+        let mut session =
+            Session::create(arc_config(seed, &scenario, cw_data::Difficulty::Standard)).unwrap();
+        let (start, _) = Observer::league(&session.world);
+        let picked: Vec<(usize, u64, i64)> = start
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| (from..=to).contains(&(i + 1)))
+            .map(|(i, (h, v))| (i + 1, *h, *v))
+            .collect();
+        let mut runner = PolicyRunner::new(ReferencePolicy::None, false);
+        crate::drive_with(&mut session, weeks, &mut runner, &mut |_, _| {});
+        let (end, _) = Observer::league(&session.world);
+        for (start_rank, handle, start_value) in picked {
+            let end_rank = rank_of(&end, handle);
+            let end_value = end
+                .iter()
+                .find(|(h, _)| *h == handle)
+                .map_or(0, |(_, v)| *v);
+            println!(
+                "{scenario} seed {seed} start_rank {start_rank} start_value {start_value} end_rank {} end_value {end_value} league {}",
+                end_rank.map_or("gone".to_owned(), |r| r.to_string()),
+                end.len()
+            );
+            rows_out.push((start_rank, start_value, end_rank, end_value, end.len()));
+        }
+    }
+    let ranks: Vec<i64> = rows_out
+        .iter()
+        .map(|r| r.2.map_or(i64::MAX, |x| x as i64))
+        .collect();
+    let values: Vec<i64> = rows_out.iter().map(|r| r.3).collect();
+    let starts: Vec<i64> = rows_out.iter().map(|r| r.1).collect();
+    let gone = rows_out.iter().filter(|r| r.2.is_none()).count();
+    println!(
+        "HELM {scenario} firms {} median_start_value {} median_end_rank {} median_end_value {} gone {gone} median_league {}",
+        rows_out.len(),
+        median_i64(&starts).unwrap_or(0),
+        median_i64(&ranks).map_or("n/a".to_owned(), |r| if r == i64::MAX {
+            "gone".into()
+        } else {
+            r.to_string()
+        }),
+        median_i64(&values).unwrap_or(0),
+        median_i64(&rows_out.iter().map(|r| r.4 as i64).collect::<Vec<_>>()).unwrap_or(0)
+    );
 }
 
 pub fn run(arguments: &[String]) {

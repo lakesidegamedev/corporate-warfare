@@ -223,6 +223,7 @@ pub fn propose(world: &World, dataset: &Dataset) -> Vec<Proposal> {
             });
         }
         cw_sim::ph!("ai::urgent", urgent(world, dataset, handle, &mut proposals));
+        defend_raids(world, dataset, handle, &mut proposals);
         // Production follows sell-through plant by plant in the weekly tick, the same planner
         // as the player's automatic production (cw_sim::economy::pricing::plan).
         cw_sim::ph!("ai::reopen", reopen(world, dataset, handle, &mut proposals));
@@ -1470,6 +1471,115 @@ fn reserve_target(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
             * 13;
     // The cautious hoard cash: half again on top of the rules' reserve.
     base * selector::thrift_pct(selector::style(world, dataset, firm)) / 100
+}
+
+/// The weekly marketing a rival keeps when nobody is raiding it: the strategic slot's rule.
+fn usual_marketing(world: &World, dataset: &Dataset, firm: Handle) -> i64 {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
+    let weeks = entity.book.recent_weeks().len().max(1) as i64;
+    let revenue: i64 = entity
+        .book
+        .recent_weeks()
+        .iter()
+        .map(|week| week.revenue)
+        .sum::<i64>()
+        / weeks;
+    (revenue * 300 / 10_000 * selector::marketing_pct(selector::style(world, dataset, firm)) / 100)
+        .max(10_000)
+}
+
+/// Answer a raid campaign announced against the firm (2.0), in character. Defence is a quarter
+/// of weekly marketing, measured when the campaign resolves, so the answer is a higher weekly
+/// marketing budget: enough to double the defence, bought when what it saves (the fall in the
+/// raider's chance times the blocks' three years of contribution less the half-book price the
+/// firm would be paid, scaled by temperament) beats what it costs over the weeks left, and the
+/// reserve allows. Otherwise the firm lets the block go. Once no campaign is pending, a budget
+/// raised for defence goes back to the usual rule.
+fn defend_raids(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
+    use cw_sim::economy::sectors;
+    let Some(entity) = world.firms.get(firm) else {
+        return;
+    };
+    let current = entity.policies.marketing_budget_cents.max(0);
+    let mut wanted = 0i64;
+    for campaign in world.raids.campaigns.iter().filter(|c| c.defender == firm) {
+        let attack = campaign.budget_cents
+            + world
+                .firms
+                .get(campaign.attacker)
+                .map(|f| f.policies.marketing_budget_cents.max(0) * 13)
+                .unwrap_or(0);
+        let now = sectors::raid_exposure(
+            world,
+            dataset,
+            firm,
+            campaign.region,
+            campaign.industry,
+            attack,
+            0,
+        );
+        if now.blocks_at_stake == 0 {
+            continue;
+        }
+        let extra = (now.defence_cents / 13).max(10_000);
+        let better = sectors::raid_exposure(
+            world,
+            dataset,
+            firm,
+            campaign.region,
+            campaign.industry,
+            attack,
+            extra,
+        );
+        let Some(division) = sectors::divisions_of(world, dataset, firm)
+            .into_iter()
+            .find(|d| d.region == campaign.region && d.industry == campaign.industry)
+        else {
+            continue;
+        };
+        let at_risk =
+            (block_contribution(world, dataset, firm, division.strategy, division.region)
+                * now.blocks_at_stake as i64
+                * 156
+                - now.price_cents)
+                .max(0);
+        let saved = at_risk * (now.chance_bps - better.chance_bps).max(0) as i64 / 10_000
+            * selector::defend_pct(selector::style(world, dataset, firm))
+            / 100;
+        let weeks_left = campaign.resolves.saturating_sub(world.tick.0).max(1) as i64;
+        let cost = extra * (weeks_left + 1);
+        if saved > cost && entity.book.cash() > reserve_target(world, dataset, firm) + cost {
+            wanted = wanted.max(current + extra);
+        }
+    }
+    let defending = world.raids.campaigns.iter().any(|c| c.defender == firm);
+    let amount = if wanted > current {
+        wanted
+    } else if !defending
+        && world
+            .raids
+            .iter()
+            .any(|r| r.defender == firm && r.tick + 2 > world.tick.0)
+    {
+        // A campaign against the firm resolved this week or last: back to the usual budget.
+        let usual = if current > 0 {
+            usual_marketing(world, dataset, firm)
+        } else {
+            0
+        };
+        if current > usual { usual } else { return }
+    } else {
+        return;
+    };
+    proposals.push(Proposal {
+        actor: firm.0,
+        intent: CommandIntent::SetMarketingBudget {
+            firm,
+            amount_cents: amount,
+        },
+    });
 }
 
 fn urgent(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec<Proposal>) {
@@ -2735,11 +2845,13 @@ fn campaign_paid_from_earnings(earned: i64, budget: i64, surcharge: i64) -> bool
 fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, u8, u8, i64, i64)> {
     use cw_sim::economy::sectors;
     let entity = world.firms.get(firm)?;
-    // One campaign a year: a raider that launched one in the last year waits.
+    // One campaign a year: a raider that launched one in the last year, or has one announced
+    // and still running, waits.
     if world
         .raids
         .iter()
         .any(|raid| raid.attacker == firm && raid.tick + RAID_COOLDOWN_WEEKS > world.tick.0)
+        || world.raids.campaigns.iter().any(|c| c.attacker == firm)
     {
         return None;
     }
@@ -2757,11 +2869,13 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
             if cw_sim::economy::rivalry::alliance(world, firm, rival) >= 5_000 {
                 continue;
             }
-            // A company that was raided in the last half year is left to recover first.
+            // A company that was raided in the last half year, or has a campaign announced
+            // against it, is left alone.
             if world
                 .raids
                 .iter()
                 .any(|raid| raid.defender == rival && raid.tick + RAID_RESPITE_WEEKS > world.tick.0)
+                || world.raids.campaigns.iter().any(|c| c.defender == rival)
             {
                 continue;
             }
@@ -2800,7 +2914,24 @@ fn best_raid(world: &World, dataset: &Dataset, firm: Handle) -> Option<(Handle, 
                 * quote.blocks_at_stake as i64
                 * 156
                 - quote.price_cents;
-            let value = gain * quote.chance_bps as i64 / 10_000 - budget - quote.surcharge_cents;
+            // Under a warning period the budget sits in escrow and is lost whatever happens,
+            // while the target has weeks to raise its defence: weigh the chance as the average
+            // of today's and the chance against a doubled defence.
+            let chance = if sectors::raid_warning_weeks(dataset) > 0 {
+                let defended = sectors::raid_exposure(
+                    world,
+                    dataset,
+                    rival,
+                    division.region,
+                    division.industry,
+                    quote.attack_cents,
+                    (probe.defence_cents / 13).max(10_000),
+                );
+                (quote.chance_bps as i64 + defended.chance_bps as i64) / 2
+            } else {
+                quote.chance_bps as i64
+            };
+            let value = gain * chance / 10_000 - budget - quote.surcharge_cents;
             // A grudge turns a marginal raid into a worthwhile one, and a raider's appetite for
             // the fight lets it take a raid that is a little short of paying for itself. Both
             // are bets on the same public numbers the validator sees; nothing is free.

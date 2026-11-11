@@ -1010,6 +1010,12 @@ impl Session {
     /// office (or the first region before one is founded): every strategy and state where the
     /// market is short of at least a fifth of a block and a block pays back. The rivals read the
     /// same signal (`cw_sim::economy::capacity`).
+    /// Raid campaigns announced and not yet decided (2.0): against the player, by the player
+    /// and between rivals, soonest to resolve first, with today's chance and stake.
+    pub fn raid_campaigns(&self) -> Vec<dto::RaidCampaignView> {
+        campaigns(&self.world, &self.dataset)
+    }
+
     pub fn capacity_openings(&self, limit: usize) -> Vec<dto::CapacityOpening> {
         let world = &self.world;
         let dataset = &self.dataset;
@@ -1940,6 +1946,69 @@ fn storage_alerts(
     }
 }
 
+/// Every pending raid campaign as the player sees it. See `Session::raid_campaigns`.
+pub fn campaigns(world: &World, dataset: &Dataset) -> Vec<dto::RaidCampaignView> {
+    use cw_sim::economy::events_engine::player_side;
+    use cw_sim::economy::sectors;
+    let mut out: Vec<dto::RaidCampaignView> = world
+        .raids
+        .campaigns
+        .iter()
+        .filter_map(|c| {
+            let attacker_name = paper::firm_name(world, c.attacker)?;
+            let defender_name = paper::firm_name(world, c.defender)?;
+            let role = if player_side(world, c.defender) {
+                dto::CampaignRole::AgainstPlayer
+            } else if player_side(world, c.attacker) {
+                dto::CampaignRole::ByPlayer
+            } else {
+                dto::CampaignRole::BetweenRivals
+            };
+            let quote = sectors::raid_quote(
+                world,
+                dataset,
+                c.attacker,
+                c.defender,
+                c.region,
+                c.industry,
+                c.budget_cents,
+            );
+            let division_blocks = sectors::divisions_of(world, dataset, c.defender)
+                .iter()
+                .find(|d| d.region == c.region && d.industry == c.industry)
+                .map(|d| d.blocks)
+                .unwrap_or(0);
+            Some(dto::RaidCampaignView {
+                role,
+                attacker: c.attacker.0,
+                attacker_name,
+                defender: c.defender.0,
+                defender_name,
+                region: c.region,
+                region_name: paper::region_name(world, c.region),
+                industry: c.industry,
+                industry_name: cw_sim::state::INDUSTRY_NAMES
+                    .get(c.industry as usize)
+                    .copied()
+                    .unwrap_or("business")
+                    .to_lowercase(),
+                budget_cents: c.budget_cents,
+                attack_cents: quote.attack_cents,
+                defence_cents: quote.defence_cents,
+                chance_bps: quote.chance_bps,
+                blocks_at_stake: quote.blocks_at_stake,
+                division_blocks,
+                price_cents: quote.price_cents,
+                announced_week: c.announced,
+                resolves_week: c.resolves,
+                weeks_left: c.resolves.saturating_sub(world.tick.0),
+            })
+        })
+        .collect();
+    out.sort_by_key(|v| (v.resolves_week, v.attacker, v.defender));
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2257,7 +2326,9 @@ mod tests {
         // reading the inputs a new plant could buy, and again when households' opening demand was
         // sized to what the named plants serve (household_cover_bps and household_unmet_bps
         // joined the dataset hash), and again when services and sellers with no import were given
-        // more room over reference (130 and 150 percent). The Swift
+        // more room over reference (130 and 150 percent). In 2.0 it moved again from b2a6baa7...
+        // when raids began to be announced four weeks ahead (the warning joined the dataset hash
+        // and the world gained the list of campaigns in progress, save schema 4). The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2283,7 +2354,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "b2a6baa74f5b3a901959aa864d3894b35c8e10aced637154b4c657cb7b2718f6"
+            "c883b4993d9d7e1301090afb77e07ae697851f97099828febb8045c542ed022f"
         );
     }
 
