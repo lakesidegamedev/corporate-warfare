@@ -211,6 +211,17 @@ pub struct Hostile {
     /// Hostile moves that landed in weeks the player ranked in the top three.
     pub while_top_three: u32,
     pub weeks_top_three: u32,
+    /// Raids on the player by a firm that had earlier bought a plant at a break-up auction or
+    /// listing in the raided region, and how many of those it won (2.0 attribution).
+    #[serde(default)]
+    pub raids_by_plant_buyers: u32,
+    #[serde(default)]
+    pub raids_won_by_plant_buyers: u32,
+    /// Raids on the player by a firm that had earlier folded in a company, and wins.
+    #[serde(default)]
+    pub raids_by_mergers: u32,
+    #[serde(default)]
+    pub raids_won_by_mergers: u32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -633,6 +644,12 @@ struct Observer {
     seen_all_raids: BTreeSet<(u32, u64, u64, u8, u8)>,
     seen_disposals: BTreeSet<(u64, u64)>,
     seen_lots: BTreeSet<u32>,
+    /// Closed lots read, and every (buyer, region) that bought a plant on offer.
+    seen_closed: BTreeSet<u32>,
+    plant_buys: BTreeSet<(u64, u8)>,
+    /// Firms that folded in a company, and how many merger records were read.
+    folded_in: BTreeSet<u64>,
+    mergers_read: usize,
     seen_raid_campaigns: BTreeSet<(u32, u64, u64, u8, u8)>,
     seen_deals: BTreeSet<(u64, u32)>,
     seen_campaigns: BTreeSet<u32>,
@@ -681,6 +698,10 @@ impl Observer {
             seen_all_raids: BTreeSet::new(),
             seen_disposals: BTreeSet::new(),
             seen_lots: BTreeSet::new(),
+            seen_closed: BTreeSet::new(),
+            plant_buys: BTreeSet::new(),
+            folded_in: BTreeSet::new(),
+            mergers_read: 0,
             seen_raid_campaigns: BTreeSet::new(),
             seen_deals: BTreeSet::new(),
             seen_campaigns: BTreeSet::new(),
@@ -1051,6 +1072,17 @@ impl Observer {
                 .filter(|m| !group.contains(&m.buyer.0))
                 .count() as u32;
         }
+        for closed in &world.auctions.closed {
+            if self.seen_closed.insert(closed.lot.id)
+                && let cw_sim::economy::auctions::LotOutcome::Sold { buyer, .. } = closed.outcome
+            {
+                self.plant_buys.insert((buyer.0, closed.lot.region));
+            }
+        }
+        for merger in world.auctions.mergers.iter().skip(self.mergers_read) {
+            self.folded_in.insert(merger.buyer.0);
+        }
+        self.mergers_read = world.auctions.mergers.len();
         let new_lots: Vec<&cw_sim::economy::auctions::PlantLot> = world
             .auctions
             .lots
@@ -1176,6 +1208,14 @@ impl Observer {
                     self.hostile.raids += 1;
                     if raid.success {
                         self.hostile.raids_succeeded += 1;
+                    }
+                    if self.plant_buys.contains(&(raid.attacker.0, raid.region)) {
+                        self.hostile.raids_by_plant_buyers += 1;
+                        self.hostile.raids_won_by_plant_buyers += raid.success as u32;
+                    }
+                    if self.folded_in.contains(&raid.attacker.0) {
+                        self.hostile.raids_by_mergers += 1;
+                        self.hostile.raids_won_by_mergers += raid.success as u32;
                     }
                     fresh += 1;
                     self.hostile.log.push(HostileEvent {

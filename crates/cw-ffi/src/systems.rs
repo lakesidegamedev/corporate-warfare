@@ -177,6 +177,76 @@ pub struct RivalRowDto {
     pub net_margin_bps: Option<i64>,
 }
 
+/// A rival's bid for a plant on offer, read at the deadline (2.0).
+#[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
+pub struct PlantBidDto {
+    pub bidder: u64,
+    pub bidder_name: String,
+    pub price_cents: i64,
+    pub weekly_cents: i64,
+    pub blocks_used: i64,
+}
+
+/// A plant on offer (2.0): a failed or wound-down company's plant at its break-up auction
+/// (`route` "break_up") or a plant its owner listed (`route` "listing"). Field meanings as in
+/// `cw_session::dto::PlantLotView`: rival bids stay sealed until the deadline, `reserve_cents` is
+/// the scrap price a break-up bid must reach, the opening figures are how the player's main
+/// company reads the plant, `player_bid_cents` and `player_bid_firm` are the player's sealed bid
+/// (zero when none) and `yours` marks the player's own listing, whose `bids` the player may
+/// accept until `answer_by_week`.
+#[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
+pub struct PlantLotDto {
+    pub lot: u32,
+    pub facility: u64,
+    pub route: String,
+    pub seller: u64,
+    pub seller_name: String,
+    pub plant_name: String,
+    pub region: u32,
+    pub region_name: String,
+    pub blocks: u32,
+    pub book_cents: i64,
+    pub reserve_cents: i64,
+    pub opened_week: u32,
+    pub closes_week: u32,
+    pub weeks_left: u32,
+    pub weekly_cents: i64,
+    pub blocks_used: i64,
+    pub earnings_cents: i64,
+    pub replacement_cents: i64,
+    pub player_bid_cents: i64,
+    pub player_bid_firm: u64,
+    pub yours: bool,
+    pub bids: Vec<PlantBidDto>,
+    pub answer_by_week: u32,
+}
+
+/// A raid campaign announced and not yet decided (2.0). `role` is "against_player",
+/// "by_player" (the player may abandon it with `AbandonRaid`) or "between_rivals". The chance and
+/// stake are today's figures; the defence measured at resolution decides it.
+#[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
+pub struct RaidCampaignDto {
+    pub role: String,
+    pub attacker: u64,
+    pub attacker_name: String,
+    pub defender: u64,
+    pub defender_name: String,
+    pub region: u32,
+    pub region_name: String,
+    pub industry: u32,
+    pub industry_name: String,
+    pub budget_cents: i64,
+    pub attack_cents: i64,
+    pub defence_cents: i64,
+    pub chance_bps: i32,
+    pub blocks_at_stake: u32,
+    pub division_blocks: u32,
+    pub price_cents: i64,
+    pub announced_week: u32,
+    pub resolves_week: u32,
+    pub weeks_left: u32,
+}
+
 /// One good both companies sold last week.
 #[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
 pub struct HeadToHeadDto {
@@ -862,6 +932,86 @@ impl SessionHandle {
         out
     }
 
+    /// Every plant on offer, as the player sees it (2.0). See `PlantLotDto`.
+    pub fn plant_lots(&self) -> Vec<PlantLotDto> {
+        let session = self.lock();
+        session
+            .plant_lots()
+            .into_iter()
+            .map(|v| PlantLotDto {
+                lot: v.lot,
+                facility: v.facility,
+                route: v.route,
+                seller: v.seller,
+                seller_name: v.seller_name,
+                plant_name: v.plant_name,
+                region: v.region as u32,
+                region_name: v.region_name,
+                blocks: v.blocks as u32,
+                book_cents: v.book_cents,
+                reserve_cents: v.reserve_cents,
+                opened_week: v.opened_week,
+                closes_week: v.closes_week,
+                weeks_left: v.weeks_left,
+                weekly_cents: v.weekly_cents,
+                blocks_used: v.blocks_used,
+                earnings_cents: v.earnings_cents,
+                replacement_cents: v.replacement_cents,
+                player_bid_cents: v.player_bid_cents,
+                player_bid_firm: v.player_bid_firm,
+                yours: v.yours,
+                bids: v
+                    .bids
+                    .into_iter()
+                    .map(|b| PlantBidDto {
+                        bidder: b.bidder,
+                        bidder_name: b.bidder_name,
+                        price_cents: b.price_cents,
+                        weekly_cents: b.weekly_cents,
+                        blocks_used: b.blocks_used,
+                    })
+                    .collect(),
+                answer_by_week: v.answer_by_week,
+            })
+            .collect()
+    }
+
+    /// Every raid campaign announced and not yet decided (2.0). See `RaidCampaignDto`.
+    pub fn raid_campaigns(&self) -> Vec<RaidCampaignDto> {
+        use cw_session::dto::CampaignRole;
+        let session = self.lock();
+        session
+            .raid_campaigns()
+            .into_iter()
+            .map(|v| RaidCampaignDto {
+                role: match v.role {
+                    CampaignRole::AgainstPlayer => "against_player",
+                    CampaignRole::ByPlayer => "by_player",
+                    CampaignRole::BetweenRivals => "between_rivals",
+                }
+                .to_owned(),
+                attacker: v.attacker,
+                attacker_name: v.attacker_name,
+                defender: v.defender,
+                defender_name: v.defender_name,
+                region: v.region as u32,
+                region_name: v.region_name,
+                industry: v.industry as u32,
+                industry_name: v.industry_name,
+                budget_cents: v.budget_cents,
+                attack_cents: v.attack_cents,
+                defence_cents: v.defence_cents,
+                chance_bps: v.chance_bps,
+                blocks_at_stake: v.blocks_at_stake as u32,
+                division_blocks: v.division_blocks,
+                price_cents: v.price_cents,
+                announced_week: v.announced_week,
+                resolves_week: v.resolves_week,
+                weeks_left: v.weeks_left,
+            })
+            .collect()
+    }
+
     /// Goods both companies sold in the closed week, with each one's share of the corridor.
     pub fn head_to_head(&self, you: u64, rival: u64) -> Vec<HeadToHeadDto> {
         let session = self.lock();
@@ -1267,5 +1417,52 @@ mod tests {
             .find(|r| r.firm == you)
             .unwrap();
         assert_ne!(mine.industry, "financial");
+    }
+
+    #[test]
+    fn a_listed_plant_and_open_raids_read_back_through_the_app_views() {
+        let session = SessionHandle::new(181, true, true).unwrap();
+        session.advance(4);
+        let facility = {
+            let handle = session.lock();
+            let primary = handle.world.investor.primary_group.unwrap();
+            *handle
+                .world
+                .firm(primary)
+                .unwrap()
+                .facilities
+                .first()
+                .unwrap()
+        };
+        let receipt =
+            session.submit_json(format!(r#"{{"ListPlant":{{"facility":{}}}}}"#, facility.0));
+        assert!(receipt.accepted, "{:?}", receipt.error_key);
+        let lots = session.plant_lots();
+        let engine = session.lock().plant_lots();
+        assert_eq!(lots.len(), engine.len());
+        let mine = lots.iter().find(|l| l.facility == facility.0).unwrap();
+        assert!(mine.yours);
+        assert_eq!(mine.route, "listing");
+        assert!(
+            mine.bids.is_empty(),
+            "rival bids stay sealed while bidding is open"
+        );
+        let view = engine.iter().find(|l| l.facility == facility.0).unwrap();
+        assert_eq!(mine.closes_week, view.closes_week);
+        assert_eq!(mine.book_cents, view.book_cents);
+        // Withdrawing through the catalogue's command takes it off the market.
+        let receipt =
+            session.submit_json(format!(r#"{{"WithdrawListing":{{"lot":{}}}}}"#, mine.lot));
+        assert!(receipt.accepted, "{:?}", receipt.error_key);
+        assert!(
+            session
+                .plant_lots()
+                .iter()
+                .all(|l| l.facility != facility.0)
+        );
+        assert_eq!(
+            session.raid_campaigns().len(),
+            session.lock().raid_campaigns().len()
+        );
     }
 }
