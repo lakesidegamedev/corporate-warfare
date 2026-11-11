@@ -1,0 +1,24 @@
+{
+  "schema": "cw-arc-gates/1",
+  "note": "Starting targets for 2.0. Report only: arc prints pass or fail per gate and always exits 0.",
+  "gates": [
+    { "id": "passive_bottom_half", "policy": "passive", "metric": "bottom_half_share", "min": 0.70,
+      "text": "passive player in the bottom half of the league at the end in at least 70 percent of careers" },
+    { "id": "reckless_bust", "policy": "reckless", "metric": "bust_share", "min": 0.20,
+      "text": "reckless goes bust in at least 20 percent of careers" },
+    { "id": "expander_first", "policy": "expander", "metric": "first_place_share", "min": 0.40, "max": 0.70,
+      "text": "expander finishes first in 40 to 70 percent of careers" },
+    { "id": "leader_changes", "policy": "any", "metric": "leader_changes_per_decade_median", "min": 3.0,
+      "text": "first place changes hands at least 3 times a decade (median, a new leader must hold 13 weeks)" },
+    { "id": "zombies", "policy": "any", "metric": "zombie_share", "max_exclusive": 0.01,
+      "text": "zombie firm-weeks under 1 percent" },
+    { "id": "exits", "policy": "any", "metric": "exits_per_decade_median", "min": 4.0,
+      "text": "at least 4 exits a decade (median)" },
+    { "id": "entries", "policy": "any", "metric": "entries_per_decade_median", "min": 4.0,
+      "text": "at least 4 entries a decade (median)" },
+    { "id": "price_range", "policy": "any", "metric": "price_range_pct_median", "min": 15.0,
+      "text": "median good's yearly price range at least 15 percent of reference" },
+    { "id": "hostile_top3", "policy": "any", "metric": "hostile_top3_median", "min": 2.0,
+      "text": "a player ranked in the top three is the target of at least 2 hostile moves a decade (median)" }
+  ]
+}

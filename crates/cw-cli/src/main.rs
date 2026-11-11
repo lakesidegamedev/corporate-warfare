@@ -3,6 +3,7 @@
 //! This binary is a developer and evidence tool. It never touches a network, a live game
 //! database or the host's AHD simulation services.
 
+mod arc;
 mod policy;
 
 use std::collections::BTreeMap;
@@ -23,6 +24,7 @@ fn main() {
         Some("diagnose") => diagnose(&arguments[1..]),
         Some("report") => report(&arguments[1..]),
         Some("bench") => bench(&arguments[1..]),
+        Some("arc") => arc::run(&arguments[1..]),
         _ => {
             eprintln!(
                 "Usage: cw-cli <doctor|run|sweep|replay|diagnose|report>\n\
@@ -33,7 +35,10 @@ fn main() {
                  [--json PATH] [--verbose]\n\
                  replay --file PATH\n\
                  diagnose --weeks N [--seed N] [--guided|--founder]\n\
-                 report --weeks N [--seed N]"
+                 report --weeks N [--seed N]\n\
+                 arc    --seeds N [--from N] --weeks N --scenario-id ID --policy \
+                 none|conservative|growth|acquirer|expander|passive|reckless \
+                 [--difficulty easy|standard|hard] [--none-json PATH] [--gates PATH] --json PATH"
             );
             std::process::exit(2);
         }
@@ -162,7 +167,19 @@ fn policy_flag(arguments: &[String]) -> ReferencePolicy {
 /// outcome-neutral (see `batching_does_not_change_the_result`), but policy decisions need the
 /// intervening revisions.
 fn drive(session: &mut Session, weeks: u32, runner: &mut PolicyRunner) -> (u32, Option<String>) {
+    drive_with(session, weeks, runner, &mut |_, _| {})
+}
+
+/// `drive` with an observer: called once after the opening policy turn (`false`) and once after
+/// every simulated week (`true`), before the policy acts on that week. It never changes the run.
+pub(crate) fn drive_with(
+    session: &mut Session,
+    weeks: u32,
+    runner: &mut PolicyRunner,
+    observer: &mut dyn FnMut(&Session, bool),
+) -> (u32, Option<String>) {
     runner.act(session);
+    observer(session, false);
     let mut advanced = 0;
     let mut paused = None;
     while advanced < weeks {
@@ -211,6 +228,7 @@ fn drive(session: &mut Session, weeks: u32, runner: &mut PolicyRunner) -> (u32, 
         if result.weeks_advanced == 0 {
             break;
         }
+        observer(session, true);
         runner.act(session);
     }
     (advanced, paused)
