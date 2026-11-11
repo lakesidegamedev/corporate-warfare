@@ -452,54 +452,11 @@ impl PolicyRunner {
         };
         let cash = entity.book.cash();
         let mut best: Option<(i64, u8, u16)> = None;
-        // Under the capacity rules the skilled player reads the sector board's openings, as the
-        // rivals do: room net of plants coming and within what spare inputs feed, today's build
-        // price, a block run only as far as its inputs can be bought, paying back in two years.
-        let openings = (self.policy.is_skilled() && dataset.capacity.span_plants > 0)
-            .then(|| cw_sim::economy::capacity::input_rooms(world, dataset));
         for (index, recipe) in dataset.recipes.iter().enumerate() {
             let recipe_index = index as u16;
             let Some(output) = dataset.product_index.get(&recipe.output).copied() else {
                 continue;
             };
-            if let Some(rooms) = &openings {
-                if recipe.storage_class.is_some() {
-                    continue;
-                }
-                for region in 0..world.regions.len() as u8 {
-                    let industry = sectors::recipe_industry(dataset, recipe_index);
-                    if sectors::division_strategy(world, dataset, handle, region, industry)
-                        .is_some_and(|strategy| strategy != recipe_index)
-                    {
-                        continue;
-                    }
-                    let Some(open) = cw_sim::economy::capacity::opening_with(
-                        world,
-                        dataset,
-                        rooms,
-                        entity.region,
-                        recipe_index,
-                        region,
-                    ) else {
-                        continue;
-                    };
-                    if open.room_lots * 5 < recipe.weekly_output_lots * 4 {
-                        continue;
-                    }
-                    let quote =
-                        sectors::build_cost(world, dataset, handle, region, recipe_index, 1);
-                    if cash < reserve + quote.total_cents()
-                        || open.weekly_contribution_cents * 104 <= quote.total_cents()
-                    {
-                        continue;
-                    }
-                    let value = open.weekly_contribution_cents * 156 - quote.total_cents();
-                    if best.is_none_or(|(b, ..)| value > b) {
-                        best = Some((value, region, recipe_index));
-                    }
-                }
-                continue;
-            }
             for region in 0..world.regions.len() as u8 {
                 let industry = sectors::recipe_industry(dataset, recipe_index);
                 if sectors::division_strategy(world, dataset, handle, region, industry)
