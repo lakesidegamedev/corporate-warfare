@@ -48,6 +48,10 @@ seller, those markets carry the whole 30 percent. A product no named plant makes
 budget. What households no longer ask for stays in savings, as any unspent budget does. Measured
 at week 4 of every scenario, every household product opens 24 to 39 percent unmet.
 
+With supply and demand in the same range, the service band tops out at 130 percent of reference
+(`service_max_bps` 13000) and a seller with no import to compete with at 150 percent
+(`local_ceiling_bps` 15000).
+
 ## Rivals build and close
 - Growth: after a quarter of results, profitable, staffed to nine tenths in the target region, with
   cash over twice the reserve plus the build cost. A rival orders one plant the size of the gap:

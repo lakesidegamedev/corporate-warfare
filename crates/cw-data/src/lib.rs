@@ -945,19 +945,26 @@ impl Dataset {
     /// The hash this dataset had before the capacity rules joined it (2.0, after the market
     /// rules): a save written then names it and loads against the current dataset.
     pub fn pre_capacity_hash(&self) -> String {
-        let mut plain = self.clone();
+        let mut plain = self.before_households();
         plain.capacity = balance::CapacityRules::default();
         plain.hash_with(self.cast.len(), true)
     }
 
     /// The hash this dataset had before households' opening demand was sized to the playable
-    /// market (2.0, after the capacity rules): a save written then names it and loads against the
-    /// current dataset.
+    /// market and local prices were given more room (2.0, after the capacity rules: services
+    /// then topped out at 110 percent of reference and sellers with no import at 130 percent): a
+    /// save written then names it and loads against the current dataset.
     pub fn pre_household_hash(&self) -> String {
+        self.before_households().hash_with(self.cast.len(), true)
+    }
+
+    fn before_households(&self) -> Dataset {
         let mut plain = self.clone();
         plain.capacity.household_cover_bps = 0;
         plain.capacity.household_unmet_bps = 0;
-        plain.hash_with(self.cast.len(), true)
+        plain.markets.service_max_bps = 11_000;
+        plain.markets.local_ceiling_bps = 13_000;
+        plain
     }
 
     fn hash_with(&self, cast_people: usize, with_markets: bool) -> String {

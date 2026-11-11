@@ -94,14 +94,16 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// budget buys, openings began reading the inputs a new plant could buy and rivals began sizing
 /// plants to the gap. Every pin moved again in 2.0 when households' opening demand was sized to
 /// what the named plants serve (household_cover_bps and household_unmet_bps joined the dataset
-/// hash; a save that names the round two hash still loads).
+/// hash; a save that names the round two hash still loads), and again when services were allowed
+/// up to 130 percent of reference and sellers with no import to 150 percent (the market rules
+/// are in the dataset hash).
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
     assert_eq!(data.scenario_id, "great-lakes-2000");
     assert_eq!(
         data.hash,
-        "8f3407b8b7c5db6f54035b258d5198817a2273e0238c3780e33c588c159d1aea"
+        "a42db33ba7e87a6e23c28d447eac307bd862b350b9b87bfd06bdc492640576d3"
     );
     // The hash before market rules joined it (the 2.0 round one pin) still finds this dataset,
     // so a save that names it loads.
@@ -123,15 +125,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "76bb189974189115fc622925735c8e4c7fd9b45b844e82476b6bee95c74cc5c2",
+            "a9704974013d86fbc38c16e4861ff48d7713f7a5cfadb6537fa5f2d5638e5c8f",
         ),
         (
             2,
-            "af9bd97a80c589666c17a0dc003d09fa3b611d6f7972f6121a786ed3e9e5e2d4",
+            "fff08dc38bde68f0d60813550133a12bdc96d1a9908f3ad4ecdfa38e89576825",
         ),
         (
             3,
-            "3bce914d9df803112873fcd90dc4f35065cb99bdcb6a5e5ff26e3f439563469c",
+            "35696ce0f8c65000cd09feeb0f5ce174ce33e60c14dc9096272a983eccab31ec",
         ),
     ];
     for (seed, hash) in pins {
@@ -143,12 +145,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "17fc7de6c1ee00e0c388401655c139f95db294f9cfd3dd97ae6d0068d01bfb2e"
+        "98acacfce80591944984d7c4d8f6318ad3a1f819ae5748aa278dbc2cc37d061f"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "2153bc3f84efd167ed3cefc4881d59026255ab1d99246d63b3b81fba4c808623"
+        "aff77aaceee3912a406f2b28c6f0bc2a0ccb50a8c70a8622e754f43204016e05"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
