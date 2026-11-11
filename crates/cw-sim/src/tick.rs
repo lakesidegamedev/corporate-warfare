@@ -169,7 +169,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     );
     crate::ph!(
         "world_prices::weekly",
-        crate::economy::world_prices::weekly(world)
+        crate::economy::world_prices::weekly(world, dataset)
     );
     crate::ph!(
         "macro_cycle::weekly",

@@ -725,7 +725,10 @@ fn set_target(world: &mut World, dataset: &Dataset, firm: Handle, target_bps: i3
 
 #[test]
 fn service_prices_and_freight_rates_follow_the_price_level() {
-    let dataset = Dataset::load().unwrap();
+    let mut dataset = Dataset::load().unwrap();
+    // Under the street rule an idle seller with no rival holds reference; this test walks an
+    // idle firm to the floor, so it uses the rule before the street.
+    dataset.demand.street_short_bps = 0;
     let mut world = seed::build(&dataset, 77, ScenarioKind::Guided, ScenarioMode::Sandbox);
     let telecom = dataset.product_index["telecom"];
     let steel = dataset.product_index["steel"];

@@ -62,6 +62,16 @@
    "weight": 20,
    "cyclical_pct": 110,
    "listed_only": true
+  },
+  "manufactures": {
+   "label": "Manufactured goods",
+   "weight": 0,
+   "cyclical_pct": 40
+  },
+  "power": {
+   "label": "Wholesale power",
+   "weight": 0,
+   "cyclical_pct": 30
   }
  },
  "products": {
@@ -88,7 +98,11 @@
   "timber": "timber",
   "rare_earth": "rare_earth",
   "building_materials": "building_materials",
-  "components": "electronics"
+  "components": "electronics",
+  "goods": "manufactures",
+  "vehicles": "manufactures",
+  "pharmaceuticals": "manufactures",
+  "electricity": "power"
  },
  "scenarios": {
   "great-lakes-2000": {
@@ -233,6 +247,15 @@
      [36, 105],
      [40, 100],
      [44, 105]
+    ],
+    "manufactures": [
+     [0, 100]
+    ],
+    "power": [
+     [0, 100]
+    ],
+    "electronics": [
+     [0, 100]
     ]
    }
   },
@@ -338,6 +361,15 @@
      [16, 120],
      [24, 115],
      [28, 115]
+    ],
+    "manufactures": [
+     [0, 100]
+    ],
+    "power": [
+     [0, 100]
+    ],
+    "electronics": [
+     [0, 100]
     ]
    }
   },
@@ -476,6 +508,12 @@
      [36, 72],
      [38, 66],
      [40, 62]
+    ],
+    "manufactures": [
+     [0, 100]
+    ],
+    "power": [
+     [0, 100]
     ]
    }
   },
@@ -583,6 +621,15 @@
      [20, 104],
      [24, 98],
      [28, 96]
+    ],
+    "manufactures": [
+     [0, 100]
+    ],
+    "power": [
+     [0, 100]
+    ],
+    "electronics": [
+     [0, 100]
     ]
    }
   }

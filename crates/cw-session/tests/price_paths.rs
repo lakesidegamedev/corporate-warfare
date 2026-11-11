@@ -62,8 +62,11 @@ fn the_scenario_default_applies_and_the_choice_overrides_it() {
         default.world.world_prices.mode,
         PriceMode::HistoricalVariance
     );
+    // Since the prices round every scenario defaults to history with variance.
     let great = Session::create(config(None, "great-lakes-2000")).unwrap();
-    assert_eq!(great.world.world_prices.mode, PriceMode::Historical);
+    assert_eq!(great.world.world_prices.mode, PriceMode::HistoricalVariance);
+    let plain = Session::create(config(Some(PricePath::Historical), "great-lakes-2000")).unwrap();
+    assert_eq!(plain.world.world_prices.mode, PriceMode::Historical);
     let random = Session::create(config(Some(PricePath::Random), "great-lakes-2000")).unwrap();
     assert_eq!(random.world.world_prices.mode, PriceMode::Random);
     let off = Session::create(config(None, "")).unwrap();
