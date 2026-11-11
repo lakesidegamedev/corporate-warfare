@@ -29,6 +29,7 @@ mod letters;
 mod paper;
 mod plans;
 mod politics;
+mod series;
 mod statements;
 mod systems;
 pub use cast::{
