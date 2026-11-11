@@ -2276,7 +2276,11 @@ fn cell_read(
     Memo::read(
         |m| &mut m.cells,
         (region, sector),
-        || std::rc::Rc::new(cw_sim::economy::sectors::cell(world, dataset, region, sector)),
+        || {
+            std::rc::Rc::new(cw_sim::economy::sectors::cell(
+                world, dataset, region, sector,
+            ))
+        },
     )
 }
 
@@ -2299,11 +2303,7 @@ fn room(world: &World, dataset: &Dataset, product: u16, region: u8) -> i64 {
     let corridor = dataset.products[product as usize].kind == cw_data::ProductKind::Goods;
     // A good's room is the corridor's, the same from every region.
     let width = world.regions.len() + 1;
-    let column = if corridor {
-        width - 1
-    } else {
-        region as usize
-    };
+    let column = if corridor { width - 1 } else { region as usize };
     let slot = product as usize * width + column;
     let hit = MEMO.with(|memo| {
         memo.borrow_mut().as_mut().and_then(|m| {
@@ -2481,7 +2481,10 @@ fn build_size(
 }
 
 /// Lots of each corridor good a new plant could still buy, read once per pass.
-fn input_rooms(world: &World, dataset: &Dataset) -> std::rc::Rc<cw_sim::economy::capacity::InputRooms> {
+fn input_rooms(
+    world: &World,
+    dataset: &Dataset,
+) -> std::rc::Rc<cw_sim::economy::capacity::InputRooms> {
     Memo::read(
         |m| &mut m.input_rooms,
         (),
@@ -2505,14 +2508,13 @@ fn recipe_room(world: &World, dataset: &Dataset, recipe: u16, output: u16, regio
     if let Some(hit) = hit {
         return hit;
     }
-    let value = room(world, dataset, output, region).min(
-        cw_sim::economy::capacity::input_cap_lots(
+    let value =
+        room(world, dataset, output, region).min(cw_sim::economy::capacity::input_cap_lots(
             dataset,
             &input_rooms(world, dataset),
             recipe,
             region,
-        ),
-    );
+        ));
     MEMO.with(|memo| {
         if let Some(m) = memo.borrow_mut().as_mut()
             && let Some(cell) = m.recipe_room.get_mut(slot)
