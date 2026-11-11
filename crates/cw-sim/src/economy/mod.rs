@@ -1,6 +1,7 @@
 //! Economic rules, split by concern. Each module implements one section of `docs/rules`.
 
 pub mod achievements;
+pub mod auctions;
 pub mod banking;
 pub mod capacity;
 pub mod cast;

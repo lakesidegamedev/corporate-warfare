@@ -74,6 +74,12 @@ const POLITICS_MAGIC: &[u8; 4] = b"POLI";
 /// running and the migration references are taken on the next week. The reader accepts it in any
 /// order after the systems trailer.
 const PLANS_MAGIC: &[u8; 4] = b"PLAN";
+/// Marks the plant auction trailer (2.0): plants on offer from failed companies and from owners
+/// who listed them, the bids put to owners and the auction log. Future-affecting, so
+/// `canonical_hash` folds it in while it is not empty; outside the postcard payload so the schema
+/// does not move. A save without it loads with no plant on offer. The reader accepts it in any
+/// order after the systems trailer.
+const AUCTIONS_MAGIC: &[u8; 4] = b"AUCT";
 
 /// Payload size of the most recent save in this process.
 static LAST_PAYLOAD: AtomicUsize = AtomicUsize::new(0);
@@ -244,6 +250,21 @@ pub fn encode_with(
             });
         }
         out.extend_from_slice(POLITICS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if !world.auctions.is_empty() {
+        let bytes =
+            postcard::to_allocvec(&world.auctions).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(AUCTIONS_MAGIC);
         out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
@@ -458,6 +479,12 @@ pub fn decode_with(
         } else if magic == POLITICS_MAGIC {
             let body = trailer_body(rest)?;
             world.civics = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+            rest = &rest[40 + body.len()..];
+        } else if magic == AUCTIONS_MAGIC {
+            let body = trailer_body(rest)?;
+            world.auctions = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
                 detail: SaveFault::MalformedPayload,
             })?;
             rest = &rest[40 + body.len()..];

@@ -549,6 +549,25 @@ pub enum CommandIntent {
         region: u8,
         industry: u8,
     },
+    /// Offer a running or mothballed plant for sale for the content's auction weeks (2.0). The
+    /// bids are put to the owner at the deadline.
+    ListPlant {
+        facility: Handle,
+    },
+    /// A sealed bid for a plant on offer through `firm`; zero withdraws the bid (2.0).
+    BidForPlant {
+        firm: Handle,
+        lot: u32,
+        price_cents: i64,
+    },
+    /// Sell a listed plant to the best bid put to its owner that can still pay (2.0).
+    AcceptPlantBid {
+        lot: u32,
+    },
+    /// Take a listed plant off the market (2.0).
+    WithdrawListing {
+        lot: u32,
+    },
 }
 
 fn yes() -> bool {
@@ -639,6 +658,10 @@ impl CommandIntent {
             CommandIntent::GiveToCandidate { .. } => "give_to_candidate",
             CommandIntent::BidOnTender { .. } => "bid_on_tender",
             CommandIntent::AbandonRaid { .. } => "abandon_raid",
+            CommandIntent::ListPlant { .. } => "list_plant",
+            CommandIntent::BidForPlant { .. } => "bid_for_plant",
+            CommandIntent::AcceptPlantBid { .. } => "accept_plant_bid",
+            CommandIntent::WithdrawListing { .. } => "withdraw_listing",
             CommandIntent::SetTransferPrice { .. } => "set_transfer_price",
             CommandIntent::CarveOutDivision { .. } => "carve_out_division",
             CommandIntent::ListSubsidiary { .. } => "list_subsidiary",
@@ -3049,6 +3072,43 @@ fn apply_intent(
         CommandIntent::BuyOutVenture { venture, firm } => {
             require_control(world, actor, *firm)?;
             structure::buyout_jv(world, *venture, *firm)
+        }
+        CommandIntent::ListPlant { facility } => {
+            let owner = world
+                .facilities
+                .get(*facility)
+                .map(|entity| entity.firm)
+                .ok_or(DomainError::InvalidEntity {
+                    handle: facility.0,
+                    kind: EntityKind::Facility,
+                })?;
+            require_control(world, actor, owner)?;
+            crate::economy::auctions::list(world, dataset, *facility).map(|_| ())
+        }
+        CommandIntent::BidForPlant {
+            firm,
+            lot,
+            price_cents,
+        } => {
+            require_control(world, actor, *firm)?;
+            crate::economy::auctions::bid(world, *firm, *lot, *price_cents)
+        }
+        CommandIntent::AcceptPlantBid { lot } | CommandIntent::WithdrawListing { lot } => {
+            let seller = world
+                .auctions
+                .lot(*lot)
+                .filter(|entry| entry.route == crate::economy::auctions::LotRoute::Listing)
+                .map(|entry| entry.seller)
+                .ok_or(DomainError::InvalidEntity {
+                    handle: *lot as u64,
+                    kind: EntityKind::Facility,
+                })?;
+            require_control(world, actor, seller)?;
+            if matches!(intent, CommandIntent::AcceptPlantBid { .. }) {
+                crate::economy::auctions::accept(world, *lot)
+            } else {
+                crate::economy::auctions::withdraw(world, *lot)
+            }
         }
         CommandIntent::ExitVenture { venture, firm } => {
             require_control(world, actor, *firm)?;

@@ -19,6 +19,7 @@ use std::collections::BTreeMap;
 use cw_core::ids::Handle;
 use cw_data::{Archetype, Dataset};
 use cw_sim::commands::{BargainingChoice, CommandIntent};
+use cw_sim::economy::auctions;
 use cw_sim::state::{BargainState, DealState, FacilityStatus, FirmStatus, HolderId, World};
 
 /// Most strategic actions one firm may attempt in its slot.
@@ -1766,12 +1767,34 @@ fn strategic(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut Vec
             actor: firm.0,
             intent,
         });
-    } else if let Some(plant) = idle_plant(world, firm)
-        && !cw_sim::economy::disposal::plant_bids(world, dataset, plant).is_empty()
+    } else if let Some(plant) = idle_plant(world, firm) {
+        // With plant auctions on, a plant left mothballed for half a year is listed, at most
+        // once in that time, so the player can bid for it too; otherwise it is sold at once when
+        // a bid appears.
+        if auctions::auction_weeks(dataset) > 0 {
+            if relist_due(world, plant) {
+                proposals.push(Proposal {
+                    actor: firm.0,
+                    intent: CommandIntent::ListPlant { facility: plant },
+                });
+            }
+        } else if !cw_sim::economy::disposal::plant_bids(world, dataset, plant).is_empty() {
+            proposals.push(Proposal {
+                actor: firm.0,
+                intent: CommandIntent::DisposeFacility { facility: plant },
+            });
+        }
+    }
+    // A listing whose bids are in: the best is accepted (the plant was idle).
+    for lot in world
+        .auctions
+        .lots
+        .iter()
+        .filter(|lot| lot.seller == firm && !lot.offered.is_empty())
     {
         proposals.push(Proposal {
             actor: firm.0,
-            intent: CommandIntent::DisposeFacility { facility: plant },
+            intent: CommandIntent::AcceptPlantBid { lot: lot.id },
         });
     }
     let building = proposals[start..].iter().any(|p| {
@@ -1875,6 +1898,17 @@ fn losing_plant(world: &World, dataset: &Dataset, firm: Handle) -> Option<Handle
 }
 
 /// The plant a rival has kept mothballed longest, once that is at least half a year.
+/// Whether an idle plant may be listed now: not on offer, and not listed in the last
+/// `IDLE_WIND_DOWN_WEEKS` weeks.
+fn relist_due(world: &World, plant: Handle) -> bool {
+    let now = world.tick.0;
+    world.auctions.for_facility(plant).is_none()
+        && !world.auctions.closed.iter().any(|closed| {
+            closed.lot.facility == plant
+                && now.saturating_sub(closed.lot.opened.0) < IDLE_WIND_DOWN_WEEKS
+        })
+}
+
 fn idle_plant(world: &World, firm: Handle) -> Option<Handle> {
     let now = world.tick.0;
     world
