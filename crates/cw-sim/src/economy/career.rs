@@ -144,12 +144,16 @@ pub struct CareerSetup {
 /// change does not move a running career's goalposts.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rules {
+    /// Biggest for this career's start: a top share of the league that earns bronze (0: none)
+    /// and the places for bronze (0: only the top share), silver and gold.
+    pub rank_bronze_top_bps: i64,
     pub rank_bronze: u32,
     pub rank_silver: u32,
     pub rank_gold: u32,
-    pub richest_bronze: u32,
-    pub richest_silver: u32,
-    pub richest_gold: u32,
+    /// Richest for this career's length: net worth over the starting fortune, basis points.
+    pub richest_bronze_bps: i64,
+    pub richest_silver_bps: i64,
+    pub richest_gold_bps: i64,
     pub dominant_quarters: u32,
     pub dominant_min_producers: u32,
     pub dominant_bronze_bps: i64,
@@ -166,14 +170,20 @@ pub struct Rules {
 }
 
 impl Rules {
-    fn from_table(t: &CareerTable) -> Rules {
+    fn from_table(t: &CareerTable, start: Start, years: u32) -> Rules {
+        let places = match start {
+            Start::Founder => &t.biggest.founder,
+            Start::Helm => &t.biggest.helm,
+        };
+        let multiples = t.richest.for_years(years);
         Rules {
-            rank_bronze: t.ranks.bronze,
-            rank_silver: t.ranks.silver,
-            rank_gold: t.ranks.gold,
-            richest_bronze: t.richest.bronze,
-            richest_silver: t.richest.silver,
-            richest_gold: t.richest.gold,
+            rank_bronze_top_bps: places.bronze_top_bps,
+            rank_bronze: places.bronze,
+            rank_silver: places.silver,
+            rank_gold: places.gold,
+            richest_bronze_bps: multiples.bronze_bps,
+            richest_silver_bps: multiples.silver_bps,
+            richest_gold_bps: multiples.gold_bps,
             dominant_quarters: t.dominant.quarters,
             dominant_min_producers: t.dominant.min_producers,
             dominant_bronze_bps: t.dominant.bronze_bps,
@@ -272,6 +282,9 @@ pub struct CareerState {
     pub events: Vec<CareerEvent>,
     pub tracking: Tracking,
     pub ending: Option<Ending>,
+    /// The fortune Richest measures growth from: the net worth when the career started (a
+    /// helm start: just after buying control, so the scaled fortune is not counted as a gain).
+    pub start_worth_cents: i64,
 }
 
 // ----- leagues -----
@@ -526,7 +539,8 @@ pub fn begin(world: &mut World, ds: &Dataset, setup: &CareerSetup) -> Result<(),
         years,
         start_week,
         end_week: start_week + years * YEAR_WEEKS,
-        rules: Rules::from_table(table),
+        rules: Rules::from_table(table, setup.start, years),
+        start_worth_cents: crate::economy::score::personal_net_worth(world),
         helm: None,
         years_log: Vec::new(),
         events: Vec::new(),
@@ -602,6 +616,7 @@ pub fn begin(world: &mut World, ds: &Dataset, setup: &CareerSetup) -> Result<(),
             }
         }
         world.investor.starting_net_worth_cents = crate::economy::score::personal_net_worth(world);
+        state.start_worth_cents = world.investor.starting_net_worth_cents;
         let paid = offer.price_cents;
         push_event(
             &mut state,
@@ -651,44 +666,215 @@ fn money(cents: i64) -> String {
 
 // ----- judging -----
 
+/// Net worth over the starting fortune, basis points (10000 = no growth; 0 when the start was
+/// not positive).
+pub fn growth_bps(worth: i64, start: i64) -> i64 {
+    if start <= 0 {
+        return 0;
+    }
+    (worth.max(0) as i128 * 10_000 / start as i128).min(i64::MAX as i128) as i64
+}
+
 /// The medal the ambition stands at right now (for Dominant: the best held so far).
 pub fn standing(world: &World, state: &CareerState) -> Medal {
     let r = &state.rules;
-    let by_rank = |rank: Option<u32>| match rank {
-        Some(x) if x <= r.rank_gold => Medal::Gold,
-        Some(x) if x <= r.rank_silver => Medal::Silver,
-        Some(x) if x <= r.rank_bronze => Medal::Bronze,
-        _ => Medal::None,
-    };
     let Some(ambition) = state.ambition else {
         return Medal::None;
     };
     let league = company_league(world);
     let primary = live_primary(world);
+    let n = league.len() as i64;
+    // Rank r is in the top share s when r <= ceil(n * s).
+    let within = |rank: u32, bps: i64| (rank as i64) * 10_000 <= (n * bps).max(10_000) + 9_999;
     match ambition {
-        Ambition::Richest => match wealth_league(world).1 {
-            x if x <= r.richest_gold => Medal::Gold,
-            x if x <= r.richest_silver => Medal::Silver,
-            x if x <= r.richest_bronze => Medal::Bronze,
+        Ambition::Richest => {
+            let (worth, _, _) = wealth_league(world);
+            let growth = growth_bps(worth, state.start_worth_cents);
+            if growth >= r.richest_gold_bps {
+                Medal::Gold
+            } else if growth >= r.richest_silver_bps {
+                Medal::Silver
+            } else if growth >= r.richest_bronze_bps {
+                Medal::Bronze
+            } else {
+                Medal::None
+            }
+        }
+        Ambition::Biggest => match primary.and_then(|p| rank_in(&league, p)) {
+            Some(x) if x <= r.rank_gold => Medal::Gold,
+            Some(x) if x <= r.rank_silver => Medal::Silver,
+            Some(x)
+                if x <= r.rank_bronze
+                    || (r.rank_bronze_top_bps > 0 && within(x, r.rank_bronze_top_bps)) =>
+            {
+                Medal::Bronze
+            }
             _ => Medal::None,
         },
-        Ambition::Biggest => by_rank(primary.and_then(|p| rank_in(&league, p))),
         Ambition::Dominant => state.tracking.dominant_best,
         Ambition::Survivor => {
             let Some(rank) = primary.and_then(|p| rank_in(&league, p)) else {
                 return Medal::None;
             };
-            let n = league.len() as i64;
-            // Rank r is in the top share s when r <= ceil(n * s).
-            let within = |bps: i64| (rank as i64) * 10_000 <= (n * bps).max(10_000) + 9_999;
-            if within(r.survivor_gold_top_bps) {
+            if within(rank, r.survivor_gold_top_bps) {
                 Medal::Gold
-            } else if within(r.survivor_silver_top_bps) {
+            } else if within(rank, r.survivor_silver_top_bps) {
                 Medal::Silver
             } else {
                 Medal::Bronze
             }
         }
+    }
+}
+
+/// Where a career stands, in plain words, for the screens and the quarterly letter.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Progress {
+    pub ambition: Option<Ambition>,
+    pub medal: Medal,
+    /// The primary company's league place and the league's size (0 when it runs none).
+    pub rank: u32,
+    pub league: u32,
+    /// Richest: net worth over the starting fortune, basis points (10000 = no growth).
+    pub growth_bps: i64,
+    /// What the standing rests on, one sentence.
+    pub detail: String,
+    /// What the next medal needs, one sentence; empty at gold or without an ambition.
+    pub next: String,
+}
+
+fn times(bps: i64) -> String {
+    format!("{}.{}", bps / 10_000, (bps % 10_000) / 1_000)
+}
+
+fn place_words(n: u32) -> String {
+    match n {
+        1 => "first place".to_owned(),
+        _ => format!("the top {n}"),
+    }
+}
+
+/// The career's standing now: the medal, the facts it rests on and what the next medal needs.
+pub fn progress(world: &World, state: &CareerState) -> Progress {
+    let r = &state.rules;
+    let medal = standing(world, state);
+    let league = company_league(world);
+    let rank = live_primary(world).and_then(|p| rank_in(&league, p));
+    let n = league.len() as u32;
+    let (worth, _, _) = wealth_league(world);
+    let growth = growth_bps(worth, state.start_worth_cents);
+    let mut out = Progress {
+        ambition: state.ambition,
+        medal,
+        rank: rank.unwrap_or(0),
+        league: n,
+        growth_bps: growth,
+        detail: String::new(),
+        next: String::new(),
+    };
+    let Some(ambition) = state.ambition else {
+        return out;
+    };
+    let next = match medal {
+        Medal::None => Some(Medal::Bronze),
+        Medal::Bronze => Some(Medal::Silver),
+        Medal::Silver => Some(Medal::Gold),
+        Medal::Gold => None,
+    };
+    match ambition {
+        Ambition::Richest => {
+            out.detail = format!(
+                "Your net worth of {} is {} times the {} you started with.",
+                money(worth),
+                times(growth),
+                money(state.start_worth_cents)
+            );
+            if let Some(m) = next {
+                let need = match m {
+                    Medal::Bronze => r.richest_bronze_bps,
+                    Medal::Silver => r.richest_silver_bps,
+                    _ => r.richest_gold_bps,
+                };
+                let target =
+                    (state.start_worth_cents.max(0) as i128 * need as i128 / 10_000) as i64;
+                out.next = format!(
+                    "{} needs {} times, a net worth of {} at the end.",
+                    capital(m.key()),
+                    times(need),
+                    money(target)
+                );
+            }
+        }
+        Ambition::Biggest | Ambition::Survivor => {
+            out.detail = match rank {
+                Some(x) => format!("Your company ranks {x} of {n} by value."),
+                None => "You run no company in the league.".to_owned(),
+            };
+            if let Some(m) = next {
+                let places = if ambition == Ambition::Biggest {
+                    match m {
+                        Medal::Bronze if r.rank_bronze == 0 => {
+                            let top =
+                                ((n as i64 * r.rank_bronze_top_bps).max(10_000) + 9_999) / 10_000;
+                            top as u32
+                        }
+                        Medal::Bronze => r.rank_bronze,
+                        Medal::Silver => r.rank_silver,
+                        _ => r.rank_gold,
+                    }
+                } else {
+                    let bps = match m {
+                        Medal::Bronze => 10_000,
+                        Medal::Silver => r.survivor_silver_top_bps,
+                        _ => r.survivor_gold_top_bps,
+                    };
+                    (((n as i64 * bps).max(10_000) + 9_999) / 10_000) as u32
+                };
+                out.next = if ambition == Ambition::Survivor && m == Medal::Bronze {
+                    "Bronze needs a solvent company you control at the end.".to_owned()
+                } else {
+                    format!(
+                        "{} needs {} by value at the end.",
+                        capital(m.key()),
+                        place_words(places)
+                    )
+                };
+            }
+        }
+        Ambition::Dominant => {
+            out.detail = if state.tracking.dominant_best == Medal::None {
+                "Your group has not yet held a leading share of an industry for a year.".to_owned()
+            } else {
+                format!(
+                    "Your group's best hold so far is {}.{} percent of {}.",
+                    state.tracking.dominant_share_bps / 100,
+                    (state.tracking.dominant_share_bps % 100) / 10,
+                    industry_name(state.tracking.dominant_industry.unwrap_or(0))
+                )
+            };
+            if let Some(m) = next {
+                let bps = match m {
+                    Medal::Bronze => r.dominant_bronze_bps,
+                    Medal::Silver => r.dominant_silver_bps,
+                    _ => r.dominant_gold_bps,
+                };
+                out.next = format!(
+                    "{} needs {} percent of one industry's output for {} quarters in a row.",
+                    capital(m.key()),
+                    bps / 100,
+                    r.dominant_quarters
+                );
+            }
+        }
+    }
+    out
+}
+
+fn capital(word: &str) -> String {
+    let mut c = word.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        None => String::new(),
     }
 }
 
@@ -1145,32 +1331,11 @@ fn quarter(world: &mut World, state: &mut CareerState) {
     }
     let medal = standing(world, state);
     if let Some(ambition) = state.ambition {
-        let detail = match ambition {
-            Ambition::Richest => {
-                let (worth, rank, n) = wealth_league(world);
-                format!(
-                    "Your net worth of {} ranks {rank} of {n} investors.",
-                    money(worth)
-                )
-            }
-            Ambition::Biggest | Ambition::Survivor => {
-                let league = company_league(world);
-                match live_primary(world).and_then(|p| rank_in(&league, p)) {
-                    Some(rank) => {
-                        format!("Your company ranks {rank} of {} by value.", league.len())
-                    }
-                    None => "You run no company in the league.".to_owned(),
-                }
-            }
-            Ambition::Dominant => match best {
-                Some((industry, share)) => format!(
-                    "Your best industry ({}) has {}.{} percent of the corridor's output this quarter.",
-                    industry_name(industry),
-                    share / 100,
-                    (share % 100) / 10
-                ),
-                None => "Your group makes nothing yet.".to_owned(),
-            },
+        let p = progress(world, state);
+        let detail = if p.next.is_empty() {
+            p.detail
+        } else {
+            format!("{} {}", p.detail, p.next)
         };
         let text = format!(
             "Career progress ({}): {} Standing: {}.",
@@ -1228,10 +1393,12 @@ fn closing_sentence(world: &World, state: &CareerState, medal: Medal) -> String 
     let rank = live_primary(world).and_then(|p| rank_in(&league, p));
     let fact = match ambition {
         Ambition::Richest => {
-            let (worth, r, n) = wealth_league(world);
+            let (worth, _, _) = wealth_league(world);
             format!(
-                "your net worth of {} ranked {r} of {n} investors",
-                money(worth)
+                "your net worth of {} is {} times the {} you started with",
+                money(worth),
+                times(growth_bps(worth, state.start_worth_cents)),
+                money(state.start_worth_cents)
             )
         }
         Ambition::Biggest => match rank {
@@ -1527,5 +1694,49 @@ mod tests {
         );
         let ending = w.career.as_ref().unwrap().ending.clone().unwrap();
         assert_eq!(ending.kind, EndKind::Removed);
+    }
+    #[test]
+    fn richest_is_the_growth_of_the_players_own_fortune() {
+        let (mut w, ds) = world();
+        begin(
+            &mut w,
+            &ds,
+            &CareerSetup {
+                ambition: Some(Ambition::Richest),
+                years: 10,
+                ..CareerSetup::default()
+            },
+        )
+        .unwrap();
+        let state = w.career.clone().unwrap();
+        let start = state.start_worth_cents;
+        assert_eq!(start, crate::economy::score::personal_net_worth(&w));
+        assert_eq!(standing(&w, &state), Medal::None);
+        let t = career_table().richest.for_years(10);
+        let extra = |bps: i64| (start as i128 * (bps - 10_000) as i128 / 10_000) as i64;
+        let base = w.investor.cash_cents;
+        w.investor.cash_cents = base + extra(t.bronze_bps);
+        assert_eq!(standing(&w, &state), Medal::Bronze);
+        w.investor.cash_cents = base + extra(t.gold_bps);
+        assert_eq!(standing(&w, &state), Medal::Gold);
+        let p = progress(&w, &state);
+        assert_eq!(p.medal, Medal::Gold);
+        assert!(p.next.is_empty());
+    }
+
+    #[test]
+    fn biggest_has_a_scale_for_each_start() {
+        let t = career_table();
+        let founder = Rules::from_table(t, Start::Founder, 10);
+        let helm = Rules::from_table(t, Start::Helm, 10);
+        assert_eq!(
+            founder.rank_bronze_top_bps,
+            t.biggest.founder.bronze_top_bps
+        );
+        assert_eq!(founder.rank_gold, t.biggest.founder.gold);
+        assert_eq!(helm.rank_gold, t.biggest.helm.gold);
+        assert!(founder.rank_gold > helm.rank_gold);
+        let five = Rules::from_table(t, Start::Founder, 5);
+        assert!(five.richest_bronze_bps < founder.richest_bronze_bps);
     }
 }

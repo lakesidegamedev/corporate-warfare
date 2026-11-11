@@ -468,6 +468,14 @@ pub struct CareerResult {
     /// The helm firm's value at the end of the same seed played with no player (its AI).
     pub ai_value_cents: Option<i64>,
     pub beats_ai: Option<bool>,
+    /// Richest's measure: the fortune the career started from and the growth over it.
+    #[serde(default)]
+    pub start_worth_cents: i64,
+    #[serde(default)]
+    pub growth_bps: i64,
+    /// The player's share of the primary company's eligible votes at the end, basis points.
+    #[serde(default)]
+    pub votes_bps: i64,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -1774,6 +1782,20 @@ fn career_result(session: &Session) -> Option<CareerResult> {
         final_company_value_cents: final_value,
         ai_value_cents: None,
         beats_ai: None,
+        start_worth_cents: state.start_worth_cents,
+        growth_bps: c::growth_bps(c::wealth_league(world).0, state.start_worth_cents),
+        votes_bps: world
+            .investor
+            .primary_group
+            .map(|p| {
+                let (ours, eligible) = c::player_votes(world, p);
+                if eligible > 0 {
+                    ours * 10_000 / eligible
+                } else {
+                    0
+                }
+            })
+            .unwrap_or(0),
     })
 }
 
@@ -2430,6 +2452,27 @@ struct GateSpec {
     /// to every run.
     #[serde(default)]
     start: Option<String>,
+    /// For the career medal metrics: the ambition the careers are judged on (the medal it would
+    /// earn in the same career). None judges the ambition the run played for.
+    #[serde(default)]
+    ambition: Option<String>,
+}
+
+/// A career medal metric judged on a named ambition, from the per-ambition medal counts.
+fn ambition_metric(aggregate: &Aggregate, metric: &str, ambition: &str) -> Option<f64> {
+    let counts = aggregate.career_medals.get(ambition)?;
+    let total: u32 = counts.iter().sum();
+    if total == 0 {
+        return None;
+    }
+    let share = |n: u32| Some(n as f64 / total as f64);
+    match metric {
+        "career_no_medal_share" => share(counts[0]),
+        "career_bronze_plus_share" => share(counts[1] + counts[2] + counts[3]),
+        "career_silver_plus_share" => share(counts[2] + counts[3]),
+        "career_gold_share" => share(counts[3]),
+        _ => metric_value(aggregate, metric),
+    }
 }
 
 fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
@@ -2492,7 +2535,10 @@ pub fn evaluate_gates_for(
         .map(|gate| {
             let applies = (gate.policy == "any" || gate.policy == policy)
                 && gate.start.as_deref().is_none_or(|s| s == start);
-            let value = metric_value(aggregate, &gate.metric);
+            let value = match gate.ambition.as_deref() {
+                Some(a) => ambition_metric(aggregate, &gate.metric, a),
+                None => metric_value(aggregate, &gate.metric),
+            };
             let result = match (applies, value) {
                 (false, _) | (true, None) => "n/a",
                 (true, Some(v)) => {

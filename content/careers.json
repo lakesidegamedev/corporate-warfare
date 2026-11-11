@@ -25,14 +25,17 @@
     "gold_bps": 4000
   },
   "richest": {
-    "bronze": 4,
-    "silver": 2,
-    "gold": 1
+    "note": "Richest: the player's net worth at the end over the fortune the career started with (a helm start: the net worth just after buying control), in basis points (10000 = no growth). One row per career length. The 10 year row is calibrated on the careful founder's Great Lakes grid (bronze in half, gold in one career of ten); 5 and 20 years compound the same yearly growth and are not measured.",
+    "multiples": [
+      { "years": 5, "bronze_bps": 32000, "silver_bps": 45000, "gold_bps": 59000 },
+      { "years": 10, "bronze_bps": 100000, "silver_bps": 200000, "gold_bps": 350000 },
+      { "years": 20, "bronze_bps": 1000000, "silver_bps": 4000000, "gold_bps": 12250000 }
+    ]
   },
-  "ranks": {
-    "bronze": 10,
-    "silver": 3,
-    "gold": 1
+  "biggest": {
+    "note": "Biggest: the company league place at the end, per start. bronze_top_bps, when not 0, also gives bronze to a company in that top share of the league (5000 = the top half).",
+    "founder": { "bronze_top_bps": 5000, "bronze": 0, "silver": 10, "gold": 3 },
+    "helm": { "bronze_top_bps": 0, "bronze": 10, "silver": 3, "gold": 1 }
   },
   "survivor": {
     "silver_top_bps": 5000,

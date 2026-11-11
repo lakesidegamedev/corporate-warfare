@@ -664,19 +664,30 @@ it as the player's.
 **Leagues.** The company league is every operating company that no other company controls,
 ranked by value (the engine valuation's equity, book equity before the first valuation),
 largest first, ties by handle; the player's group counts once, as its primary company. The
-wealth league is the player and the corridor's outside investors, each valued as cash
-(capital for an outside investor) plus every share held at the fair price, less personal loans
-for the player. Rival chief executives keep no personal purse in the engine, so they are not in
-it. In every bundled scenario the wealth league has nine members: the player and eight funds.
+wealth league (the player and the corridor's eight outside funds, each valued as cash plus
+shares at the fair price) is kept as information in the summary only: eight funds holding the
+outside float of every company are not a contest.
 
 **Ambition.** One of four, each with bronze, silver and gold:
 
 | ambition | judged | bronze | silver | gold |
 |---|---|---|---|---|
-| Richest | at the end, wealth league place | 4th or better | 2nd | 1st |
-| Biggest | at the end, company league place | top 10 | top 3 | 1st |
+| Richest (10 years) | at the end, net worth over the starting fortune | 10 times | 20 times | 35 times |
+| Biggest, founder | at the end, company league place | top half | top 10 | top 3 |
+| Biggest, helm | at the end, company league place | top 10 | top 3 | 1st |
 | Dominant | at any time | 20 percent | 30 percent | 40 percent |
 | Survivor | at the end | controls a solvent company | in the top half | in the top quarter |
+
+Richest is the growth of the player's own fortune: personal net worth (cash plus shares at the
+fair price, less personal loans) at the end over the net worth when the career started. For a
+helm start the starting fortune is the net worth just after buying control, so the fortune the
+start scaled up is not counted as a gain. The multiples are per career length in
+`richest.multiples` (5 years: 3.2, 4.5 and 5.9 times; 20 years: 100, 400 and 1,225 times). The
+10 year row is calibrated on the careful founder's Great Lakes careers (bronze in about half,
+gold in one of ten); the other lengths compound the same yearly growth and are not measured.
+Biggest's places are per start in `biggest.founder` and `biggest.helm`; `bronze_top_bps` gives
+bronze to a company in that top share of the league (rank r is in the top share s of n
+companies when r is at most n times s rounded up). Survivor and Dominant have one scale.
 
 Dominant: the player's group makes at least the share of one industry's output across the
 corridor (lots made by operating plants, summed over the quarter) for `dominant.quarters` (4)

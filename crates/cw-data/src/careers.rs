@@ -63,11 +63,47 @@ pub struct Dominant {
     pub gold_bps: i64,
 }
 
+/// Biggest's thresholds for one start: company league places, and optionally a top share of
+/// the league that also earns bronze.
 #[derive(Clone, Debug, Deserialize)]
-pub struct Ranks {
+pub struct Places {
+    /// When not 0, a company in this top share of the league earns bronze (5000 = top half).
+    pub bronze_top_bps: i64,
+    /// Places for bronze, silver and gold (1 is first). Bronze 0 means only the top share counts.
     pub bronze: u32,
     pub silver: u32,
     pub gold: u32,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Biggest {
+    pub founder: Places,
+    pub helm: Places,
+}
+
+/// Richest's growth multiples for one career length, basis points of the starting fortune.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Multiples {
+    pub years: u32,
+    pub bronze_bps: i64,
+    pub silver_bps: i64,
+    pub gold_bps: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Richest {
+    pub multiples: Vec<Multiples>,
+}
+
+impl Richest {
+    /// The multiples for a career length (the nearest shorter row, else the first).
+    pub fn for_years(&self, years: u32) -> &Multiples {
+        self.multiples
+            .iter()
+            .filter(|m| m.years <= years)
+            .max_by_key(|m| m.years)
+            .unwrap_or(&self.multiples[0])
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -89,10 +125,10 @@ pub struct CareerTable {
     pub found_grace_weeks: u32,
     pub board: Board,
     pub dominant: Dominant,
-    /// Places in the wealth league (the player and the outside investors) for Richest.
-    pub richest: Ranks,
-    /// Places in the company league for Biggest.
-    pub ranks: Ranks,
+    /// Richest: growth of the player's own fortune over the career, per length.
+    pub richest: Richest,
+    /// Biggest: company league places, per start.
+    pub biggest: Biggest,
     pub survivor: Survivor,
     pub events_kept: usize,
 }
@@ -115,9 +151,26 @@ impl CareerTable {
         {
             return Err("dominant thresholds out of order".into());
         }
-        for r in [&self.ranks, &self.richest] {
-            if !(r.gold >= 1 && r.gold <= r.silver && r.silver <= r.bronze) {
-                return Err("rank thresholds out of order".into());
+        for r in [&self.biggest.founder, &self.biggest.helm] {
+            let bronze_ok = r.bronze == 0 && r.bronze_top_bps > 0 || r.bronze >= r.silver;
+            if !(r.gold >= 1 && r.gold <= r.silver && bronze_ok && r.bronze_top_bps <= 10_000) {
+                return Err("biggest thresholds out of order".into());
+            }
+        }
+        if self.richest.multiples.is_empty() {
+            return Err("richest has no multiples".into());
+        }
+        for m in &self.richest.multiples {
+            if !(10_000 < m.bronze_bps
+                && m.bronze_bps <= m.silver_bps
+                && m.silver_bps <= m.gold_bps)
+            {
+                return Err("richest multiples out of order".into());
+            }
+        }
+        for years in &self.lengths_years {
+            if !self.richest.multiples.iter().any(|m| m.years == *years) {
+                return Err(format!("richest has no row for {years} years"));
             }
         }
         if !(0 < self.survivor.gold_top_bps
