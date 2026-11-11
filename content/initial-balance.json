@@ -1796,7 +1796,7 @@
     "payout_buffer_weeks": 26,
     "payout_share_bps": 5000,
     "raid_warning_weeks": 4,
-    "household_cover_bps": 8500,
+    "household_cover_bps": 9000,
     "household_unmet_bps": 3000
   },
   "demand": {
@@ -1906,7 +1906,8 @@
       "components"
     ],
     "credit_elasticity_bps": 5000,
-    "retail_reads_street": false
+    "retail_reads_street": true,
+    "street_short_bps": 1000
   },
   "texture": {
     "named_bps": 1500,
@@ -1953,7 +1954,7 @@
       },
       {
         "family": "ore",
-        "swing_bps": 1600,
+        "swing_bps": 1700,
         "half_life_weeks": 18,
         "causes_up": [
           "a mine flood cuts ore shipments",
@@ -1966,7 +1967,7 @@
       },
       {
         "family": "steel",
-        "swing_bps": 1400,
+        "swing_bps": 1600,
         "half_life_weeks": 18,
         "causes_up": [
           "mills abroad run short and steel climbs",
@@ -1992,7 +1993,7 @@
       },
       {
         "family": "fertilizer",
-        "swing_bps": 1400,
+        "swing_bps": 1600,
         "half_life_weeks": 16,
         "causes_up": [
           "dear gas lifts fertilizer costs",
@@ -2031,7 +2032,7 @@
       },
       {
         "family": "rare_earth",
-        "swing_bps": 1600,
+        "swing_bps": 1800,
         "half_life_weeks": 20,
         "causes_up": [
           "export limits abroad lift rare earths",

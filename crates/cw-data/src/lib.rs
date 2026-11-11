@@ -983,9 +983,12 @@ impl Dataset {
     }
 
     fn before_prices(&self) -> Dataset {
+        const PRE_PRICES_HOUSEHOLD_COVER_BPS: i64 = 8_500;
         let mut plain = self.clone();
         plain.texture = balance::TextureRules::default();
         plain.demand.retail_reads_street = false;
+        plain.demand.street_short_bps = 0;
+        plain.capacity.household_cover_bps = PRE_PRICES_HOUSEHOLD_COVER_BPS;
         plain
     }
 
@@ -1234,6 +1237,9 @@ impl Dataset {
             hasher
                 .i64(d.credit_elasticity_bps)
                 .bool(d.retail_reads_street);
+            if d.street_short_bps != 0 {
+                hasher.string("street").i64(d.street_short_bps);
+            }
         }
         // The world's texture moves every traded good's outside price, so it names the dataset
         // when it differs from the smooth paths before it.

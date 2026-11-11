@@ -339,6 +339,12 @@ pub struct DemandRules {
     /// Whether a shop's price reads households going without and local competition the way a
     /// service's does, not only its own shelf cover.
     pub retail_reads_street: bool,
+    /// The street rule (2.0 prices round): a seller of a service, or a shop under
+    /// `retail_reads_street`, asks reference in a balanced market, lifts its price only by the
+    /// share of households going without in its regions beyond this many basis points, and cuts
+    /// only by its own idle capacity while a rival in its regions also has capacity to spare.
+    /// Zero: the rule before it (a seller reads its own use plus every household going without).
+    pub street_short_bps: i64,
 }
 
 impl Default for DemandRules {
@@ -352,6 +358,7 @@ impl Default for DemandRules {
             investment_goods: Vec::new(),
             credit_elasticity_bps: 0,
             retail_reads_street: false,
+            street_short_bps: 0,
         }
     }
 }

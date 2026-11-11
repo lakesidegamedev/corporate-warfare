@@ -176,6 +176,11 @@ pub fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         if capacity <= 0 {
             return None;
         }
+        if dataset.demand.street_short_bps > 0 {
+            return Some(street_wanted_bps(
+                world, dataset, firm, product, sold, capacity,
+            ));
+        }
         let mut used_bps = (sold.saturating_mul(10_000) / capacity).clamp(0, 10_000);
         // Households that found no seller are demand the region's capacity could not meet: a
         // region short of capacity reads as more than full, and its price keeps rising until
@@ -195,6 +200,11 @@ pub fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         && dataset.products[product as usize].kind.is_consumer_goods()
     {
         let capacity = service_capacity(world, dataset, firm, product);
+        if capacity > 0 && dataset.demand.street_short_bps > 0 {
+            return Some(street_wanted_bps(
+                world, dataset, firm, product, sold, capacity,
+            ));
+        }
         if capacity > 0 {
             let mut used_bps = (sold.saturating_mul(10_000) / capacity).clamp(0, 10_000);
             let (unmet, wanted) = seller_household_unmet(world, dataset, firm, product);
@@ -233,6 +243,86 @@ pub fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         cover
     };
     Some(goods_wanted_bps(cover, target, short, need))
+}
+
+/// The street rule: what a seller of a service or a shop wants, in basis points of reference.
+/// It reads the share of its capacity that sold plus the share of households in its regions
+/// that went without, against the opening state (everything sold, `street_short_bps` going
+/// without), which asks reference. Above it, a market outgrowing its sellers, the price rises
+/// by the service slope; below it, idle capacity, the price falls by the same slope, but only
+/// while a rival selling in one of its regions also has capacity to spare (a seller alone with
+/// idle shelves has no one to undercut it, and holds). Within the service band; a shop's local
+/// ceiling still bounds it in `target_price`.
+pub fn street_wanted_bps(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    product: u16,
+    sold: i64,
+    capacity: i64,
+) -> i64 {
+    let rules = &dataset.markets;
+    let used = (sold.saturating_mul(10_000) / capacity.max(1)).clamp(0, 10_000);
+    let (unmet, wanted) = seller_household_unmet(world, dataset, firm, product);
+    let short = if wanted > 0 {
+        (unmet.saturating_mul(10_000) / wanted).clamp(0, 10_000)
+    } else {
+        0
+    };
+    // The opening state, a seller selling all it makes with the opening share going without,
+    // reads zero: reference.
+    let reading = used + short - 10_000 - dataset.demand.street_short_bps;
+    let reading = if reading < 0 && !rival_has_spare(world, dataset, firm, product) {
+        0
+    } else {
+        reading
+    };
+    (10_000 + reading * rules.service_slope_pct / 100)
+        .clamp(rules.service_min_bps, rules.service_max_bps)
+}
+
+/// Whether another operative firm with an operating plant making the product in one of the
+/// regions this seller serves sold under the service balance share of its capacity last week.
+fn rival_has_spare(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> bool {
+    let id = &dataset.products[product as usize].id;
+    let Some(entity) = world.firms.get(firm) else {
+        return false;
+    };
+    let mut regions: std::collections::BTreeSet<u8> = Default::default();
+    for plant in entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|plant| plant.is_operating() && dataset.recipes[plant.recipe as usize].makes(id))
+    {
+        regions.extend(crate::economy::markets::supply_regions(
+            dataset,
+            plant.region,
+            product,
+        ));
+    }
+    world
+        .firms
+        .iter()
+        .filter(|(handle, rival)| *handle != firm && rival.operative())
+        .any(|(handle, rival)| {
+            let here = rival
+                .facilities
+                .iter()
+                .filter_map(|h| world.facilities.get(*h))
+                .any(|plant| {
+                    plant.is_operating()
+                        && regions.contains(&plant.region)
+                        && dataset.recipes[plant.recipe as usize].makes(id)
+                });
+            if !here {
+                return false;
+            }
+            let capacity = service_capacity(world, dataset, handle, product);
+            capacity > 0
+                && weekly_sold(world, handle, product).saturating_mul(10_000) / capacity
+                    < dataset.markets.service_balance_bps
+        })
 }
 
 /// Whole lots of a good households across the corridor found no seller for last week, and the
