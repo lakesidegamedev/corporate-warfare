@@ -188,6 +188,22 @@ pub fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         }
         return Some(service_wanted_bps_with(&dataset.markets, used_bps));
     }
+    // Under the demand rules a shop prices like a service: on the share of its shelves'
+    // capacity that sold, plus the households it serves that went without, so its price reads
+    // the street (shortage and local competition), not only its own shelf cover.
+    if dataset.demand.retail_reads_street
+        && dataset.products[product as usize].kind.is_consumer_goods()
+    {
+        let capacity = service_capacity(world, dataset, firm, product);
+        if capacity > 0 {
+            let mut used_bps = (sold.saturating_mul(10_000) / capacity).clamp(0, 10_000);
+            let (unmet, wanted) = seller_household_unmet(world, dataset, firm, product);
+            if wanted > 0 && unmet > 0 {
+                used_bps = used_bps.saturating_add(unmet.saturating_mul(10_000) / wanted);
+            }
+            return Some(service_wanted_bps_with(&dataset.markets, used_bps));
+        }
+    }
     let stock = free_stock(world, dataset, firm, product);
     if sold <= 0 {
         return (stock > 0).then_some(7_000);
