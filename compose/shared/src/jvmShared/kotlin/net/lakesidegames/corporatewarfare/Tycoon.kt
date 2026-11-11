@@ -64,8 +64,10 @@ import uniffi.cw_ffi.RivalRowDto
  */
 enum class Place(val title: String, val group: String, val key: String, val converted: Boolean) {
     Overview("Overview", "Company", "F2", true),
-    Finance("Finance", "Company", "F4", false),
-    Research("Research", "Company", "F3", false),
+    Finance("Finance", "Company", "F4", true),
+    Research("Research", "Company", "F3", true),
+    People("People", "Company", "", true),
+    Plants("Plants", "Company", "", true),
     Office("Office room", "Company", "", false),
     Goods("Goods", "Markets", "F5", true),
     Openings("Openings", "Markets", "", true),
@@ -76,8 +78,9 @@ enum class Place(val title: String, val group: String, val key: String, val conv
     Raids("Raids", "Rivals", "", true),
     Paper("The paper", "World", "F8", false),
     Inbox("Letters", "World", "", false),
-    Portfolio("Portfolio", "You", "F7", false),
-    Hall("Hall of Careers", "You", "F9", false),
+    Portfolio("Portfolio", "You", "F7", true),
+    Career("Career", "You", "", true),
+    Hall("Hall of Careers", "You", "F9", true),
 }
 
 /** Switch the 2.0 shell on for a session: CW_UI=2.0 in the environment or -Dcw.ui=2.0. */
@@ -184,15 +187,18 @@ private fun PlaceContent(store: GameStore, place: Place, leaguePick: ULong?, onL
         Place.Auctions -> AuctionsScreen(store)
         Place.League -> LeagueScreen(store, leaguePick, onLeaguePick)
         Place.Raids -> RaidsScreen(store, openRival)
-        Place.Finance -> DesktopStats(store)
-        Place.Research -> Box(Modifier.fillMaxSize().padding(10.dp)) { ResearchScreen(store) }
+        Place.Finance -> FinanceScreen(store)
+        Place.Research -> ResearchGridScreen(store)
+        Place.People -> PeopleScreen(store)
+        Place.Plants -> PlantsScreen(store)
+        Place.Career -> CareerScreen(store)
         Place.Office -> DesktopOffice(store) { page -> Place.entries.firstOrNull { it.name == page.name }?.let(open) ?: open(Place.Overview) }
         Place.Exchange -> DesktopMarkets(store)
         Place.Map -> DesktopMap(store)
         Place.Paper -> PaperScreen(store)
         Place.Inbox -> DesktopInbox(store)
-        Place.Portfolio -> DesktopPortfolio(store)
-        Place.Hall -> HallScreen(store)
+        Place.Portfolio -> PortfolioScreen(store)
+        Place.Hall -> HallGridScreen(store)
     }
 }
 
