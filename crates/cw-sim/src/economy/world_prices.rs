@@ -271,6 +271,12 @@ pub fn texture_at(seed: u64, texture: &cw_data::balance::FamilyTexture, week: i6
     (bps.clamp(-limit, limit), top_week)
 }
 
+/// The seed a world's texture is drawn from: the game's seed and its scenario's start year, so
+/// the same seed in two scenarios does not play the same weather.
+pub fn texture_seed(world: &World) -> u64 {
+    world.seed ^ mix64(world.start_year as u64)
+}
+
 /// A named world event behind a family's price this week, if its disturbance is past the
 /// content's threshold: the push in basis points and the cause to print.
 pub fn world_event<'a>(
@@ -283,7 +289,7 @@ pub fn world_event<'a>(
         return None;
     }
     let texture = rules.families.iter().find(|t| t.family == family.key)?;
-    let (bps, top_week) = texture_at(world.seed, texture, world.tick.0 as i64);
+    let (bps, top_week) = texture_at(texture_seed(world), texture, world.tick.0 as i64);
     if bps.abs() < rules.named_bps {
         return None;
     }
@@ -295,7 +301,7 @@ pub fn world_event<'a>(
     if causes.is_empty() {
         return None;
     }
-    let pick = mix64(world.seed ^ fnv(&family.key) ^ top_week as u64) as usize % causes.len();
+    let pick = mix64(texture_seed(world) ^ fnv(&family.key) ^ top_week as u64) as usize % causes.len();
     Some((bps, causes[pick].as_str()))
 }
 
@@ -431,7 +437,7 @@ pub fn weekly(world: &mut World, dataset: &cw_data::Dataset) {
             .find(|t| t.family == family.key && t.swing_bps > 0)
             .filter(|_| family.mode == PriceMode::HistoricalVariance);
         let textured = rule.is_some();
-        let texture = rule.map(|t| texture_at(world.seed, t, week).0).unwrap_or(0);
+        let texture = rule.map(|t| texture_at(texture_seed(world), t, week).0).unwrap_or(0);
         let path_bps = match family.mode {
             PriceMode::Historical => interpolate_bps(&family.anchors, week),
             PriceMode::HistoricalVariance => {

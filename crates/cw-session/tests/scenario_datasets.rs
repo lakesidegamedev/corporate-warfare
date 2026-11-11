@@ -158,15 +158,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "0d16e65b308f42543af2e6407e65740ce9c5f4e74a636e9cc65df065753a2d1b",
+            "a584fbf32db8cbb7697208730f09f3779fde0f2b03ac36e2a39d84f0a239dcfa",
         ),
         (
             2,
-            "2025711a9298db9b48e53e37cb0d95bed5075a8082aeed3d643093b4f9fcbed7",
+            "d052a6a5ef2fcb0b1ae1dc7281bf9cf0c7dabe00d28953c1906778de3ea089be",
         ),
         (
             3,
-            "0e41aab79455129031330c80338d3b5d4cdb930f72ff20eced8e96b8211c4e66",
+            "c8ac1a768c5dc6267774893afa40981b8c41879a93b553f6f644e6d81597cf46",
         ),
     ];
     for (seed, hash) in pins {
@@ -178,7 +178,7 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "89320f4a76a0d5c58904f294249e97896417a18f9dbfc192dae01610b46f2e2c"
+        "11a8c65e949e39eedffac629d5a6cb0a6b2c7c788db1f16041ab1f59bcc10fe9"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
