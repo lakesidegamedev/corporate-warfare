@@ -1305,7 +1305,58 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
                 budget_cents: category_budget,
                 brand_sensitive: true,
             }];
-            let fills = allocate(reference, &offers, &requests);
+            let mut fills = allocate(reference, &offers, &requests);
+            if dataset.demand.sell_within_room {
+                // Households whose first choice ran out turn to the sellers that still have stock,
+                // as far as their budget goes, so a new seller with stock wins the buyers the
+                // others could not serve. Two more rounds settle any market in practice.
+                for _ in 0..2 {
+                    let mut left_offers = offers.clone();
+                    let mut cost = 0i64;
+                    for (_, seller, qty) in &fills {
+                        if let Some(offer) = left_offers.iter_mut().find(|o| o.seller == *seller) {
+                            offer.qty -= qty;
+                            cost += ceil_cost(offer.price_cents, *qty);
+                        }
+                    }
+                    let filled: i64 = fills.iter().map(|(_, _, qty)| *qty).sum();
+                    let left_qty = requested - filled;
+                    let left_budget = category_budget - cost;
+                    left_offers.retain(|o| o.qty > 0);
+                    if left_qty <= 0 || left_budget <= 0 || left_offers.is_empty() {
+                        break;
+                    }
+                    let more = allocate(
+                        reference,
+                        &left_offers,
+                        &[Request {
+                            buyer: u64::MAX,
+                            qty: left_qty,
+                            budget_cents: left_budget,
+                            brand_sensitive: true,
+                        }],
+                    );
+                    if more.iter().all(|(_, _, qty)| *qty <= 0) {
+                        break;
+                    }
+                    fills.extend(more);
+                }
+                let filled: i64 = fills.iter().map(|(_, _, qty)| *qty).sum();
+                world.regions[region_index]
+                    .households
+                    .unmet_milli
+                    .insert(product, (requested - filled).max(0));
+                grow_latent(
+                    world,
+                    dataset,
+                    region_index,
+                    product,
+                    requested,
+                    filled,
+                    category_budget,
+                    reference,
+                );
+            }
             let spent = settle_household_fills(
                 world,
                 product,
@@ -1337,6 +1388,52 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
             }
         }
     }
+}
+
+/// Households in a well served market move spending from the background economy to the named
+/// sellers that serve them: while what they went without is under the content's share of what
+/// they asked for, the lots they ask for grow toward what their budget for the category buys,
+/// a quarter's growth spread over its weeks. A market left short does not grow.
+#[allow(clippy::too_many_arguments)]
+fn grow_latent(
+    world: &mut World,
+    dataset: &Dataset,
+    region: usize,
+    product: u16,
+    requested: i64,
+    filled: i64,
+    category_budget: i64,
+    reference: i64,
+) {
+    let rules = &dataset.demand;
+    if rules.latent_growth_bps <= 0 || requested <= 0 {
+        return;
+    }
+    let unmet = (requested - filled).max(0);
+    if unmet * 10_000 >= requested * rules.latent_content_bps {
+        return;
+    }
+    let households = &mut world.regions[region].households;
+    let Some(base) = households.baseline_lots.get(&product).copied() else {
+        return;
+    };
+    // What the category budget buys at the reference price: the most households could ever
+    // move to named sellers.
+    let ceiling = category_budget / reference.max(1);
+    if base <= 0 || base >= ceiling {
+        return;
+    }
+    // A quarter's growth over thirteen weeks, carried in the seeded weekly rounding so a small
+    // market still grows on average: the remainder is kept by rounding up in the weeks the
+    // tick says, which is deterministic.
+    let step_milli = base * 1_000 * rules.latent_growth_bps / 10_000 / 13;
+    let whole = step_milli / 1_000;
+    let part = step_milli % 1_000;
+    let extra = i64::from(
+        (world.tick.0 as i64 * 389 + region as i64 * 97 + product as i64 * 31) % 1_000 < part,
+    );
+    let grown = (base + whole + extra).min(ceiling);
+    households.baseline_lots.insert(product, grown);
 }
 
 fn source_id(source: OfferSource) -> u64 {

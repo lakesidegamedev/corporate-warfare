@@ -326,12 +326,15 @@ fn build(
             .filter(|p| p.is_operating())
             .map(|p| p.last_made(dataset, id).0)
             .sum();
-        // The division's share of what the firm makes of this good here.
+        // A sale is booked in the market where the buyer stands: a service sold across the
+        // state, or a good shipped to a buyer in another region, lands outside the plant's own
+        // region. The division takes its share of everything the firm sold of this good, in
+        // proportion to what it made of the firm's whole output of it.
         let firm_made: i64 = entity
             .facilities
             .iter()
             .filter_map(|h| world.facilities.get(*h))
-            .filter(|p| p.region == region && p.is_operating())
+            .filter(|p| p.is_operating())
             .map(|p| p.last_made(dataset, id).0)
             .sum();
         let share_bps = if firm_made > 0 {
@@ -339,10 +342,13 @@ fn build(
         } else {
             0
         };
-        let sold_lots = entity
-            .last_closed_sales()
-            .and_then(|w| w.get(&(region, code)).copied())
-            .unwrap_or(0);
+        let sold_in = |week: &std::collections::BTreeMap<(u8, u16), i64>| -> i64 {
+            week.iter()
+                .filter(|((_, product), _)| *product == code)
+                .map(|(_, lots)| *lots)
+                .sum()
+        };
+        let sold_lots = entity.last_closed_sales().map(sold_in).unwrap_or(0);
         let sold_milli = sold_lots * 1_000 * share_bps / 10_000;
         let price = pricing::posture_price(world, dataset, firm, code)
             .or_else(|| entity.policies.prices.get(&code).copied())
@@ -350,7 +356,7 @@ fn build(
             .max(1);
         revenue += sold_milli * price / 1_000;
         for (i, week) in entity.sales_history.iter().enumerate().filter(|_| detail) {
-            let lots = week.get(&(region, code)).copied().unwrap_or(0);
+            let lots = sold_in(week);
             let milli = lots * 1_000 * share_bps / 10_000;
             if trend_units.len() <= i {
                 trend_units.push((0, 0));

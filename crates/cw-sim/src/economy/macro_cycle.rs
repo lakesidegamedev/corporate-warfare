@@ -151,7 +151,7 @@ pub fn weekly(world: &mut World, dataset: &Dataset) {
     world.macro_state.policy_rate_bps = new_rate;
     world.macro_state.real_growth_bps = growth;
     apply_nominal_drift(world, dataset, new_inflation);
-    apply_demand(world, gap);
+    apply_demand(world, dataset, gap);
 
     // Tell the player when the economy turns: the same cards the old regime draw used.
     if phase != previous {
@@ -321,18 +321,91 @@ pub fn opening_wage_gap_bps(dataset: &Dataset, week: u32) -> i32 {
     (gap * left / cw_data::opening_macro::WAGE_FADE_WEEKS as i64) as i32
 }
 
-/// Household demand everywhere rises and falls with the output gap: a 1 percent gap moves
-/// demand 1.2 percent.
-fn apply_demand(world: &mut World, gap: i32) {
+/// Demand everywhere rises and falls with the output gap, by product (content
+/// `demand.cycle_elasticity`; 1.2 percent per percent of gap for anything not listed). Goods
+/// bought to invest also follow credit: built-up credit lifts orders, debt being paid off after a
+/// bust cuts them. A timeline event's own demand modifier multiplies on top of this one.
+fn apply_demand(world: &mut World, dataset: &Dataset, gap: i32) {
     let until = Tick(world.tick.0 + 2);
+    let rules = &dataset.demand;
+    let default = (gap as i64 * rules.cycle_default_bps / 10_000) as i32;
+    // Each listed product's own swing, carried as a modifier on top of the default one so the
+    // product's total is its own elasticity times the gap.
+    let mut own: Vec<(u16, i32)> = Vec::new();
+    let credit = {
+        let c = &world.macro_state.cycle;
+        (c.credit_bps - c.deleveraging_bps - CREDIT_NORMAL_BPS) as i64
+    };
+    let ids: std::collections::BTreeSet<&String> = rules
+        .cycle_elasticity
+        .iter()
+        .map(|(id, _)| id)
+        .chain(rules.investment_goods.iter())
+        .collect();
+    for id in ids {
+        let Some(product) = dataset.product_index.get(id).copied() else {
+            continue;
+        };
+        let total = cycle_demand_bps(world, dataset, product, gap, credit);
+        let extra = ((10_000 + total) * 10_000 / (10_000 + default as i64).max(1) - 10_000) as i32;
+        own.push((product, extra));
+    }
     for region in &mut world.regions {
         region
             .demand_modifiers
             .retain(|(cause, _, _, _)| cause != "macro_cycle");
         region
             .demand_modifiers
-            .push(("macro_cycle".to_owned(), None, gap * 12 / 10, until));
+            .push(("macro_cycle".to_owned(), None, default, until));
+        for (product, extra) in &own {
+            if *extra != 0 {
+                region.demand_modifiers.push((
+                    "macro_cycle".to_owned(),
+                    Some(*product),
+                    *extra,
+                    until,
+                ));
+            }
+        }
     }
+}
+
+/// Credit conditions counted as normal: neither lifting nor cutting investment orders.
+const CREDIT_NORMAL_BPS: i32 = 450;
+
+/// How far the business cycle moves one product's demand this week, in basis points: its
+/// elasticity times the output gap, plus, for goods bought to invest, the credit term. Bounded
+/// to thirty percent either way.
+fn cycle_demand_bps(world: &World, dataset: &Dataset, product: u16, gap: i32, credit: i64) -> i64 {
+    let rules = &dataset.demand;
+    let id = &dataset.products[product as usize].id;
+    let elasticity = rules
+        .cycle_elasticity
+        .iter()
+        .find(|(p, _)| p == id)
+        .map_or(rules.cycle_default_bps, |(_, bps)| *bps);
+    let investment = if rules.investment_goods.contains(id) {
+        credit * rules.credit_elasticity_bps / 10_000
+    } else {
+        0
+    };
+    let _ = world;
+    (gap as i64 * elasticity / 10_000 + investment).clamp(-3_000, 3_000)
+}
+
+/// What the business cycle is doing to one product's demand now, in basis points, and the
+/// phase: for the price reason ("recession: orders for steel are down 14 percent").
+pub fn cycle_demand(
+    world: &World,
+    dataset: &Dataset,
+    product: u16,
+) -> (crate::state::CyclePhase, i64) {
+    let c = &world.macro_state.cycle;
+    let credit = (c.credit_bps - c.deleveraging_bps - CREDIT_NORMAL_BPS) as i64;
+    (
+        c.phase,
+        cycle_demand_bps(world, dataset, product, c.output_gap_bps, credit),
+    )
 }
 
 #[cfg(test)]

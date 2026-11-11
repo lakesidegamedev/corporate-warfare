@@ -2533,7 +2533,8 @@ fn new_block_contribution(
         |m| &mut m.new_block_contribution,
         (home, recipe, region),
         || {
-            let fill = cw_sim::economy::capacity::input_fill_bps(
+            let fill = cw_sim::economy::capacity::sell_bps(
+                world,
                 dataset,
                 &input_rooms(world, dataset),
                 recipe,

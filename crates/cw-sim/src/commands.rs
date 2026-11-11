@@ -3223,10 +3223,15 @@ pub(crate) fn blank_firm(
         intercompany_inventory: Default::default(),
         storage: Default::default(),
     };
+    // A new company offers at least the region's going wage: wages drift with inflation, and an
+    // offer under four fifths of the going wage hires nobody, so a plant founded on the catalogue
+    // wage alone would open with no staff and make nothing.
     for tier in 0..3 {
-        firm.policies.wage_offer[tier] = dataset.baseline_weekly_wage_cents[tier]
+        let catalogue = dataset.baseline_weekly_wage_cents[tier]
             * world.regions[region as usize].wage_index_bps as i64
             / 10_000;
+        let going = world.regions[region as usize].labour[tier].prevailing_wage_cents;
+        firm.policies.wage_offer[tier] = catalogue.max(going);
     }
     firm
 }

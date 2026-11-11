@@ -100,13 +100,17 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// weeks ahead (the warning joined the dataset hash; the world gained the list of campaigns in
 /// progress, save schema 4; rivals answer a campaign with marketing and weigh the escrow) and a
 /// company's only block became far harder to take. A save that names the pre-warning hash loads.
+/// Every pin moved again in 2.0 when the demand rules joined the dataset hash (openings count
+/// only what their room, inputs and labour allow, households turn to sellers with stock left and
+/// grow toward their budget where served, demand follows the cycle by product) and a new company began offering at least the going wage. A save that names the
+/// pre-demand hash still loads.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
     assert_eq!(data.scenario_id, "great-lakes-2000");
     assert_eq!(
         data.hash,
-        "fd94415cce08ad029cc5de3adff229e750f2e2a89e27c606d8856e0a596f21c4"
+        "3856624d8fe911499f1f62988f0f25b533c4b455404c70bfb0095aee9c5cf110"
     );
     // The hash before market rules joined it (the 2.0 round one pin) still finds this dataset,
     // so a save that names it loads.
@@ -132,18 +136,26 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
         cw_data::Dataset::for_hash(pre_warning).unwrap().hash,
         data.hash
     );
+    // The hash before the demand rules joined it (the 2.0 raid warning pin) still finds this
+    // dataset.
+    let before_demand = "fd94415cce08ad029cc5de3adff229e750f2e2a89e27c606d8856e0a596f21c4";
+    assert_eq!(data.pre_demand_hash(), before_demand);
+    assert_eq!(
+        cw_data::Dataset::for_hash(before_demand).unwrap().hash,
+        data.hash
+    );
     let pins = [
         (
             1u64,
-            "1aaa8ab44757bc1624994f133868c83fdb3247e0c267af8769fa9a2e546f98e7",
+            "908023f9298ad126785f83facdebba1f329375075177ecdc6edc3fbd29532f4d",
         ),
         (
             2,
-            "16ae0f4e39f489a90a1a880ece203c0e40fdba76be01560cf301f3d9cf04fa00",
+            "6f19794d0e883b46497cde0306c06cff4a47b7b26d166bf57b11e102be102b52",
         ),
         (
             3,
-            "55750cb5e5546ccf852cb3901bd639b28a30023d2af49c52ef8508b38b920135",
+            "c939a4c43b39de8df5c34887023370fb3fca65912e87204d111624319b7b5839",
         ),
     ];
     for (seed, hash) in pins {
@@ -155,12 +167,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "07d5d58ebc39cd318fd786811d2f67be10b888daa5357a736246bbf44274c070"
+        "9b5c3cf5df7b4798b6f56aa68c52cd05876cbb56afd82e6a2558f1980e6da5b6"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "5118758f49fdc2866d4aea346b283f8b133f9426bc0478c3304f4cbc12e6624a"
+        "d6df1237f2420215d49153ed8e3e181638783be41cb5897cc944f0bf445e7a5e"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
