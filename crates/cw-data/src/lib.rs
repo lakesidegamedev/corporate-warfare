@@ -288,6 +288,7 @@ impl Dataset {
                     || dataset.legacy_hash() == hash
                     || dataset.pre_markets_hashes().iter().any(|old| old == hash)
                     || dataset.pre_capacity_hash() == hash
+                    || dataset.pre_raid_warning_hash() == hash
             })
     }
 
@@ -946,6 +947,15 @@ impl Dataset {
     pub fn pre_capacity_hash(&self) -> String {
         let mut plain = self.clone();
         plain.capacity = balance::CapacityRules::default();
+        plain.hash_with(self.cast.len(), true)
+    }
+
+    /// The hash this dataset had before raids were announced ahead (2.0, after the capacity
+    /// rules): the same content with no raid warning. A save written then names it and loads
+    /// against the current dataset, where its next raid is announced.
+    pub fn pre_raid_warning_hash(&self) -> String {
+        let mut plain = self.clone();
+        plain.capacity.raid_warning_weeks = 0;
         plain.hash_with(self.cast.len(), true)
     }
 

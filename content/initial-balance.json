@@ -1795,6 +1795,6 @@
     "close_after_loss_weeks": 26,
     "payout_buffer_weeks": 26,
     "payout_share_bps": 5000,
-    "raid_warning_weeks": 0
+    "raid_warning_weeks": 4
   }
 }

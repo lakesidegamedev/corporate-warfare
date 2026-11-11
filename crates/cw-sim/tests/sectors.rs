@@ -263,7 +263,18 @@ fn a_market_raid_prices_its_stake_and_conserves_blocks_and_money() {
     // two thirds, scaled down by the stake (one fifth of the division costs 17 percent of it).
     assert_eq!(quote.blocks_at_stake, 1);
     assert_eq!(quote.stake_bps, 2_000);
-    assert_eq!(quote.chance_bps, 5_532);
+    // Then the whole-business rule (2.0): the defender's company runs 12 blocks (this farm's 5
+    // and 7 elsewhere), so one block is s = 833 bps of it and the chance keeps
+    // 1 - 0.0833 x (1 - 0.6666) of 5,532: 5,532 x 9,723 / 10,000 = 5,378.
+    let whole: i64 = world
+        .firm(defender)
+        .unwrap()
+        .facilities
+        .iter()
+        .map(|h| world.facilities.get(*h).unwrap().blocks as i64)
+        .sum();
+    assert_eq!(whole, 12);
+    assert_eq!(quote.chance_bps, 5_378);
     assert_eq!(
         quote.surcharge_cents, 0,
         "a first raid on a rival carries no surcharge"

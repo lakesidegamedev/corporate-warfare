@@ -14,7 +14,7 @@ use cw_core::ledger::{Account, Txn};
 use cw_data::Dataset;
 
 use crate::economy::operations::industry_index;
-use crate::state::{FacilityStatus, RaidRecord, World};
+use crate::state::{FacilityStatus, RaidCampaign, RaidRecord, World};
 
 /// The most blocks one build order may add. Past `FAST_BLOCKS` in flight, cost and lead time rise.
 pub const MAX_BLOCKS_PER_ORDER: u8 = u8::MAX;
@@ -627,14 +627,261 @@ pub fn raid_exposure(
     };
     let chance = (base_chance * (10_000 - taken_bps as i128 * RAID_STAKE_DRAG_BPS as i128 / 10_000)
         / 10_000) as i32;
+    let whole_bps = whole_business_share_bps(world, defender, at_stake);
     RaidQuote {
         attack_cents: attack,
         defence_cents: defence,
-        chance_bps: chance.clamp(500, 9_500),
+        chance_bps: whole_business_chance(chance, base_chance as i64, whole_bps),
         blocks_at_stake: at_stake.clamp(0, u8::MAX as i64) as u8,
         price_cents: price,
         stake_bps: taken_bps.clamp(0, 10_000) as i32,
         surcharge_cents: 0,
+    }
+}
+
+/// Share of the defender's whole business, in basis points of all its blocks, that `at_stake`
+/// blocks are.
+fn whole_business_share_bps(world: &World, defender: Handle, at_stake: i64) -> i64 {
+    let total: i64 = world
+        .firms
+        .get(defender)
+        .map(|firm| {
+            firm.facilities
+                .iter()
+                .filter_map(|h| world.facilities.get(*h))
+                .map(|plant| plant.blocks as i64)
+                .sum()
+        })
+        .unwrap_or(0);
+    if total <= 0 {
+        return 0;
+    }
+    (at_stake.max(0) * 10_000 / total).clamp(0, 10_000)
+}
+
+/// The chance after the stake in the defender's whole business is weighed (2.0).
+///
+/// With `c` the chance after the division stake, `b` the base chance (attack over attack plus
+/// defence) and `s` the share of the defender's whole business at stake, all as fractions:
+///
+/// `chance = c x (1 - s x (1 - b))`, with a floor of `5 percent x (1 - s)` and a cap of 95 percent.
+///
+/// A small part of a large company barely moves (s near 0 keeps c and the old 5 percent floor).
+/// A company's only block (s = 1) is taken only as often as the attack would win twice, c x b,
+/// with no floor: a long shot stays a long shot. Example: attack three times the defence, b =
+/// 75 percent, one block division so c = 75 x 0.15 = 11.25 percent. A large company: about 11
+/// percent as before. A company whose only block it is: 11.25 x 0.75 = 8.44 percent. At even
+/// strength (b = 50 percent, c = 7.5 percent) the only block falls 3.75 percent of the time,
+/// where the old floor made it 7.5.
+pub fn whole_business_chance(chance_bps: i32, base_bps: i64, whole_bps: i64) -> i32 {
+    let s = whole_bps.clamp(0, 10_000) as i128;
+    let b = base_bps.clamp(0, 10_000) as i128;
+    let scaled = chance_bps as i128 * (10_000 - s * (10_000 - b) / 10_000) / 10_000;
+    let floor = 500 * (10_000 - s) / 10_000;
+    (scaled as i64).clamp(floor as i64, 9_500) as i32
+}
+
+/// Weeks between a raid's announcement and its resolution, from content. Zero resolves at once.
+pub fn raid_warning_weeks(dataset: &Dataset) -> u32 {
+    dataset.capacity.raid_warning_weeks
+}
+
+/// The checks a raid must pass when it is launched, announced or not.
+fn raid_launch_checks(
+    world: &World,
+    dataset: &Dataset,
+    attacker: Handle,
+    defender: Handle,
+    region: u8,
+    industry: u8,
+    budget_cents: i64,
+) -> Result<(), DomainError> {
+    use cw_core::error::{ArithmeticFault, DomainError as E};
+    if budget_cents <= 0 {
+        return Err(E::Arithmetic {
+            detail: ArithmeticFault::OutOfRange,
+        });
+    }
+    if attacker == defender || crate::economy::ownership::same_group(world, attacker, defender) {
+        return Err(E::WrongPhase {
+            expected: "rival_firm",
+            actual: "own_group",
+        });
+    }
+    if division_plants(world, dataset, attacker, region, industry).is_empty() {
+        return Err(E::WrongPhase {
+            expected: "own_division",
+            actual: "no_division",
+        });
+    }
+    if world.tick.0 < raid_open_tick(world, dataset, defender, region, industry) {
+        return Err(E::WrongPhase {
+            expected: "established_division",
+            actual: "opening_grace",
+        });
+    }
+    let defending = division_plants(world, dataset, defender, region, industry);
+    if division_blocks_and_book(world, &defending).0 < 1 {
+        return Err(E::WrongPhase {
+            expected: "rival_division",
+            actual: "too_small",
+        });
+    }
+    Ok(())
+}
+
+/// Announce a raid campaign (2.0): the checks of a raid today, the budget moved into the
+/// raider's restricted cash, and the campaign recorded to resolve `raid_warning_weeks` from now.
+/// One campaign per raider against the same division at a time.
+pub fn announce_raid(
+    world: &mut World,
+    dataset: &Dataset,
+    attacker: Handle,
+    defender: Handle,
+    region: u8,
+    industry: u8,
+    budget_cents: i64,
+) -> Result<RaidCampaign, DomainError> {
+    use cw_core::error::DomainError as E;
+    raid_launch_checks(
+        world,
+        dataset,
+        attacker,
+        defender,
+        region,
+        industry,
+        budget_cents,
+    )?;
+    if world.raids.campaigns.iter().any(|c| {
+        c.attacker == attacker && c.defender == defender && c.region == region && c.industry == industry
+    }) {
+        return Err(E::WrongPhase {
+            expected: "no_campaign",
+            actual: "campaign_running",
+        });
+    }
+    let cash = world
+        .firms
+        .get(attacker)
+        .map(|f| f.book.cash())
+        .unwrap_or(0);
+    if cash < budget_cents {
+        return Err(E::InsufficientCash {
+            entity: attacker.0,
+            required: budget_cents,
+            available: cash,
+        });
+    }
+    if let Some(entity) = world.firms.get_mut(attacker) {
+        let _ = entity.book.commit(
+            world.tick,
+            Txn::new()
+                .credit(Account::Cash, budget_cents, "raid campaign escrow")
+                .debit(Account::RestrictedCash, budget_cents, "raid campaign escrow"),
+        );
+    }
+    let campaign = RaidCampaign {
+        attacker,
+        defender,
+        region,
+        industry,
+        budget_cents,
+        announced: world.tick.0,
+        resolves: world.tick.0 + raid_warning_weeks(dataset).max(1),
+    };
+    world.raids.campaigns.push(campaign.clone());
+    Ok(campaign)
+}
+
+/// Take a campaign's escrow out of restricted cash and spend it on the campaign's advertising.
+/// Returns what was spent (less if a liquidation already released the escrow).
+fn spend_escrow(world: &mut World, dataset: &Dataset, campaign: &RaidCampaign) -> i64 {
+    let held = world
+        .firms
+        .get(campaign.attacker)
+        .map(|f| f.book.balance(Account::RestrictedCash).max(0))
+        .unwrap_or(0);
+    let amount = campaign.budget_cents.min(held);
+    if amount <= 0 {
+        return 0;
+    }
+    if let Some(entity) = world.firms.get_mut(campaign.attacker) {
+        let _ = entity.book.commit(
+            world.tick,
+            Txn::new()
+                .debit(Account::Cash, amount, "raid campaign escrow released")
+                .credit(Account::RestrictedCash, amount, "raid campaign escrow released"),
+        );
+    }
+    crate::economy::research::buy_advertising(
+        world,
+        dataset,
+        campaign.attacker,
+        amount,
+        "market raid",
+    );
+    amount
+}
+
+/// Give up a campaign before it resolves. The escrowed budget is lost all the same: it is spent
+/// on the advertising already booked. No surcharge or purchase follows.
+pub fn abandon_raid(
+    world: &mut World,
+    dataset: &Dataset,
+    attacker: Handle,
+    defender: Handle,
+    region: u8,
+    industry: u8,
+) -> Result<RaidCampaign, DomainError> {
+    let Some(at) = world.raids.campaigns.iter().position(|c| {
+        c.attacker == attacker && c.defender == defender && c.region == region && c.industry == industry
+    }) else {
+        return Err(DomainError::WrongPhase {
+            expected: "campaign_running",
+            actual: "no_campaign",
+        });
+    };
+    let campaign = world.raids.campaigns.remove(at);
+    spend_escrow(world, dataset, &campaign);
+    Ok(campaign)
+}
+
+/// Resolve every campaign due this week, oldest first, each against the defence at this moment.
+/// A campaign whose raider or target division is gone lapses: the budget is spent, nothing is
+/// taken. A raider that cannot pay the purchase price and surcharge when it falls due loses.
+pub fn resolve_raid_campaigns(world: &mut World, dataset: &Dataset) {
+    if world.raids.campaigns.is_empty() {
+        return;
+    }
+    let now = world.tick.0;
+    let (due, keep): (Vec<RaidCampaign>, Vec<RaidCampaign>) = std::mem::take(&mut world.raids.campaigns)
+        .into_iter()
+        .partition(|c| c.resolves <= now);
+    world.raids.campaigns = keep;
+    for campaign in due {
+        let live = |h: Handle| world.firms.get(h).is_some_and(|f| f.operative());
+        let viable = live(campaign.attacker)
+            && live(campaign.defender)
+            && !division_plants(world, dataset, campaign.attacker, campaign.region, campaign.industry)
+                .is_empty()
+            && division_blocks_and_book(
+                world,
+                &division_plants(world, dataset, campaign.defender, campaign.region, campaign.industry),
+            )
+            .0 >= 1;
+        let spent = spend_escrow(world, dataset, &campaign);
+        if !viable || spent <= 0 {
+            continue;
+        }
+        let _ = settle_raid(
+            world,
+            dataset,
+            campaign.attacker,
+            campaign.defender,
+            campaign.region,
+            campaign.industry,
+            spent,
+        );
     }
 }
 
@@ -650,38 +897,16 @@ pub fn raid(
     industry: u8,
     budget_cents: i64,
 ) -> Result<RaidRecord, DomainError> {
-    use cw_core::error::{ArithmeticFault, DomainError as E};
-    if budget_cents <= 0 {
-        return Err(E::Arithmetic {
-            detail: ArithmeticFault::OutOfRange,
-        });
-    }
-    if attacker == defender || crate::economy::ownership::same_group(world, attacker, defender) {
-        return Err(E::WrongPhase {
-            expected: "rival_firm",
-            actual: "own_group",
-        });
-    }
-    let own = division_plants(world, dataset, attacker, region, industry);
-    let Some(target_plant) = own.first().copied() else {
-        return Err(E::WrongPhase {
-            expected: "own_division",
-            actual: "no_division",
-        });
-    };
-    if world.tick.0 < raid_open_tick(world, dataset, defender, region, industry) {
-        return Err(E::WrongPhase {
-            expected: "established_division",
-            actual: "opening_grace",
-        });
-    }
-    let defending = division_plants(world, dataset, defender, region, industry);
-    if division_blocks_and_book(world, &defending).0 < 1 {
-        return Err(E::WrongPhase {
-            expected: "rival_division",
-            actual: "too_small",
-        });
-    }
+    use cw_core::error::DomainError as E;
+    raid_launch_checks(
+        world,
+        dataset,
+        attacker,
+        defender,
+        region,
+        industry,
+        budget_cents,
+    )?;
     let quote = raid_quote(
         world,
         dataset,
@@ -711,13 +936,52 @@ pub fn raid(
         budget_cents,
         "market raid",
     );
-    crate::economy::structure::charge_raid_surcharge(world, attacker, quote.surcharge_cents);
+    settle_raid(world, dataset, attacker, defender, region, industry, budget_cents)
+}
+
+/// Decide a raid whose budget has already been spent on advertising: surcharge, roll, and on
+/// success the purchase of the blocks at stake. A raider short of the price and surcharge loses.
+fn settle_raid(
+    world: &mut World,
+    dataset: &Dataset,
+    attacker: Handle,
+    defender: Handle,
+    region: u8,
+    industry: u8,
+    budget_cents: i64,
+) -> Result<RaidRecord, DomainError> {
+    let own = division_plants(world, dataset, attacker, region, industry);
+    let Some(target_plant) = own.first().copied() else {
+        return Err(DomainError::WrongPhase {
+            expected: "own_division",
+            actual: "no_division",
+        });
+    };
+    let defending = division_plants(world, dataset, defender, region, industry);
+    let quote = raid_quote(
+        world,
+        dataset,
+        attacker,
+        defender,
+        region,
+        industry,
+        budget_cents,
+    );
+    let cash = world
+        .firms
+        .get(attacker)
+        .map(|f| f.book.cash())
+        .unwrap_or(0);
+    let can_pay = cash >= quote.price_cents + quote.surcharge_cents;
+    if can_pay {
+        crate::economy::structure::charge_raid_surcharge(world, attacker, quote.surcharge_cents);
+    }
     let mut rng = cw_core::rng::Rng::entity_stream(
         world.seed ^ ((world.tick.0 as u64) << 32) ^ ((region as u64) << 8) ^ industry as u64,
         cw_core::rng::TAG_RAID,
         attacker,
     );
-    let success = quote.blocks_at_stake > 0 && rng.chance_bps(quote.chance_bps);
+    let success = can_pay && quote.blocks_at_stake > 0 && rng.chance_bps(quote.chance_bps);
     let mut record = RaidRecord {
         tick: world.tick.0,
         attacker,

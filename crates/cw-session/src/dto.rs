@@ -87,6 +87,46 @@ pub struct PauseInfo {
     pub firm: Option<u64>,
 }
 
+/// Whose raid campaign this is, from the player's side.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CampaignRole {
+    /// A rival raiding one of the player's companies.
+    AgainstPlayer,
+    /// One of the player's companies raiding a rival; it can be abandoned (`AbandonRaid`).
+    ByPlayer,
+    /// One rival raiding another.
+    BetweenRivals,
+}
+
+/// A raid campaign announced and not yet decided (2.0), with today's figures. The chance and
+/// stake are what the raid would be if it were decided now; the defence measured at resolution
+/// decides it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RaidCampaignView {
+    pub role: CampaignRole,
+    pub attacker: u64,
+    pub attacker_name: String,
+    pub defender: u64,
+    pub defender_name: String,
+    pub region: u8,
+    pub region_name: String,
+    pub industry: u8,
+    pub industry_name: String,
+    pub budget_cents: i64,
+    /// The campaign budget plus a quarter of the raider's weekly marketing.
+    pub attack_cents: i64,
+    pub defence_cents: i64,
+    pub chance_bps: i32,
+    pub blocks_at_stake: u8,
+    /// Blocks in the defender's division.
+    pub division_blocks: u32,
+    /// What the raider would pay for the blocks if it wins (half of book).
+    pub price_cents: i64,
+    pub announced_week: u32,
+    pub resolves_week: u32,
+    pub weeks_left: u32,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Alert {
     pub key: String,

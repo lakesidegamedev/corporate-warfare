@@ -430,6 +430,7 @@ fn in_window(fact_week: u32, week: u32) -> bool {
 fn collect(world: &World, dataset: &Dataset, week: u32) -> Vec<Candidate> {
     let mut found: Vec<Candidate> = Vec::new();
     raids(world, dataset, week, &mut found);
+    campaigns(world, dataset, week, &mut found);
     rival_moves(world, dataset, week, &mut found);
     deals(world, dataset, week, &mut found);
     labour_and_news(world, week, &mut found);
@@ -578,6 +579,43 @@ fn raids(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) 
             yours,
             base,
             raid.budget_cents,
+        ));
+    }
+}
+
+/// Raid campaigns announced between rivals this week (2.0). A campaign on the player's own
+/// company is told by alert and letter; one by the player is the player's own news.
+fn campaigns(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) {
+    for c in world.raids.campaigns.iter().filter(|c| in_window(c.announced, week)) {
+        if player_side(world, c.attacker) || player_side(world, c.defender) {
+            continue;
+        }
+        let (Some(attacker), Some(defender)) =
+            (firm_name(world, c.attacker), firm_name(world, c.defender))
+        else {
+            continue;
+        };
+        let industry = cw_sim::state::INDUSTRY_NAMES
+            .get(c.industry as usize)
+            .copied()
+            .unwrap_or("business")
+            .to_lowercase();
+        let region = region_name(world, c.region);
+        let weeks = c.resolves.saturating_sub(c.announced);
+        out.push(candidate(
+            format!("raid-announced:{}:{}:{}", c.announced, c.attacker.0, c.defender.0),
+            c.announced,
+            &format!("{attacker} launches a raid on {defender}"),
+            format!(
+                "{attacker} has put {} behind a campaign for {defender}'s {industry} business in {region}, to be decided in {weeks} week{}.",
+                money(world, dataset, c.attacker, c.budget_cents),
+                if weeks == 1 { "" } else { "s" },
+            ),
+            "Business desk",
+            PaperLink::company(c.defender),
+            false,
+            5,
+            c.budget_cents,
         ));
     }
 }

@@ -67,6 +67,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     );
     crate::ph!("deals::weekly", crate::economy::deals::weekly(world));
     crate::ph!(
+        "sectors::resolve_raid_campaigns",
+        crate::economy::sectors::resolve_raid_campaigns(world, dataset)
+    );
+    crate::ph!(
         "governance::weekly",
         crate::economy::governance::weekly(world, dataset)
     );

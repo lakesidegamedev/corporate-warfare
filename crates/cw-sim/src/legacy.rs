@@ -9,7 +9,8 @@
 //!
 //! Layout 1: releases up to 1.8 preview 2. Layout 2 added `Facility.cut_bps`,
 //! `Policies.production_locked` and `Household.wanted_milli` / `unmet_milli`. Layout 3 added
-//! `SystemicState.timeline`, the scenario timeline cursor.
+//! `SystemicState.timeline`, the scenario timeline cursor. Layout 4 (2.0) turned `World.raids` from
+//! the raid log into `Raids`, the log plus the raid campaigns announced and not yet resolved.
 
 use std::cell::Cell;
 use std::collections::BTreeMap;
@@ -20,10 +21,12 @@ use cw_core::quantity::MilliLots;
 use serde::Deserialize;
 
 use crate::economy::systemic::{Incident, KINDS, SystemicState};
-use crate::state::{Facility, FacilityStatus, Household, Policies, PricePosture};
+use crate::state::{
+    Facility, FacilityStatus, Household, Policies, PricePosture, RaidRecord, Raids,
+};
 
 /// The layout this build writes.
-pub const LAYOUT: u32 = 3;
+pub const LAYOUT: u32 = 4;
 /// The oldest layout this build can read.
 pub const MIN_LAYOUT: u32 = 1;
 
@@ -191,6 +194,21 @@ impl From<SystemicStateV2> for SystemicState {
     }
 }
 
+/// Layouts 1 to 3 wrote `World.raids` as the plain raid log.
+#[derive(Deserialize)]
+#[serde(transparent)]
+pub(crate) struct RaidsV3(Vec<RaidRecord>);
+
+impl From<RaidsV3> for Raids {
+    fn from(old: RaidsV3) -> Self {
+        // No campaign was ever announced in those layouts: every raid resolved at once.
+        Raids {
+            log: old.0,
+            campaigns: Vec::new(),
+        }
+    }
+}
+
 /// Serde glue for a struct whose layout changed: the derive is generated as inherent functions
 /// (`#[serde(remote = "Self")]`) and the trait impls pick the frozen copy when reading an older
 /// layout. Writing always uses the current layout. `$below` is the first layout that has the
@@ -218,3 +236,4 @@ versioned!(Facility, FacilityV1, 2);
 versioned!(Policies, PoliciesV1, 2);
 versioned!(Household, HouseholdV1, 2);
 versioned!(SystemicState, SystemicStateV2, 3);
+versioned!(Raids, RaidsV3, 4);
