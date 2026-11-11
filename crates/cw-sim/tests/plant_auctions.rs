@@ -196,7 +196,7 @@ fn the_player_s_bid_wins_when_it_is_best_and_falls_away_when_it_cannot_be_paid()
         .first()
         .map(|b| b.price_cents)
         .unwrap_or(0);
-    let price = rival_best.max(lot.reserve_cents) + 1_000_00;
+    let price = rival_best.max(lot.reserve_cents) + 100_000;
     fund(&mut world, player, price * 2);
     auctions::bid(&mut world, player, lot.id, price).unwrap();
     let player_cash = world.firm(player).unwrap().book.cash();
