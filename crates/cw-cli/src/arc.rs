@@ -253,6 +253,10 @@ pub struct CapacityStats {
     /// Per year: share of household demand for services and retail goods (no gateway) that found
     /// no seller, in percent, averaged over the year's weeks.
     pub unmet_local_pct_by_year: Vec<f64>,
+    /// Plants in the world (operating, building or mothballed, every owner) at week 0 and at
+    /// the end of each year.
+    #[serde(default)]
+    pub world_plants_by_year: Vec<u32>,
     /// Raids announced against the player's group, with the weeks of warning before they resolve.
     pub raids_announced_on_player: u32,
     pub raid_warning_weeks: Vec<u32>,
@@ -438,6 +442,14 @@ pub struct Aggregate {
     pub unmet_local_last_year_pct_median: Option<f64>,
     #[serde(default)]
     pub unmet_local_fall_pct_median: Option<f64>,
+    /// Plants in the world at week 0 and at the end of the career, median over careers.
+    #[serde(default)]
+    pub world_plants_start_median: Option<f64>,
+    #[serde(default)]
+    pub world_plants_final_median: Option<f64>,
+    /// Median over careers of the plants in the world at the end of each year (index 0 is week 0).
+    #[serde(default)]
+    pub world_plants_by_year_median: Vec<f64>,
     #[serde(default)]
     pub raids_announced_on_player_per_decade_median: Option<f64>,
     #[serde(default)]
@@ -764,6 +776,11 @@ impl Observer {
         }
 
         // Capacity: plants built, mothballed and gone; payouts; household demand going without.
+        if !after_week || week.is_multiple_of(YEAR) {
+            self.capacity
+                .world_plants_by_year
+                .push(world.facilities.iter().count() as u32);
+        }
         let mut alive: BTreeSet<u64> = BTreeSet::new();
         for (handle, plant) in world.facilities.iter() {
             alive.insert(handle.0);
@@ -1659,6 +1676,29 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
                 Some(years.first()? - years.last()?)
             })
             .collect()),
+        world_plants_start_median: med(careers
+            .iter()
+            .filter_map(|c| c.capacity.world_plants_by_year.first().map(|v| *v as f64))
+            .collect()),
+        world_plants_final_median: med(careers
+            .iter()
+            .filter_map(|c| c.capacity.world_plants_by_year.last().map(|v| *v as f64))
+            .collect()),
+        world_plants_by_year_median: {
+            let years = careers
+                .iter()
+                .map(|c| c.capacity.world_plants_by_year.len())
+                .max()
+                .unwrap_or(0);
+            (0..years)
+                .filter_map(|y| {
+                    med(careers
+                        .iter()
+                        .filter_map(|c| c.capacity.world_plants_by_year.get(y).map(|v| *v as f64))
+                        .collect())
+                })
+                .collect()
+        },
         raids_announced_on_player_per_decade_median: med(careers
             .iter()
             .filter(|c| c.had_company)
