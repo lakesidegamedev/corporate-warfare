@@ -19,7 +19,7 @@ object ProposalCounts {
     data class Count(val texts: Int, val figures: Int, val distinct: Int, val rows: Int)
 
     fun count(scene: ImageComposeScene, width: Int, height: Int, density: Float): Count {
-        val owner = semanticsOwner(scene)
+        val owners = semanticsOwners(scene)
         val texts = mutableListOf<Triple<String, Float, Float>>()
         fun walk(n: SemanticsNode) {
             val b = n.boundsInWindow
@@ -30,7 +30,7 @@ object ProposalCounts {
             }
             n.children.forEach(::walk)
         }
-        walk(owner.unmergedRootSemanticsNode)
+        owners.forEach { walk(it.unmergedRootSemanticsNode) }
         val figures = texts.filter { (t, _, _) -> t.any { it.isDigit() } }
         val rows = figures.sortedBy { it.second }.fold(mutableListOf<MutableList<Float>>()) { acc, (_, y, _) ->
             if (acc.isNotEmpty() && y - acc.last().last() <= 5f) acc.last().add(y) else acc.add(mutableListOf(y))
@@ -39,12 +39,15 @@ object ProposalCounts {
         return Count(texts.size, figures.size, figures.map { it.first }.toSet().size, rows)
     }
 
-    /** The semantics owner of a scene: scene, then its main owner, then that owner's root for tests. */
-    private fun semanticsOwner(scene: ImageComposeScene): SemanticsOwner {
+    /** The semantics owners of a scene: the main one, then one for every dialog layer drawn over it. */
+    private fun semanticsOwners(scene: ImageComposeScene): List<SemanticsOwner> {
         val inner = field(scene, "scene")
-        val main = field(inner, "mainOwner")
-        val root = field(main, "rootForTest")
-        return root.javaClass.getMethod("getSemanticsOwner").also { it.isAccessible = true }.invoke(root) as SemanticsOwner
+        val roots = mutableListOf(field(inner, "mainOwner"))
+        runCatching { (field(inner, "layers") as List<*>).forEach { l -> roots += field(l!!, "owner") } }
+        return roots.map { r ->
+            val root = field(r, "rootForTest")
+            root.javaClass.getMethod("getSemanticsOwner").also { it.isAccessible = true }.invoke(root) as SemanticsOwner
+        }
     }
 
     private fun field(from: Any, name: String): Any {
