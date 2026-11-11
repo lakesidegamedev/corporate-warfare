@@ -122,6 +122,11 @@ pub struct InputRooms {
     /// By region, then product: the import room the region's gateways have left across all their
     /// volume steps beyond their smoothed imports.
     imports: Vec<Vec<i64>>,
+    /// By region, then labour tier: workers a new plant could hire over its first quarter (the
+    /// unemployed under the hiring cap plus a quarter of the two percent of staff who look for
+    /// work each week), less the jobs plants already running or being built there still want
+    /// filled.
+    workers: Vec<[i64; 3]>,
 }
 
 impl InputRooms {
@@ -205,7 +210,43 @@ pub fn input_rooms(world: &World, dataset: &Dataset) -> InputRooms {
             *room -= crate::economy::pricing::buyer_shortfall(world, dataset, product as u16).0;
         }
     }
-    InputRooms { corridor, imports }
+    let mut workers: Vec<[i64; 3]> = world
+        .regions
+        .iter()
+        .map(|state| {
+            let mut row = [0i64; 3];
+            for (tier, slot) in row.iter_mut().enumerate() {
+                let labour = &state.labour[tier];
+                let cap = labour.population * crate::economy::labour::HIRE_CAP_BPS / 10_000;
+                let staffed = labour.employed.min(cap);
+                *slot = (cap - staffed).max(0) + staffed * 20 * 13 / 1_000;
+            }
+            row
+        })
+        .collect();
+    for (_, plant) in world.facilities.iter() {
+        let building = plant.status == FacilityStatus::Building;
+        if !building && plant.status != FacilityStatus::Operating {
+            continue;
+        }
+        let Some(row) = workers.get_mut(plant.region as usize) else {
+            continue;
+        };
+        for (tier, slot) in row.iter_mut().enumerate() {
+            let want = if building {
+                dataset.recipes[plant.recipe as usize].workers_low_mid_high[tier]
+                    * plant.blocks as i64
+            } else {
+                crate::economy::labour::desired_workers(world, dataset, plant, tier)
+            };
+            *slot -= (want - plant.workers[tier]).max(0);
+        }
+    }
+    InputRooms {
+        corridor,
+        imports,
+        workers,
+    }
 }
 
 /// Share of a block's full output, in basis points, that a new plant of `recipe` in `region`
@@ -251,6 +292,49 @@ pub fn recipe_room_lots(
         return 0;
     };
     room_lots(world, dataset, product, region).min(input_cap_lots(dataset, rooms, recipe, region))
+}
+
+/// Share of one new block's output it can sell, basis points: what its inputs allow
+/// (`input_fill_bps`) and, for a product sold where it is made (a service, a shop) under the
+/// demand rules, no more than the room (`recipe_room_lots`) holds of a block. A good trades on
+/// the corridor exchange and sells any surplus at a gateway, so only its inputs limit it.
+pub fn sell_bps(
+    world: &World,
+    dataset: &Dataset,
+    rooms: &InputRooms,
+    recipe: u16,
+    region: u8,
+) -> i64 {
+    let fill = input_fill_bps(dataset, rooms, recipe, region);
+    if !dataset.demand.sell_within_room {
+        return fill;
+    }
+    let template = &dataset.recipes[recipe as usize];
+    let fill = fill.min(staff_bps(dataset, rooms, recipe, region));
+    let Some(product) = dataset.product_index.get(&template.output).copied() else {
+        return fill;
+    };
+    if corridor(dataset, product) {
+        return fill;
+    }
+    let block = template.weekly_output_lots.max(1);
+    let room = recipe_room_lots(world, dataset, rooms, recipe, region);
+    fill.min(room.saturating_mul(10_000) / block).max(0)
+}
+
+/// Share of one new block's crew the region's labour could fill in its first quarter, basis
+/// points (`InputRooms::workers` against what the block needs in each tier). The scarcest tier
+/// sets it.
+pub fn staff_bps(dataset: &Dataset, rooms: &InputRooms, recipe: u16, region: u8) -> i64 {
+    let template = &dataset.recipes[recipe as usize];
+    let Some(row) = rooms.workers.get(region as usize) else {
+        return 10_000;
+    };
+    (0..3)
+        .filter(|tier| template.workers_low_mid_high[*tier] > 0)
+        .map(|tier| (row[tier].max(0) * 10_000 / template.workers_low_mid_high[tier]).min(10_000))
+        .min()
+        .unwrap_or(10_000)
 }
 
 /// Public price of a product in a state: the gateway import price where one quotes; for a
@@ -441,7 +525,8 @@ pub struct Opening {
     /// corridor's spare inputs could feed (`recipe_room_lots`).
     pub room_lots: i64,
     /// Share of a block's output its inputs could be bought for, basis points
-    /// (`input_fill_bps`); the contribution below runs the block at this share.
+    /// (`input_fill_bps`), no more than its room holds for a local product (`sell_bps`); the
+    /// contribution below runs the block at this share.
     pub input_fill_bps: i64,
     /// One block's weekly output.
     pub block_lots: i64,
@@ -491,7 +576,7 @@ pub fn opening_with(
     let product = dataset.product_index.get(&template.output).copied()?;
     let traded = corridor(dataset, product);
     let room = recipe_room_lots(world, dataset, rooms, recipe, region);
-    let fill = input_fill_bps(dataset, rooms, recipe, region);
+    let fill = sell_bps(world, dataset, rooms, recipe, region);
     let (unmet, wanted) = if traded {
         (0, 0)
     } else {

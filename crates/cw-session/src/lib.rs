@@ -2257,7 +2257,7 @@ mod tests {
         // reading the inputs a new plant could buy, and again when households' opening demand was
         // sized to what the named plants serve (household_cover_bps and household_unmet_bps
         // joined the dataset hash), and again when services and sellers with no import were given
-        // more room over reference (130 and 150 percent). The Swift
+        // more room over reference (130 and 150 percent), and again when the demand rules joined the dataset hash (a new seller counts only what its room, inputs and labour allow, households turn to sellers with stock left and grow toward their budget where served) and a new company began offering at least the going wage. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2283,7 +2283,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "b2a6baa74f5b3a901959aa864d3894b35c8e10aced637154b4c657cb7b2718f6"
+            "eeab66200d6dc1669003524ff0a04f7e4cbe952620b4dc9da0836e905c316262"
         );
     }
 

@@ -134,13 +134,16 @@ pub fn train(world: &mut World) {
     }
 }
 
+/// The most of a region's people in a tier its employers may hire, basis points.
+pub const HIRE_CAP_BPS: i64 = 9_500;
+
 fn clear_tier(world: &mut World, dataset: &Dataset, region_index: usize, tier: usize) {
     let mut severance: Vec<(Handle, i64, i64)> = Vec::new();
     let region = &world.regions[region_index];
     let prevailing = region.labour[tier].prevailing_wage_cents.max(1);
     let reservation = region.labour[tier].reservation_wage_cents.max(1);
     let population = region.labour[tier].population;
-    let cap = population * 9_500 / 10_000;
+    let cap = population * HIRE_CAP_BPS / 10_000;
 
     // Named employment and the background residual.
     let mut named_employed = 0i64;

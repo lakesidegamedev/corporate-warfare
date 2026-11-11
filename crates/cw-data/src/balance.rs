@@ -267,6 +267,58 @@ pub struct Balance {
     /// defaults (the rules before 2.0).
     #[serde(default)]
     pub capacity: CapacityRules,
+    /// How household and business demand grows as it is served, swings with the business cycle,
+    /// and what a new seller is promised (2.0). Absent in older content files, which then get
+    /// the defaults (the rules before it).
+    #[serde(default)]
+    pub demand: DemandRules,
+}
+
+/// Demand as a frontier: what a new seller can count on selling, how households move spending
+/// from the background economy to named sellers that serve them well, and how much each product
+/// swings with the business cycle. Shared by every scenario.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DemandRules {
+    /// Whether an opening for a product sold where it is made (a service, a shop) counts only
+    /// the lots its room holds as sold. Off: a new block is valued at its full output, however
+    /// small the room (the rule before it).
+    pub sell_within_room: bool,
+    /// How fast households in a well served market move spending to named sellers: the share
+    /// their asked-for lots grow a quarter, basis points, toward what their category budget
+    /// buys. Zero: households ask for the same lots for ever, apart from price and the cycle.
+    pub latent_growth_bps: i64,
+    /// A market is well served while the share of what households ask for that finds no seller
+    /// is under this, basis points. Only then does it grow.
+    pub latent_content_bps: i64,
+    /// How much each product's demand moves with the business cycle: percent of demand per
+    /// percent of output gap, in basis points of one (12,000 moves demand 1.2 percent for a
+    /// 1 percent gap). Products not listed use `cycle_default_bps`.
+    pub cycle_elasticity: Vec<(String, i64)>,
+    pub cycle_default_bps: i64,
+    /// Products bought to invest (plant, buildings, machines), whose demand also follows credit:
+    /// basis points of demand per basis point of credit conditions (credit built up less debt
+    /// being paid off, against its usual level).
+    pub investment_goods: Vec<String>,
+    pub credit_elasticity_bps: i64,
+    /// Whether a shop's price reads households going without and local competition the way a
+    /// service's does, not only its own shelf cover.
+    pub retail_reads_street: bool,
+}
+
+impl Default for DemandRules {
+    fn default() -> Self {
+        DemandRules {
+            sell_within_room: false,
+            latent_growth_bps: 0,
+            latent_content_bps: 0,
+            cycle_elasticity: Vec::new(),
+            cycle_default_bps: 12_000,
+            investment_goods: Vec::new(),
+            credit_elasticity_bps: 0,
+            retail_reads_street: false,
+        }
+    }
 }
 
 /// Capacity as the contest: what a new plant costs today, when a company adds or closes one, and

@@ -1798,5 +1798,15 @@
     "raid_warning_weeks": 0,
     "household_cover_bps": 8500,
     "household_unmet_bps": 3000
+  },
+  "demand": {
+    "sell_within_room": true,
+    "latent_growth_bps": 600,
+    "latent_content_bps": 1000,
+    "cycle_elasticity": [],
+    "cycle_default_bps": 12000,
+    "investment_goods": [],
+    "credit_elasticity_bps": 0,
+    "retail_reads_street": false
   }
 }
