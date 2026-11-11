@@ -38,22 +38,7 @@ const LOAN_STEP_CENTS: i64 = 50_000_000;
 const FOUNDER_KEEPS_CENTS: i64 = 10_000_000;
 
 #[derive(Default)]
-pub struct SkilledState {
-    /// Weeks the weekly brief crashed the engine (a mandate whose due week precedes its set week
-    /// makes `chapters::progress` overflow); the harness skips the brief those weeks.
-    pub brief_panics: u32,
-}
-
-/// The weekly brief, or None when the engine panics building it.
-fn safe_brief(session: &Session, firm: u64) -> Option<cw_session::brief::Brief> {
-    let previous = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        cw_session::brief::weekly_brief(&session.world, &session.dataset, firm)
-    }));
-    std::panic::set_hook(previous);
-    result.ok()
-}
+pub struct SkilledState {}
 
 impl PolicyRunner {
     /// Found the scenario's starting company with all the spare personal cash.
@@ -131,10 +116,7 @@ impl PolicyRunner {
                 }
             }
         }
-        let Some(brief) = safe_brief(session, firm) else {
-            self.skilled.brief_panics += 1;
-            return;
-        };
+        let brief = cw_session::brief::weekly_brief(&session.world, &session.dataset, firm);
         for mv in brief.moves.iter().filter(|mv| mv.key == "lane") {
             for command in &mv.commands {
                 if let Ok(intent) = serde_json::from_str::<CommandIntent>(command) {

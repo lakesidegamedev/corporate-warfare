@@ -585,17 +585,88 @@ pub fn events(world: &World, dataset: &Dataset) -> Vec<EventLine> {
                     }),
                 mandatory: event.mandatory,
                 deadline: event.deadline.0,
-                choices: card
-                    .choices
-                    .iter()
-                    .map(|choice| ChoiceLine {
-                        id: choice.id.clone(),
-                        label: choice.label.clone(),
-                    })
-                    .collect(),
+                choices: tender_choices(world, dataset, event.deal, &card.choices).unwrap_or_else(
+                    || {
+                        card.choices
+                            .iter()
+                            .map(|choice| ChoiceLine {
+                                id: choice.id.clone(),
+                                label: choice.label.clone(),
+                            })
+                            .collect()
+                    },
+                ),
             })
         })
         .collect()
+}
+
+/// A tender card that would cost the player control of a company they run: the engine puts the
+/// refusal first and says in plain words what tendering costs, with the bid against fair value.
+/// None for every other card and for tenders that leave the player's majority alone.
+fn grouped(n: i64) -> String {
+    let digits = n.abs().to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
+
+fn tender_choices(
+    world: &World,
+    dataset: &Dataset,
+    deal: Option<cw_core::ids::Handle>,
+    card_choices: &[cw_data::events::EventChoice],
+) -> Option<Vec<ChoiceLine>> {
+    let outlook = cw_sim::economy::deals::tender_outlook(world, deal?)?;
+    if !outlook.loses_control() {
+        return None;
+    }
+    let company = world.firm(outlook.target)?.name.clone();
+    let paper_money = |cents: i64| crate::paper::money(world, dataset, outlook.target, cents);
+    let symbol = paper_money(0).trim_end_matches('0').to_owned();
+    let price = |cents: i64| format!("{symbol}{}.{:02}", cents / 100, cents % 100);
+    let after = outlook.after_bps();
+    let premium = outlook.premium_bps();
+    let against_fair = match premium.cmp(&0) {
+        std::cmp::Ordering::Greater => format!(
+            "{}.{:02} percent above fair value of {}",
+            premium / 100,
+            premium % 100,
+            price(outlook.fair_cents)
+        ),
+        std::cmp::Ordering::Less => format!(
+            "{}.{:02} percent below fair value of {}",
+            -premium / 100,
+            -premium % 100,
+            price(outlook.fair_cents)
+        ),
+        std::cmp::Ordering::Equal => format!("at fair value of {}", price(outlook.fair_cents)),
+    };
+    let mut lines: Vec<ChoiceLine> = card_choices
+        .iter()
+        .map(|choice| ChoiceLine {
+            id: choice.id.clone(),
+            label: match choice.id.as_str() {
+                "tender" => format!(
+                    "Tender {} shares at {} each ({against_fair}). You would hold {}.{:02} percent and lose control of {company}",
+                    grouped(outlook.shares_sold),
+                    price(outlook.offer_cents),
+                    after / 100,
+                    after % 100
+                ),
+                "refuse" => format!("Refuse the terms and keep control of {company}"),
+                _ => choice.label.clone(),
+            },
+        })
+        .collect();
+    // The safe answer comes first; the order of the rest is the card's own.
+    lines.sort_by_key(|line| line.id != "refuse");
+    Some(lines)
 }
 
 pub fn market(world: &World, dataset: &Dataset, region: u8, product: u16) -> MarketLine {
