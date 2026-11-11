@@ -272,6 +272,41 @@ pub struct Balance {
     /// the defaults (the rules before it).
     #[serde(default)]
     pub demand: DemandRules,
+    /// The world price's weekly texture on top of the authored price paths (2.0). Absent in
+    /// older content files, which then get the defaults (smooth paths, the rule before it).
+    #[serde(default)]
+    pub texture: TextureRules,
+}
+
+/// How the outside world's prices stray from their authored paths week to week in a game that
+/// plays history with variance. Each price family strays by a seeded, mean-reverting
+/// disturbance drawn from the game's seed and the week alone (no saved state), so the dated
+/// history still shows through and a loaded game continues exactly. Plain historical games keep
+/// the smooth authored path.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TextureRules {
+    /// One entry per price family; a family not listed keeps its smooth path.
+    pub families: Vec<FamilyTexture>,
+    /// A disturbance at least this far from the path, in basis points, is a named world event
+    /// the price reason prints. Zero names none.
+    pub named_bps: i64,
+}
+
+/// One price family's texture.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FamilyTexture {
+    pub family: String,
+    /// How far the world price typically strays from the path: one standard deviation, in basis
+    /// points of the path.
+    pub swing_bps: i64,
+    /// Weeks for a disturbance to fade by half.
+    pub half_life_weeks: i64,
+    /// Causes printed when the price is pushed up or down past `named_bps`, lower case, each a
+    /// whole clause such as "a cold winter lifts natural gas".
+    pub causes_up: Vec<String>,
+    pub causes_down: Vec<String>,
 }
 
 /// Demand as a frontier: what a new seller can count on selling, how households move spending
@@ -304,6 +339,12 @@ pub struct DemandRules {
     /// Whether a shop's price reads households going without and local competition the way a
     /// service's does, not only its own shelf cover.
     pub retail_reads_street: bool,
+    /// The street rule (2.0 prices round): a seller of a service, or a shop under
+    /// `retail_reads_street`, asks reference in a balanced market, lifts its price only by the
+    /// share of households going without in its regions beyond this many basis points, and cuts
+    /// only by its own idle capacity while a rival in its regions also has capacity to spare.
+    /// Zero: the rule before it (a seller reads its own use plus every household going without).
+    pub street_short_bps: i64,
 }
 
 impl Default for DemandRules {
@@ -317,6 +358,7 @@ impl Default for DemandRules {
             investment_goods: Vec::new(),
             credit_elasticity_bps: 0,
             retail_reads_street: false,
+            street_short_bps: 0,
         }
     }
 }

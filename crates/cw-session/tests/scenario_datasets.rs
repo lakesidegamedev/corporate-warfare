@@ -103,10 +103,14 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// Every pin moved again in 2.0 when the demand rules joined the dataset hash (openings count
 /// only what their room, inputs and labour allow, households turn to sellers with stock left and
 /// grow toward their budget where served, demand follows the cycle by product) and a new company began offering at least the going wage. A save that names the
-/// pre-demand hash still loads.
+/// pre-demand hash still loads. Every pin moved again in 2.0 when world prices gained their
+/// seeded texture (variance became the default, the texture rules and the street rule joined the
+/// dataset hash), seller markets began opening near balance and shops and services began
+/// pricing on their street, and the worlds moved again when rivals began closing losing plants and
+/// paying out idle cash in live play. A save that names the pre-prices hash still loads.
 /// Every pin here moved again in 2.0 when plant auctions joined the dataset hash (four weeks for a
 /// failed company's break-up and for a listing) and a failed company's plants began going to the
-/// best bid as running plants instead of being sold off at once for scrap. A save that names the
+/// best bid as running plants instead of being sold off at once for scrap; a save that names the
 /// pre-auction hash loads. The founder world (seed 4) moved once more when rivals began listing
 /// plants they had kept mothballed for half a year and folding in companies they hold at 90
 /// percent.
@@ -116,9 +120,17 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     assert_eq!(data.scenario_id, "great-lakes-2000");
     assert_eq!(
         data.hash,
-        "2ef8d9aa0b212e4fa696eda45ea59bef735c30bbf10196acc82d9edeef47ef62"
+        "1d51f9426f808967fd905e264707b0f926270740f40fe79cde6ade3467771e8f"
     );
-    // The hash before plant auctions joined it is the 2.0 demand round's pin.
+    // The hash before the prices round (the plant auction round's pin) still finds this dataset.
+    let before_prices = "2ef8d9aa0b212e4fa696eda45ea59bef735c30bbf10196acc82d9edeef47ef62";
+    assert_eq!(data.pre_prices_hash(), before_prices);
+    assert_eq!(
+        cw_data::Dataset::for_hash(before_prices).unwrap().hash,
+        data.hash
+    );
+    // The hash before plant auctions joined it (and before the prices round) is the 2.0 demand
+    // round's pin.
     let pre_auction = "3856624d8fe911499f1f62988f0f25b533c4b455404c70bfb0095aee9c5cf110";
     assert_eq!(data.pre_auction_hash(), pre_auction);
     assert_eq!(
@@ -160,15 +172,15 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     let pins = [
         (
             1u64,
-            "7d527db3f0f705be44a4b4c7a9ef9e428c1f4e300882cf9d9ec2027b921182c6",
+            "c9fa16da40f26bfc876fcb0f0abe35451221d5430cb529b6222d77223eb95909",
         ),
         (
             2,
-            "294a7cb1b77130df32bfd2cb79b21845fca49ba8d4cc3dc9f898f6166d53a9c6",
+            "45636e573c20eae777c32ab5da8a777777a3ce5df16cddf7ff460187e6aeef6a",
         ),
         (
             3,
-            "58aae317af97569118c08a3ca01c9d7c33d7305632fd46918ddc313e0baddad0",
+            "3488440724ab809c9d242996106c85f40c2cb610244713bb5494d2fdee0659eb",
         ),
     ];
     for (seed, hash) in pins {
@@ -180,12 +192,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "2f03314a411975328e69189e4efe1f2d2e8c314f8c768bfbafcb917161e91e0a"
+        "2c19da89e46194c8d011ca79be3a9872e15de4a790f28e6f74a2b61be66c822a"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "88aedf63cf67622e559c0ff86baa86460b973434e7681a01410cdc368f520615"
+        "f40ef74a3f0baf38fd6a0527aea3c3e4e953bbcb9ba16c9b6c7a89a860c0c12d"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
@@ -373,18 +385,21 @@ fn silicon_valley_opens_the_bakersfield_pipelines() {
 
 #[test]
 fn silicon_valley_electronics_prices_follow_the_chip_cycle() {
-    // Components are in the scenario's own family; Great Lakes and Texas have no such family.
+    // Components follow the chip cycle in Silicon Valley; since the prices round Great Lakes and
+    // Texas hold them on a flat path with only the world's texture.
     let valley = run_answering(3, "silicon-valley-1995", 1);
-    let family = |s: &Session| {
+    let anchors = |s: &Session| {
         s.world
             .world_prices
             .families
             .iter()
-            .any(|f| f.key == "electronics")
+            .find(|f| f.key == "electronics")
+            .map(|f| f.anchors.len())
+            .unwrap_or(0)
     };
-    assert!(family(&valley));
-    assert!(!family(&run_answering(3, "great-lakes-2000", 1)));
-    assert!(!family(&run_answering(3, "texas-1981", 1)));
+    assert!(anchors(&valley) > 1);
+    assert_eq!(anchors(&run_answering(3, "great-lakes-2000", 1)), 1);
+    assert_eq!(anchors(&run_answering(3, "texas-1981", 1)), 1);
 }
 
 #[test]

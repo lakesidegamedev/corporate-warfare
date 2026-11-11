@@ -2429,12 +2429,13 @@ mod tests {
         // joined the dataset hash), and again when services and sellers with no import were given
         // more room over reference (130 and 150 percent). In 2.0 it moved again from b2a6baa7...
         // when raids began to be announced four weeks ahead (the warning joined the dataset hash
-        // and the world gained the list of campaigns in progress, save schema 4), again when the
-        // demand rules joined the dataset hash (a new seller counts only what its room, inputs and
-        // labour allow, households turn to sellers with stock left and grow toward their budget
-        // where served, demand follows the cycle by product) and a new company began offering at
-        // least the going wage, and again in 2.0 when plant auctions joined the dataset hash (four
-        // weeks for a break-up or a listing). The Swift
+        // and the world gained the list of campaigns in progress, save schema 4), and again when the demand rules joined the dataset hash (a new seller counts
+        // only what its room, inputs and labour allow, households turn to sellers with stock left
+        // and grow toward their budget where served, demand follows the cycle by product) and a new company began offering at least the going wage, and again
+        // when the texture and street rules joined the dataset hash (world prices stray from their
+        // paths by a seeded texture, seller markets open near balance, shops and services price on
+        // their street), and again in 2.0 when plant auctions joined the dataset hash (four weeks
+        // for a break-up or a listing). The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2460,7 +2461,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "6ad6fbf7ed2a13f38fe9d9a2784cf3ab1cab28ba9a475905e26106400d6a20e8"
+            "54409d0cc118f568c53c823f37ac78311aaf921efac40135bf66f6cc551c6786"
         );
     }
 
