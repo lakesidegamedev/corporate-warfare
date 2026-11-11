@@ -724,8 +724,14 @@ five-year game started with a career and no length plays five years, and its sco
 After any ending the world plays on as a sandbox; the career keeps its ending.
 
 **Telling the player.** Through the chair of the board's letters (`letters::career_letters`):
-every quarter the standing against the ambition, the board's warning and its lifting, and the
-ending. The pause `career_board_warning` is a warning pause; `career_end` is a milestone.
+every quarter the standing against the ambition and what the next medal needs
+(`career::progress`), the board's warning and its lifting, and the ending. The same lines reach
+the weekly brief the week they are written (change kind `career`), and the ending is a story in
+the paper. `Session::career_standing` gives the standing at any week for the screens: ambition,
+medal, rank, growth, the sentence it rests on, what the next medal needs, weeks left, and the
+board's warning with whether the board can act on it. The apps reach all of it through cw-ffi:
+`helm_offers(NewGameDto)`, `SessionHandle::start_career(NewGameDto, CareerOptionsDto)`,
+`career_standing()` and `career_summary()`. The pause `career_board_warning` is a warning pause; `career_end` is a milestone.
 
 **Summary.** `CareerSummaryDto`: start, ambition, length, the medal it stands at, the ending and
 its medal, one sentence from engine facts on why it ended as it did, a line a year (company

@@ -17,6 +17,7 @@ use cw_session::{Query, Session};
 uniffi::setup_scaffolding!();
 
 mod brief;
+mod career;
 mod cast;
 mod catalogue;
 mod chapters;
@@ -2461,6 +2462,41 @@ fn laws_dto(laws: &cw_sim::state::Laws, dataset: &cw_data::Dataset) -> LawsDto {
     }
 }
 
+/// The engine's scenario configuration for a new-game screen's choices.
+fn scenario_config(options: &NewGameDto) -> cw_session::ScenarioConfig {
+    cw_session::ScenarioConfig {
+        seed: options.seed,
+        scenario: if options.guided {
+            cw_sim::state::ScenarioKind::Guided
+        } else {
+            cw_sim::state::ScenarioKind::Founder
+        },
+        mode: if options.five_year {
+            cw_sim::state::ScenarioMode::FiveYear
+        } else {
+            cw_sim::state::ScenarioMode::Sandbox
+        },
+        dataset_hash: String::new(),
+        difficulty: cw_data::Difficulty::from_key(&options.difficulty),
+        economy_start: cw_sim::state::EconomyStart::from_key(&options.economy),
+        starting_capital_cents: options.starting_capital_cents.filter(|c| *c > 0),
+        prices: cw_session::PriceSetup {
+            scenario_id: options.scenario_id.clone(),
+            path: cw_data::PricePath::from_key(&options.price_path),
+            timeline: cw_sim::economy::timeline::TimelineMode::from_key(&options.timeline),
+        },
+    }
+}
+
+/// The established companies a helm career can start at, for these new-game choices (2.0).
+#[uniffi::export]
+pub fn helm_offers(options: NewGameDto) -> Result<Vec<career::HelmOfferDto>, FfiError> {
+    Ok(Session::helm_offers(scenario_config(&options))?
+        .into_iter()
+        .map(career::HelmOfferDto::from)
+        .collect())
+}
+
 /// Everything the new-game screen chooses.
 #[derive(uniffi::Record)]
 pub struct NewGameDto {
@@ -2498,28 +2534,7 @@ impl SessionHandle {
     /// A new career from the new-game screen's choices.
     #[uniffi::constructor]
     pub fn start(options: NewGameDto) -> Result<Arc<SessionHandle>, FfiError> {
-        let config = cw_session::ScenarioConfig {
-            seed: options.seed,
-            scenario: if options.guided {
-                cw_sim::state::ScenarioKind::Guided
-            } else {
-                cw_sim::state::ScenarioKind::Founder
-            },
-            mode: if options.five_year {
-                cw_sim::state::ScenarioMode::FiveYear
-            } else {
-                cw_sim::state::ScenarioMode::Sandbox
-            },
-            dataset_hash: String::new(),
-            difficulty: cw_data::Difficulty::from_key(&options.difficulty),
-            economy_start: cw_sim::state::EconomyStart::from_key(&options.economy),
-            starting_capital_cents: options.starting_capital_cents.filter(|c| *c > 0),
-            prices: cw_session::PriceSetup {
-                scenario_id: options.scenario_id.clone(),
-                path: cw_data::PricePath::from_key(&options.price_path),
-                timeline: cw_sim::economy::timeline::TimelineMode::from_key(&options.timeline),
-            },
-        };
+        let config = scenario_config(&options);
         let mut session = Session::create(config)?;
         if !options.chief_name.is_empty() || !options.chief_portrait.is_empty() {
             session.set_player_chief(
@@ -2531,6 +2546,50 @@ impl SessionHandle {
         Ok(Arc::new(SessionHandle {
             inner: Mutex::new(session),
         }))
+    }
+
+    /// A new career with a start, an ambition and a length (2.0): the new-game screen's choices
+    /// plus the career options. A helm start needs `career.helm_firm` from `helm_offers`.
+    #[uniffi::constructor]
+    pub fn start_career(
+        options: NewGameDto,
+        career: career::CareerOptionsDto,
+    ) -> Result<Arc<SessionHandle>, FfiError> {
+        let setup = career.setup().map_err(|detail| FfiError::Domain {
+            key: "career.invalid".to_owned(),
+            detail,
+        })?;
+        let mut session =
+            Session::create_career(scenario_config(&options), &setup).map_err(|detail| {
+                FfiError::Domain {
+                    key: "career.refused".to_owned(),
+                    detail,
+                }
+            })?;
+        if !options.chief_name.is_empty() || !options.chief_portrait.is_empty() {
+            session.set_player_chief(
+                &options.chief_name,
+                &options.chief_portrait,
+                &options.chief_temperament,
+            );
+        }
+        Ok(Arc::new(SessionHandle {
+            inner: Mutex::new(session),
+        }))
+    }
+
+    /// Where the career stands this week; none for a game started without career options.
+    pub fn career_standing(&self) -> Option<career::CareerStandingDto> {
+        self.lock()
+            .career_standing()
+            .map(career::CareerStandingDto::from)
+    }
+
+    /// The career summary for the end screen; none without a career.
+    pub fn career_summary(&self) -> Option<career::CareerSummaryDto> {
+        self.lock()
+            .career_summary()
+            .map(career::CareerSummaryDto::from)
     }
 
     /// The engine fixture constructor: no world commodity prices. Games started from the
@@ -5187,6 +5246,75 @@ mod tests {
             archive[archive.len() - 1]
         );
         assert_eq!(career.paper(now + 50).week, now, "a future week is today");
+    }
+
+    fn career_options(scenario: &str) -> NewGameDto {
+        NewGameDto {
+            seed: 7,
+            scenario_id: scenario.to_owned(),
+            guided: false,
+            five_year: false,
+            difficulty: "standard".to_owned(),
+            economy: "historic".to_owned(),
+            starting_capital_cents: None,
+            price_path: String::new(),
+            timeline: String::new(),
+            chief_name: String::new(),
+            chief_portrait: String::new(),
+            chief_temperament: String::new(),
+        }
+    }
+
+    #[test]
+    fn careers_cross_the_boundary() {
+        // The new-game screen: offers, then a helm career with an ambition and a length.
+        let offers = helm_offers(career_options("great-lakes-2000")).unwrap();
+        assert!(!offers.is_empty());
+        let pick = &offers[0];
+        assert!(pick.price_cents > 0 && pick.fortune_cents >= pick.price_cents);
+        let career = SessionHandle::start_career(
+            career_options("great-lakes-2000"),
+            career::CareerOptionsDto {
+                start: "helm".to_owned(),
+                helm_firm: Some(pick.firm),
+                ambition: "biggest".to_owned(),
+                years: 10,
+            },
+        )
+        .unwrap();
+        // The standing each week.
+        let standing = career.career_standing().unwrap();
+        assert_eq!(standing.ambition.as_deref(), Some("biggest"));
+        assert_eq!(standing.rank, pick.rank);
+        assert!(!standing.detail.is_empty());
+        assert!(standing.medal == "gold" || !standing.next.is_empty());
+        assert_eq!(standing.weeks_left, 520);
+        assert!(!standing.board_warned);
+        // A helm start buys just over half the votes: the board cannot remove the player.
+        assert!(!standing.board_can_remove);
+        // The summary.
+        let summary = career.career_summary().unwrap();
+        assert_eq!(summary.start, "helm");
+        assert_eq!(summary.helm_company.as_deref(), Some(pick.name.as_str()));
+        assert_eq!(summary.years, 10);
+        assert!(!summary.ended && summary.ending.is_empty());
+        assert!(summary.start_worth_cents > 0);
+        assert!(summary.events.iter().any(|e| e.key == "took_helm"));
+        // A refused pick is a typed error, and a game without career options has no career.
+        assert!(
+            SessionHandle::start_career(
+                career_options("great-lakes-2000"),
+                career::CareerOptionsDto {
+                    start: "helm".to_owned(),
+                    helm_firm: Some(u64::MAX),
+                    ..Default::default()
+                },
+            )
+            .is_err()
+        );
+        let sandbox = SessionHandle::start(career_options("great-lakes-2000")).unwrap();
+        assert!(sandbox.career_standing().is_none());
+        assert!(sandbox.career_summary().is_none());
     }
 
     #[test]

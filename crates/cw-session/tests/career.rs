@@ -205,3 +205,49 @@ fn the_board_writes_each_quarter_with_progress() {
             .all(|l| l.paragraphs.iter().any(|f| f.contains("ranks")))
     );
 }
+
+#[test]
+fn the_brief_carries_the_quarterly_line_and_the_paper_the_ending() {
+    let cfg = config(39, ScenarioMode::Sandbox);
+    let offer = Session::helm_offers(cfg.clone()).unwrap().remove(0);
+    let mut session =
+        Session::create_career(cfg, &helm_setup(offer.firm, Ambition::Survivor, 5)).unwrap();
+    // Play to the first quarter's progress line and read the brief that week.
+    let mut seen = false;
+    for _ in 0..16 {
+        run(&mut session, 1);
+        let brief = cw_session::brief::weekly_brief(&session.world, &session.dataset, offer.firm);
+        if brief
+            .changes
+            .iter()
+            .any(|c| c.kind == "career" && c.text.starts_with("Career progress"))
+        {
+            seen = true;
+            break;
+        }
+    }
+    assert!(seen, "the quarterly progress line reaches the weekly brief");
+    // Bring the end forward and play to it: the paper reports the ending in its own words.
+    let now = session.world.tick.0;
+    session.world.career.as_mut().unwrap().end_week = now + 1;
+    run(&mut session, 2);
+    let ending = session
+        .world
+        .career
+        .as_ref()
+        .unwrap()
+        .ending
+        .clone()
+        .unwrap();
+    assert_eq!(ending.kind, EndKind::Completed);
+    let week = session.world.tick.0;
+    let paper = cw_session::paper::weekly_paper(&session.world, &session.dataset, week);
+    assert!(
+        paper
+            .lead
+            .iter()
+            .chain(&paper.briefs)
+            .any(|s| s.body == ending.sentence),
+        "the paper carries the career's ending"
+    );
+}

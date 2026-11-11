@@ -1100,6 +1100,51 @@ fn labour_and_news(world: &World, week: u32, out: &mut Vec<Candidate>) {
                 format!("An activist campaign has opened against {s}."),
                 5,
             )
+        } else if item.key == "career.ended" {
+            // The career's ending (2.0), in the engine's own sentence.
+            let Some(ending) = world.career.as_ref().and_then(|c| c.ending.as_ref()) else {
+                continue;
+            };
+            let company = world
+                .investor
+                .primary_group
+                .and_then(|h| world.firms.get(h))
+                .map(|f| f.name.clone())
+                .unwrap_or_else(|| "a corridor company".to_owned());
+            let headline = match ending.kind {
+                cw_sim::economy::career::EndKind::Removed => {
+                    format!("Board removes the head of {company}")
+                }
+                cw_sim::economy::career::EndKind::TakenOver => {
+                    format!("{company} falls to a rival")
+                }
+                cw_sim::economy::career::EndKind::NoCompany => {
+                    "A corridor business career ends".to_owned()
+                }
+                _ => match ending.medal {
+                    cw_sim::economy::career::Medal::None => {
+                        format!("The owner of {company} looks back")
+                    }
+                    medal => format!("The owner of {company} ends the run with {}", medal.key()),
+                },
+            };
+            let link = world
+                .investor
+                .primary_group
+                .map(PaperLink::company)
+                .unwrap_or_else(PaperLink::none);
+            out.push(candidate(
+                id,
+                item.week.0,
+                &headline,
+                ending.sentence.clone(),
+                "Business desk",
+                link,
+                true,
+                8,
+                0,
+            ));
+            continue;
         } else if item.key == "news.lobbying_backlash" {
             (
                 format!("Lobbying backlash hits {s}"),

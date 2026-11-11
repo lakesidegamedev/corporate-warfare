@@ -1581,7 +1581,41 @@ pub struct CareerSummaryDto {
     pub sentence: String,
     /// The board has warned the player and removal is pending.
     pub board_warned: bool,
+    /// Richest's measure: the fortune the career started from, net worth now and the growth
+    /// over the start in basis points (10000 = no growth).
+    #[serde(default)]
+    pub start_worth_cents: i64,
+    #[serde(default)]
+    pub net_worth_cents: i64,
+    #[serde(default)]
+    pub growth_bps: i64,
     pub years_log: Vec<CareerYearDto>,
     /// The events that mattered, in date order.
     pub events: Vec<CareerEventDto>,
+}
+
+/// Where a career stands this week (2.0): for the career line on the main screen and the
+/// quarterly progress line in the weekly brief.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CareerStandingDto {
+    /// `richest`, `biggest`, `dominant`, `survivor`, or none for a sandbox career.
+    pub ambition: Option<String>,
+    /// `none`, `bronze`, `silver` or `gold`.
+    pub medal: String,
+    /// The primary company's league place and the league's size; 0 when it runs none.
+    pub rank: u32,
+    pub league: u32,
+    /// Net worth over the starting fortune, basis points (10000 = no growth).
+    pub growth_bps: i64,
+    /// What the standing rests on, one plain sentence.
+    pub detail: String,
+    /// What the next medal needs, one plain sentence; empty at gold.
+    pub next: String,
+    pub weeks_left: u32,
+    pub ended: bool,
+    /// The board's warning is in force, its words, and whether the board can act on it (the
+    /// player holds less than half the votes).
+    pub board_warned: bool,
+    pub board_warning: String,
+    pub board_can_remove: bool,
 }

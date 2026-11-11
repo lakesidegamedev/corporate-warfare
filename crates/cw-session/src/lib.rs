@@ -232,6 +232,43 @@ impl Session {
             .collect())
     }
 
+    /// Where the career stands this week: the medal, the facts it rests on, what the next medal
+    /// needs and the board's warning. `None` without a career.
+    pub fn career_standing(&self) -> Option<dto::CareerStandingDto> {
+        use cw_sim::economy::career as c;
+        let state = self.world.career.as_ref()?;
+        let p = c::progress(&self.world, state);
+        let warned = state.tracking.warned_week.is_some();
+        Some(dto::CareerStandingDto {
+            ambition: p.ambition.map(|a| a.key().to_owned()),
+            medal: p.medal.key().to_owned(),
+            rank: p.rank,
+            league: p.league,
+            growth_bps: p.growth_bps,
+            detail: p.detail,
+            next: p.next,
+            weeks_left: state.end_week.saturating_sub(self.world.tick.0),
+            ended: state.ending.is_some(),
+            board_warned: warned,
+            board_warning: if warned {
+                state
+                    .events
+                    .iter()
+                    .rev()
+                    .find(|e| e.key == "board_warning")
+                    .map(|e| e.text.clone())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            },
+            board_can_remove: self
+                .world
+                .investor
+                .primary_group
+                .is_some_and(|h| !c::holds_majority(&self.world, h)),
+        })
+    }
+
     /// The career's summary: ambition and standing, the year by year line, the events that
     /// mattered and, once it has ended, the ending in one sentence. `None` without a career.
     pub fn career_summary(&self) -> Option<dto::CareerSummaryDto> {
@@ -271,6 +308,9 @@ impl Session {
                 .unwrap_or_default(),
             sentence,
             board_warned: state.tracking.warned_week.is_some(),
+            start_worth_cents: state.start_worth_cents,
+            net_worth_cents: c::wealth_league(&self.world).0,
+            growth_bps: c::growth_bps(c::wealth_league(&self.world).0, state.start_worth_cents),
             years_log: state
                 .years_log
                 .iter()
