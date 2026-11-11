@@ -1011,8 +1011,10 @@ fn a_carrier_trims_toward_85_percent_only_while_its_lanes_keep_their_freight() {
     // One carrier pinned to one truck lane, run at 80 percent. The plan reads last week's fill by
     // lot-km and the lane's outside overflow; worked by hand from the rule in MARKETS.md:
     // under 85 percent full cuts 15 points, from 90 raises 15, and an overflow of 40 percent or
-    // more of the lane's lots blocks the cut (but not the raise).
-    let (mut w, dataset) = world(15);
+    // more of the lane's lots blocks the cut (but not the raise). Worked with the pre-2.0 plan
+    // step of fifteen points; content sets its own (`MarketRules::plan_step_bps`).
+    let (mut w, mut dataset) = world(15);
+    dataset.markets.plan_step_bps = 1_500;
     let (owner, _) = two_firms(&w);
     let home = region(&dataset, "OH-CEN");
     let near = region(&dataset, "OH-SE");
