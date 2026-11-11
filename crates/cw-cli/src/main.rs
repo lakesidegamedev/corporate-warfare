@@ -28,6 +28,8 @@ fn main() {
         Some("arc") => arc::run(&arguments[1..]),
         Some("market-trace") => trace::run(&arguments[1..]),
         Some("probe") => policy::skilled::probe_all(&arguments[1..]),
+        Some("helm") => arc::helm(&arguments[1..]),
+        Some("story") => policy::skilled::story(&arguments[1..]),
         Some("opps") => policy::skilled::explore(&arguments[1..]),
         Some("openings") => openings(&arguments[1..]),
         _ => {
