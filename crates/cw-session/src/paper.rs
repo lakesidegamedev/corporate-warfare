@@ -586,7 +586,12 @@ fn raids(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) 
 /// Raid campaigns announced between rivals this week (2.0). A campaign on the player's own
 /// company is told by alert and letter; one by the player is the player's own news.
 fn campaigns(world: &World, dataset: &Dataset, week: u32, out: &mut Vec<Candidate>) {
-    for c in world.raids.campaigns.iter().filter(|c| in_window(c.announced, week)) {
+    for c in world
+        .raids
+        .campaigns
+        .iter()
+        .filter(|c| in_window(c.announced, week))
+    {
         if player_side(world, c.attacker) || player_side(world, c.defender) {
             continue;
         }

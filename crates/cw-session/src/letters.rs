@@ -681,7 +681,12 @@ fn raid_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Lett
 /// its chief's voice (2.0). The facts are the campaign's: business, region, budget, the week it is
 /// decided.
 fn campaign_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
-    for c in world.raids.campaigns.iter().filter(|c| c.announced >= since) {
+    for c in world
+        .raids
+        .campaigns
+        .iter()
+        .filter(|c| c.announced >= since)
+    {
         if !player_side(world, c.defender) || player_side(world, c.attacker) {
             continue;
         }

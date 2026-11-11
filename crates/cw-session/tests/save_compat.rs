@@ -247,7 +247,12 @@ fn a_schema_3_career_loads_its_raid_log_with_no_campaigns() {
     assert_eq!(world.raids.len(), 1);
     let record = &world.raids[0];
     assert_eq!(
-        (record.tick, record.budget_cents, record.chance_bps, record.success),
+        (
+            record.tick,
+            record.budget_cents,
+            record.chance_bps,
+            record.success
+        ),
         (5, 4_000_000, 2_100, false)
     );
     assert!(world.raids.campaigns.is_empty());

@@ -1539,11 +1539,12 @@ fn defend_raids(world: &World, dataset: &Dataset, firm: Handle, proposals: &mut 
         else {
             continue;
         };
-        let at_risk = (block_contribution(world, dataset, firm, division.strategy, division.region)
-            * now.blocks_at_stake as i64
-            * 156
-            - now.price_cents)
-            .max(0);
+        let at_risk =
+            (block_contribution(world, dataset, firm, division.strategy, division.region)
+                * now.blocks_at_stake as i64
+                * 156
+                - now.price_cents)
+                .max(0);
         let saved = at_risk * (now.chance_bps - better.chance_bps).max(0) as i64 / 10_000
             * selector::defend_pct(selector::style(world, dataset, firm))
             / 100;

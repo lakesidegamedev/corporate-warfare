@@ -160,7 +160,10 @@ fn a_campaign_escrows_its_budget_and_is_decided_against_the_defence_at_resolutio
     let book = &s.world.firm(s.attacker).unwrap().book;
     assert_eq!(book.cash(), cash_before - budget);
     assert_eq!(book.balance(Account::RestrictedCash), budget);
-    assert!(s.world.raids.is_empty(), "nothing is decided at announcement");
+    assert!(
+        s.world.raids.is_empty(),
+        "nothing is decided at announcement"
+    );
     assert_eq!(money(&s.world), total);
     // One campaign per raider on the same division at a time.
     assert!(
@@ -176,13 +179,7 @@ fn a_campaign_escrows_its_budget_and_is_decided_against_the_defence_at_resolutio
         .is_err()
     );
     let announced = sectors::raid_quote(
-        &s.world,
-        &s.dataset,
-        s.attacker,
-        s.defender,
-        s.region,
-        s.industry,
-        budget,
+        &s.world, &s.dataset, s.attacker, s.defender, s.region, s.industry, budget,
     );
     // Not due yet: three weeks on, still pending.
     s.world.tick.0 += 3;
@@ -198,13 +195,7 @@ fn a_campaign_escrows_its_budget_and_is_decided_against_the_defence_at_resolutio
         .marketing_budget_cents = s.defence / 13;
     s.world.tick.0 += 1;
     let at_resolution = sectors::raid_quote(
-        &s.world,
-        &s.dataset,
-        s.attacker,
-        s.defender,
-        s.region,
-        s.industry,
-        budget,
+        &s.world, &s.dataset, s.attacker, s.defender, s.region, s.industry, budget,
     );
     assert!(at_resolution.chance_bps < announced.chance_bps);
     sectors::resolve_raid_campaigns(&mut s.world, &s.dataset);
@@ -224,7 +215,11 @@ fn a_campaign_escrows_its_budget_and_is_decided_against_the_defence_at_resolutio
             .balance(Account::RestrictedCash),
         0
     );
-    assert_eq!(money(&s.world), total, "a campaign moves money, never mints it");
+    assert_eq!(
+        money(&s.world),
+        total,
+        "a campaign moves money, never mints it"
+    );
 }
 
 #[test]
@@ -254,10 +249,17 @@ fn an_abandoned_campaign_loses_its_budget_and_takes_nothing() {
     )
     .unwrap();
     assert!(s.world.raids.campaigns.is_empty());
-    assert!(s.world.raids.is_empty(), "an abandoned campaign decides nothing");
+    assert!(
+        s.world.raids.is_empty(),
+        "an abandoned campaign decides nothing"
+    );
     let book = &s.world.firm(s.attacker).unwrap().book;
     assert_eq!(book.balance(Account::RestrictedCash), 0);
-    assert_eq!(book.cash(), cash_before - budget, "the budget is not returned");
+    assert_eq!(
+        book.cash(),
+        cash_before - budget,
+        "the budget is not returned"
+    );
     assert_eq!(money(&s.world), total);
     // Nothing left to abandon.
     assert!(

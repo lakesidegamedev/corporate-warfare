@@ -753,7 +753,10 @@ pub fn announce_raid(
         budget_cents,
     )?;
     if world.raids.campaigns.iter().any(|c| {
-        c.attacker == attacker && c.defender == defender && c.region == region && c.industry == industry
+        c.attacker == attacker
+            && c.defender == defender
+            && c.region == region
+            && c.industry == industry
     }) {
         return Err(E::WrongPhase {
             expected: "no_campaign",
@@ -777,7 +780,11 @@ pub fn announce_raid(
             world.tick,
             Txn::new()
                 .credit(Account::Cash, budget_cents, "raid campaign escrow")
-                .debit(Account::RestrictedCash, budget_cents, "raid campaign escrow"),
+                .debit(
+                    Account::RestrictedCash,
+                    budget_cents,
+                    "raid campaign escrow",
+                ),
         );
     }
     let campaign = RaidCampaign {
@@ -810,7 +817,11 @@ fn spend_escrow(world: &mut World, dataset: &Dataset, campaign: &RaidCampaign) -
             world.tick,
             Txn::new()
                 .debit(Account::Cash, amount, "raid campaign escrow released")
-                .credit(Account::RestrictedCash, amount, "raid campaign escrow released"),
+                .credit(
+                    Account::RestrictedCash,
+                    amount,
+                    "raid campaign escrow released",
+                ),
         );
     }
     crate::economy::research::buy_advertising(
@@ -834,7 +845,10 @@ pub fn abandon_raid(
     industry: u8,
 ) -> Result<RaidCampaign, DomainError> {
     let Some(at) = world.raids.campaigns.iter().position(|c| {
-        c.attacker == attacker && c.defender == defender && c.region == region && c.industry == industry
+        c.attacker == attacker
+            && c.defender == defender
+            && c.region == region
+            && c.industry == industry
     }) else {
         return Err(DomainError::WrongPhase {
             expected: "campaign_running",
@@ -854,19 +868,32 @@ pub fn resolve_raid_campaigns(world: &mut World, dataset: &Dataset) {
         return;
     }
     let now = world.tick.0;
-    let (due, keep): (Vec<RaidCampaign>, Vec<RaidCampaign>) = std::mem::take(&mut world.raids.campaigns)
-        .into_iter()
-        .partition(|c| c.resolves <= now);
+    let (due, keep): (Vec<RaidCampaign>, Vec<RaidCampaign>) =
+        std::mem::take(&mut world.raids.campaigns)
+            .into_iter()
+            .partition(|c| c.resolves <= now);
     world.raids.campaigns = keep;
     for campaign in due {
         let live = |h: Handle| world.firms.get(h).is_some_and(|f| f.operative());
         let viable = live(campaign.attacker)
             && live(campaign.defender)
-            && !division_plants(world, dataset, campaign.attacker, campaign.region, campaign.industry)
-                .is_empty()
+            && !division_plants(
+                world,
+                dataset,
+                campaign.attacker,
+                campaign.region,
+                campaign.industry,
+            )
+            .is_empty()
             && division_blocks_and_book(
                 world,
-                &division_plants(world, dataset, campaign.defender, campaign.region, campaign.industry),
+                &division_plants(
+                    world,
+                    dataset,
+                    campaign.defender,
+                    campaign.region,
+                    campaign.industry,
+                ),
             )
             .0 >= 1;
         let spent = spend_escrow(world, dataset, &campaign);
@@ -936,7 +963,15 @@ pub fn raid(
         budget_cents,
         "market raid",
     );
-    settle_raid(world, dataset, attacker, defender, region, industry, budget_cents)
+    settle_raid(
+        world,
+        dataset,
+        attacker,
+        defender,
+        region,
+        industry,
+        budget_cents,
+    )
 }
 
 /// Decide a raid whose budget has already been spent on advertising: surcharge, roll, and on

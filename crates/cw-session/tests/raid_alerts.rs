@@ -155,7 +155,10 @@ fn an_announced_raid_names_the_raider_the_stake_the_chance_the_weeks_and_the_def
         resolves: 43,
     });
     let text = detail(&s, "alert.raid_announced").expect("an announcement");
-    assert!(text.contains(&format!("{raider} has announced a raid")), "{text}");
+    assert!(
+        text.contains(&format!("{raider} has announced a raid")),
+        "{text}"
+    );
     assert!(text.contains("At stake: 1 block of your 1 block"), "{text}");
     assert!(text.contains("decided in 3 weeks"), "{text}");
     assert!(text.contains("Raising weekly marketing by"), "{text}");

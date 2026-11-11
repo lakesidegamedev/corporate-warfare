@@ -116,7 +116,10 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     // The hash before raids were announced ahead is the 2.0 capacity round's pin.
     let pre_warning = "cbe64f26652373ca72519696c3ca4c5182e6c9b386c6d3f5c7adb8c3479f076d";
     assert_eq!(data.pre_raid_warning_hash(), pre_warning);
-    assert_eq!(cw_data::Dataset::for_hash(pre_warning).unwrap().hash, data.hash);
+    assert_eq!(
+        cw_data::Dataset::for_hash(pre_warning).unwrap().hash,
+        data.hash
+    );
     let pins = [
         (
             1u64,
