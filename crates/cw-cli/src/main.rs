@@ -25,6 +25,8 @@ fn main() {
         Some("report") => report(&arguments[1..]),
         Some("bench") => bench(&arguments[1..]),
         Some("arc") => arc::run(&arguments[1..]),
+        Some("probe") => policy::skilled::probe_all(&arguments[1..]),
+        Some("opps") => policy::skilled::explore(&arguments[1..]),
         _ => {
             eprintln!(
                 "Usage: cw-cli <doctor|run|sweep|replay|diagnose|report>\n\
@@ -157,7 +159,9 @@ fn policy_flag(arguments: &[String]) -> ReferencePolicy {
     match ReferencePolicy::parse(&name) {
         Some(policy) => policy,
         None => {
-            eprintln!("unknown policy {name}; use none, conservative, growth or acquirer");
+            eprintln!(
+                "unknown policy {name}; use none, conservative, growth, acquirer, expander, passive, reckless, skilled, skilled-organic, noise or noise-macro"
+            );
             std::process::exit(2);
         }
     }
