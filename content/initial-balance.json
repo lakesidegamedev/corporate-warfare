@@ -1906,6 +1906,6 @@
       "components"
     ],
     "credit_elasticity_bps": 5000,
-    "retail_reads_street": false
+    "retail_reads_street": true
   }
 }
