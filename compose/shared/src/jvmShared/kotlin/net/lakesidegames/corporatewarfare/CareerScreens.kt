@@ -24,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uniffi.cw_ffi.AchievementDto
+import uniffi.cw_ffi.CareerEventDto
+import uniffi.cw_ffi.CareerYearDto
 import uniffi.cw_ffi.ChapterDto
 
 /**
@@ -106,11 +108,19 @@ fun CareerScreen(store: GameStore) {
     var pick by remember { mutableStateOf<UInt?>(null) }
     if (hall == null) { Box(Modifier.fillMaxSize().padding(16.dp)) { Text("The record opens once the career is running.", color = Palette.secondary, fontSize = 12.sp) }; return }
     val chapters = hall.chapters
+    val standing = rememberEngine(store, store.overview?.tick) { h -> h.careerStanding() }
+    val summary = rememberEngine(store, store.overview?.tick) { h -> h.careerSummary() }
+    val years = summary?.yearsLog.orEmpty()
     val chosen = chapters.firstOrNull { it.number == pick } ?: chapters.lastOrNull()
     val score = store.score
     Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FigureLine(
             *listOfNotNull(
+                standing?.ambition?.let { Triple("Ambition", ambitionWords(it), Palette.gold) },
+                standing?.let { Triple("Medal", medalWords(it.medal), medalTint(it.medal)) },
+                standing?.takeIf { it.league > 0u }?.let { Triple("Rank", "#${it.rank} of ${it.league}", Palette.primaryText) },
+                standing?.let { Triple("Growth", changeText(it.growthBps), changeTint(it.growthBps)) },
+                standing?.takeIf { it.weeksLeft > 0u && !it.ended }?.let { Triple("Weeks left", "${it.weeksLeft}", Palette.primaryText) },
                 score?.let { Triple("Five-year score", it.total.toString(), Palette.gold) },
                 score?.let { Triple("Return", it.returnComponent.toString(), Palette.primaryText) },
                 score?.let { Triple("Expansion", it.expansionComponent.toString(), Palette.primaryText) },
@@ -120,18 +130,39 @@ fun CareerScreen(store: GameStore) {
                 Triple("Years in", "${hall.weeks / 52u}", Palette.primaryText),
             ).toTypedArray(),
         )
-        SplitOrStack(Modifier.fillMaxWidth().weight(1f), 1.8f, 1f, 360.dp, 420.dp, left = { m ->
+        SplitOrStack(Modifier.fillMaxWidth().weight(1f), 1.8f, 1f, 760.dp, 560.dp, left = { m ->
+          Column(m, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             DataGrid(
                 "Chapters", chapters, chapterColumns(), key = { it.number },
                 views = GridViews("career-chapters", ChapterViews, mine = { true }),
-                modifier = m,
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 filterText = { "${it.name} ${chosenOf(it)?.title.orEmpty()}" },
                 selected = chosen?.number, onSelect = { pick = it.number },
                 breakdown = { c -> "${c.name}: ${outcomeWords(c)}" + (chosenOf(c)?.let { ", goal: ${it.title}" } ?: "") },
                 initialSort = "num",
             )
+            if (years.isNotEmpty()) DataGrid(
+                "Year by year", years, yearColumns(), key = { it.year },
+                views = GridViews("career-years", YearViews),
+                modifier = Modifier.fillMaxWidth().height(gridNaturalHeight(years.size.coerceAtMost(8)) + 30.dp),
+                filterText = { "year ${it.year}" },
+                initialSort = "year", initialDescending = false,
+            )
+          }
         }, right = { m ->
             DetailPane(chosen?.name ?: "Chapter", m) {
+                if (standing != null) {
+                    if (standing.ended && summary != null) {
+                        Text(summary.ending.replace('_', ' ').replaceFirstChar { it.uppercase() }, color = if (summary.lost) Palette.negative else Palette.gold, fontFamily = Pixel.font, fontSize = 14.sp)
+                        if (summary.sentence.isNotEmpty()) Text(summary.sentence, color = Palette.primaryText, fontSize = 12.sp, lineHeight = 16.sp)
+                        Text("Net worth ${Format.compact(summary.startWorthCents)} to ${Format.compact(summary.netWorthCents)}, ${changeText(summary.growthBps)}. Medal: ${medalWords(summary.medal)}.", color = Palette.primaryText, fontSize = 12.sp)
+                    } else {
+                        if (standing.detail.isNotEmpty()) Text(standing.detail, color = Palette.primaryText, fontSize = 12.sp, lineHeight = 16.sp)
+                        if (standing.next.isNotEmpty()) Text("Next medal: ${standing.next}", color = Palette.gold, fontSize = 12.sp, lineHeight = 16.sp)
+                    }
+                    if (standing.boardWarned && standing.boardWarning.isNotEmpty()) Text(standing.boardWarning, color = Palette.warning, fontSize = 12.sp, lineHeight = 16.sp)
+                    summary?.events?.takeIf { it.isNotEmpty() }?.takeLast(4)?.forEach { e -> Text("Week ${e.week}: ${e.text}", color = Palette.secondary, fontSize = 11.sp, lineHeight = 15.sp) }
+                }
                 if (chosen == null) { Text("The first chapter opens in week 1.", color = Palette.secondary, fontSize = 12.sp); return@DetailPane }
                 val taken = chosenOf(chosen)
                 if (chosen.offered.isEmpty()) Text("The board made no offer this chapter.", color = Palette.secondary, fontSize = 12.sp)
@@ -217,3 +248,28 @@ fun HallGridScreen(store: GameStore, settings: AppSettings? = LocalAppSettings.c
         })
     }
 }
+
+private fun ambitionWords(key: String) = when (key) {
+    "richest" -> "Richest"
+    "biggest" -> "Biggest"
+    "dominant" -> "Dominant"
+    "survivor" -> "Survivor"
+    else -> key.replaceFirstChar { it.uppercase() }
+}
+
+private fun medalWords(key: String) = when (key) { "bronze" -> "Bronze"; "silver" -> "Silver"; "gold" -> "Gold"; else -> "None yet" }
+
+private fun medalTint(key: String) = if (key == "none") Palette.secondary else Palette.gold
+
+internal val YearViews = listOf(
+    ViewState("Years", cols("year", "rank", "value", "worth", "wealth", "medal"), sort = "year", descending = false),
+)
+
+private fun yearColumns(): List<GridColumn<CareerYearDto>> = listOf(
+    GridColumn("year", "Year", null, numeric = false, text = { "Year ${it.year}" }, sort = { it.year.toLong() }, minWidth = 80.dp, bold = true, topic = "About"),
+    GridColumn("rank", "Company rank", 100.dp, text = { "#${it.rank} of ${it.league}" }, sort = { it.rank.toLong() }, topic = "Company"),
+    GridColumn("value", "Company value", 100.dp, text = { Format.compact(it.companyValueCents) }, sort = { it.companyValueCents }, scale = 100.0, topic = "Company"),
+    GridColumn("worth", "Net worth", 90.dp, text = { Format.compact(it.netWorthCents) }, sort = { it.netWorthCents }, scale = 100.0, topic = "You"),
+    GridColumn("wealth", "Wealth rank", 90.dp, text = { "#${it.wealthRank}" }, sort = { it.wealthRank.toLong() }, topic = "You"),
+    GridColumn("medal", "Medal", 70.dp, numeric = false, text = { medalWords(it.medal) }, tone = { medalTint(it.medal) }, topic = "You"),
+)
