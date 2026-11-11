@@ -225,7 +225,7 @@ fn texture_fade_q16(half_life_weeks: i64) -> i64 {
         let mid = (low + high) / 2;
         let mut power = 65_536i64;
         for _ in 0..weeks {
-            power = power * mid >> 16;
+            power = (power * mid) >> 16;
         }
         if power >= 32_768 {
             high = mid;
@@ -252,8 +252,8 @@ pub fn texture_at(seed: u64, texture: &cw_data::balance::FamilyTexture, week: i6
     let (mut power, mut squares, mut sum) = (65_536i64, 0i64, 0i64);
     let (mut top, mut top_week) = (0i64, week);
     for age in 0..window {
-        let weight = power * (age + 1) >> 4;
-        squares += weight * weight >> 16;
+        let weight = (power * (age + 1)) >> 4;
+        squares += (weight * weight) >> 16;
         let at = week - age;
         if at >= 1 {
             let part = weight * texture_shock(seed, &texture.family, at);
@@ -262,7 +262,7 @@ pub fn texture_at(seed: u64, texture: &cw_data::balance::FamilyTexture, week: i6
                 (top, top_week) = (part, at);
             }
         }
-        power = power * fade >> 16;
+        power = (power * fade) >> 16;
     }
     // squares is in 1/65536ths of the weights squared; its root is in 1/256ths, so scale back.
     let spread = ((squares as u64).isqrt() as i64 * 256).max(1);
@@ -888,7 +888,7 @@ mod tests {
             let fade = texture_fade_q16(weeks);
             let mut power = 65_536i64;
             for _ in 0..weeks {
-                power = power * fade >> 16;
+                power = (power * fade) >> 16;
             }
             assert!((32_768..=33_200).contains(&power), "{weeks}: {power}");
         }
