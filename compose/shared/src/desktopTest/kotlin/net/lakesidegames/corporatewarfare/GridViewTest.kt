@@ -159,7 +159,7 @@ class GridViewTest {
         // Every built-in view only names columns its screen has, and sorts by a column it shows.
         val screens = mapOf(
             GoodsViews to setOf("name", "sector", "price", "vsnormal", "week", "made", "sold", "through", "stock", "imported", "exported", "yours"),
-            LeagueViews to setOf("name", "sector", "revenue", "profit", "margin", "cash", "debt", "price", "week", "cap", "fair", "float", "divisions", "held", "overlap", "theirlots", "raids"),
+            LeagueViews to setOf("name", "sector", "revenue", "profit", "margin", "cash", "debt", "price", "week", "quarter", "cap", "fair", "float", "divisions", "held", "overlap", "theirlots", "raids"),
             DivisionViews to setOf("name", "sector", "region", "strategy", "plants", "share", "stock", "serves", "made", "sold", "util", "price", "cost", "margin", "weekly", "mpct", "earned"),
             LineViews to setOf("name", "price", "market", "cost", "margin", "made", "sold", "stock", "posture"),
             ResultViews to setOf("week", "revenue", "goods", "wages", "net", "cash", "equity", "nm"),

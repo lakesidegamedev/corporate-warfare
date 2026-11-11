@@ -71,13 +71,20 @@ enum class Place(val title: String, val group: String, val key: String, val conv
     Office("Office room", "Company", "", false),
     Goods("Goods", "Markets", "F5", true),
     Openings("Openings", "Markets", "", true),
+    Regions("Regions", "Markets", "", true),
+    Freight("Freight and lanes", "Markets", "", true),
     Auctions("Auctions, listings", "Markets", "", true),
-    Exchange("Stocks, economy", "Markets", "", false),
+    Exchange("Old markets page", "Markets", "", false),
     Map("Map, freight", "Markets", "F1", false),
     League("League table", "Rivals", "F6", true),
     Raids("Raids", "Rivals", "", true),
+    Activity("Activity", "Rivals", "", true),
+    Deals("Deals and stakes", "Rivals", "", true),
+    Economy("Economy", "World", "", true),
+    Politics("Politics and laws", "World", "", true),
+    Timeline("Timeline", "World", "", true),
     Paper("The paper", "World", "F8", false),
-    Inbox("Letters", "World", "", false),
+    Inbox("Letters", "World", "", true),
     Portfolio("Portfolio", "You", "F7", true),
     Career("Career", "You", "", true),
     Hall("Hall of Careers", "You", "F9", true),
@@ -192,11 +199,18 @@ private fun PlaceContent(store: GameStore, place: Place, leaguePick: ULong?, onL
         Place.People -> PeopleScreen(store)
         Place.Plants -> PlantsScreen(store)
         Place.Career -> CareerScreen(store)
+        Place.Regions -> RegionsScreen(store)
+        Place.Freight -> FreightScreen(store)
+        Place.Activity -> ActivityScreen(store, openRival)
+        Place.Deals -> DealsScreen(store, openRival)
+        Place.Economy -> EconomyScreen(store)
+        Place.Politics -> PoliticsScreen(store)
+        Place.Timeline -> TimelineScreen(store) { week -> store.paperWeek = week; open(Place.Paper) }
         Place.Office -> DesktopOffice(store) { page -> Place.entries.firstOrNull { it.name == page.name }?.let(open) ?: open(Place.Overview) }
         Place.Exchange -> DesktopMarkets(store)
         Place.Map -> DesktopMap(store)
         Place.Paper -> PaperScreen(store)
-        Place.Inbox -> DesktopInbox(store)
+        Place.Inbox -> LettersScreen(store)
         Place.Portfolio -> PortfolioScreen(store)
         Place.Hall -> HallGridScreen(store)
     }
@@ -230,7 +244,7 @@ fun TopStrip(store: GameStore, onOpen: (Place) -> Unit, onPalette: () -> Unit) {
         }
         if (rank > 0) StripFigure("League, by value", "#$rank of ${ranked.size}", if (rank <= 3) Palette.gold else Palette.primaryText) { onOpen(Place.League) }
         StripFigure("Net worth", Format.compact(o?.investorNetWorthCents ?: 0)) { onOpen(Place.Portfolio) }
-        store.economy?.let { e -> StripFigure("Economy", "${e.phase.replaceFirstChar { it.uppercase() }} ${"%.2f%%".format(e.policyRateBps / 100.0)}", economyPhaseTint(e.phase)) { onOpen(Place.Exchange) } }
+        store.economy?.let { e -> StripFigure("Economy", "${e.phase.replaceFirstChar { it.uppercase() }} ${"%.2f%%".format(e.policyRateBps / 100.0)}", economyPhaseTint(e.phase)) { onOpen(Place.Economy) } }
         Spacer(Modifier.weight(1f))
         FocusChip()
         TimeframeStrip()
@@ -890,6 +904,16 @@ fun LeagueScreen(store: GameStore, pick: ULong?, onPick: (ULong) -> Unit) {
                     )
                 }
             }
+            // The exchange lives here: buy and sell this company's shares from its dossier.
+            var trading by remember { mutableStateOf(false) }
+            val line = stocks[chosen]
+            if (line != null && !them.yours) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GoldButton("Buy shares") { trading = true }
+                    if (line.yourShares > 0) GridButton("Sell", false) { trading = true }
+                }
+                if (trading) StockDialog(store, line, showPage = false) { trading = false }
+            }
             val page = rememberEngine(store, chosen, store.overview?.tick) { h -> h.companyPage(chosen) }
             if (page != null) CompanyPageBody(store, page, onOpenFirm = onPick, onTrade = null)
         }
@@ -920,6 +944,7 @@ private fun leagueColumns(
     GridColumn("price", "Share", 72.dp, text = { Format.price(it.sharePriceCents) }, sort = { it.sharePriceCents }, series = { hist.shares[it.firm] ?: stocks[it.firm]?.historyCents.orEmpty() }, fmt = { Format.price(it) }, scale = 100.0, topic = "Shares",
         tip = "The share price. Its change, percent and trend use the weekly closing prices, five years of them."),
     GridColumn("week", "Week", 60.dp, text = { stocks[it.firm]?.let { s -> changeText(s.changeWeekBps) } ?: "" }, sort = { stocks[it.firm]?.changeWeekBps ?: 0 }, tone = { changeTint(stocks[it.firm]?.changeWeekBps ?: 0) }, scale = 100.0, topic = "Shares"),
+    GridColumn("quarter", "Quarter", 64.dp, text = { stocks[it.firm]?.let { s -> changeText(s.changeQuarterBps) } ?: "" }, sort = { stocks[it.firm]?.changeQuarterBps ?: 0 }, tone = { changeTint(stocks[it.firm]?.changeQuarterBps ?: 0) }, scale = 100.0, topic = "Shares"),
     GridColumn("cap", "Value", 96.dp, text = { Format.compact(it.marketCapCents) }, sort = { it.marketCapCents }, bar = { it.marketCapCents.toFloat() / maxCap }, fmt = { Format.compact(it) }, scale = 100.0, total = true, topic = "Shares",
         tip = "Market value: share price times shares issued."),
     GridColumn("fair", "Fair price", 76.dp, text = { stocks[it.firm]?.let { s -> Format.price(s.fairCents) } ?: DASH }, sort = { stocks[it.firm]?.fairCents ?: Long.MIN_VALUE }, scale = 100.0, topic = "Shares", tip = "What the market's own valuation says a share is worth."),
@@ -945,6 +970,7 @@ internal val LeagueViews = listOf(
     ViewState("Overview", cols("name", "sector", "revenue", "profit", "margin", "price", "price.Spark", "cap"), sort = "cap"),
     ViewState("Finance", cols("name", "revenue", "revenue.Percent", "profit", "profit.Change", "margin", "cash", "debt", "debt.Change"), sort = "revenue"),
     ViewState("Shares", cols("name", "price", "price.Percent", "price.Spark", "cap", "fair", "float", "held"), sort = "cap"),
+    ViewState("Exchange", cols("name", "price", "week", "quarter", "price.Spark", "fair", "float", "cap", "held"), sort = "cap"),
     ViewState("Against me", cols("name", "sector", "overlap", "theirlots", "raids", "cap", "profit"), sort = "theirlots", filters = listOf(Filter(FilterOp.Above, "overlap", number = 0.0))),
 )
 
