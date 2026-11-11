@@ -235,6 +235,33 @@ fn texas_has_its_own_geography_lanes_firms_and_balance() {
     assert_eq!(texas.player_recipe, "oil_wells");
 }
 
+/// The 2.0 balance pass opens Texas rivals at 70 percent of their authored size (the roster
+/// carried half as much capacity again as Great Lakes for the same corridor workforce). The
+/// figure joins the hash only where a scenario sets it, so every other scenario keeps its hash,
+/// and a Texas save written before the pass names the old hash and still finds Texas.
+#[test]
+fn texas_rivals_open_smaller_and_the_old_texas_hash_still_loads() {
+    let texas = cw_data::Dataset::load_scenario("texas-1981").unwrap();
+    assert_eq!(texas.rival_blocks_bps, 7_000);
+    assert_eq!(texas.opening_blocks(10), 7);
+    assert_eq!(texas.opening_blocks(1), 1);
+    let before = texas.pre_balance_hash();
+    assert_eq!(
+        before,
+        "449e603a3e7b9c636f7e6147defbf3e31380c865fbf14c1d3695dfea8057c7f3"
+    );
+    assert_ne!(before, texas.hash);
+    assert_eq!(
+        cw_data::Dataset::for_hash(&before).unwrap().scenario_id,
+        "texas-1981"
+    );
+    for id in ["great-lakes-2000", "silicon-valley-1995", "ruhr-rhine-1991"] {
+        let data = cw_data::Dataset::load_scenario(id).unwrap();
+        assert_eq!(data.rival_blocks_bps, 10_000);
+        assert_eq!(data.pre_balance_hash(), data.hash, "{id}");
+    }
+}
+
 #[test]
 fn texas_pipelines_open_on_named_corridors_and_carry_crude() {
     let session = Session::create(config(1, ScenarioKind::Guided, "texas-1981")).unwrap();
