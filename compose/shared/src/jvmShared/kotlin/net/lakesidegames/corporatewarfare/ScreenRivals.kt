@@ -140,11 +140,11 @@ private fun activityScopes(rows: List<ActivityRow>): List<ScopeOption<ActivityRo
     rows.map { it.kind }.distinct().sorted().map { k -> ScopeOption<ActivityRow>("kind:$k", k, "Kind") { it.kind == k } }
 
 internal val ActivityViews = listOf(
-    ViewState("Everything", cols("who", "kind", "whom", "place", "sector", "result", "when"), sort = "ago", descending = false),
-    ViewState("Raids", cols("who", "whom", "place", "sector", "result", "plants", "when"), sort = "ago", descending = false, filters = listOf(Filter(FilterOp.Is, "kind", "Raid"))),
-    ViewState("Mergers and sales", cols("who", "kind", "whom", "place", "result", "plants", "when"), sort = "ago", descending = false, filters = listOf(Filter(FilterOp.Is, "kind", "Merger"))),
-    ViewState("Involving me", cols("who", "kind", "whom", "place", "sector", "result", "when"), sort = "ago", descending = false, filters = listOf(Filter(FilterOp.Mine))),
-    ViewState("Rival moves", cols("who", "kind", "text", "when"), sort = "ago", descending = false, filters = listOf(Filter(FilterOp.Is, "kind", "Move"))),
+    ViewState("Everything", cols("who", "kind", "whom", "place", "sector", "result", "when"), sort = "when"),
+    ViewState("Raids", cols("who", "whom", "place", "sector", "result", "plants", "when"), sort = "when", filters = listOf(Filter(FilterOp.Is, "kind", "Raid"))),
+    ViewState("Mergers and sales", cols("who", "kind", "whom", "place", "result", "plants", "when"), sort = "when", filters = listOf(Filter(FilterOp.Is, "kind", "Merger"))),
+    ViewState("Involving me", cols("who", "kind", "whom", "place", "sector", "result", "when"), sort = "when", filters = listOf(Filter(FilterOp.Mine))),
+    ViewState("Rival moves", cols("who", "kind", "text", "when"), sort = "when", filters = listOf(Filter(FilterOp.Is, "kind", "Move"))),
 )
 
 // MARK: Deals and stakes
@@ -302,5 +302,4 @@ internal val DealViews = listOf(
     ViewState("Stakes in me", cols("name", "shares", "stake", "value"), sort = "stake", filters = listOf(Filter(FilterOp.Is, "type", "Holds you"))),
     ViewState("Tender offers", cols("name", "state", "price", "shares", "stake", "escrow", "left"), sort = "left", descending = false, filters = listOf(Filter(FilterOp.Is, "kind", "Share offer"))),
     ViewState("Finished deals", cols("name", "kind", "state", "price", "shares"), sort = "name", descending = false, filters = listOf(Filter(FilterOp.Is, "type", "Finished deal"))),
-    ViewState("Everything", cols("name", "type", "kind", "state", "shares", "stake", "value"), sort = "value"),
 )

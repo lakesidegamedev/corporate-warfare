@@ -31,4 +31,13 @@ class RollBRenderTest {
         ProposalCareer.shoot("roll-b-economy-phone", 390, 844, settings, density = 2f) { EconomyScreen(store) }
         ProposalCareer.shoot("roll-b-letters-phone", 390, 844, settings, density = 2f) { LettersScreen(store) }
     }
+
+    @Test
+    fun builtInViewsAreSound() {
+        val all = mapOf("regions" to RegionViews, "lanes" to LaneViews, "activity" to ActivityViews, "deals" to DealViews, "economy" to EconomyViews, "politics" to PoliticsViews, "tenders" to TenderViews, "timeline" to TimelineViews, "letters" to LetterViews)
+        for ((name, views) in all) {
+            assertTrue(views.size in 3..5, "$name has three to five views")
+            for (v in views) assertTrue(v.columns.any { it.key == v.sort }, "$name: ${v.name} sorts by a column it does not show")
+        }
+    }
 }
