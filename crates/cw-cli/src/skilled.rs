@@ -37,9 +37,6 @@ const LOAN_STEP_CENTS: i64 = 50_000_000;
 /// Cash the founder keeps personally, in cents ($100,000).
 const FOUNDER_KEEPS_CENTS: i64 = 10_000_000;
 
-#[derive(Default)]
-pub struct SkilledState {}
-
 impl PolicyRunner {
     /// Found the scenario's starting company with all the spare personal cash.
     pub(super) fn found_skilled(&mut self, session: &mut Session) {

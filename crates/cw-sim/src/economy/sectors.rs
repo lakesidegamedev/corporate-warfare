@@ -531,13 +531,37 @@ pub fn raid_quote(
     industry: u8,
     budget_cents: i64,
 ) -> RaidQuote {
-    let quarter = |firm: Handle| {
-        world
-            .firms
-            .get(firm)
-            .map(|f| f.policies.marketing_budget_cents.max(0) * 13)
-            .unwrap_or(0)
-    };
+    let quarter = world
+        .firms
+        .get(attacker)
+        .map(|f| f.policies.marketing_budget_cents.max(0) * 13)
+        .unwrap_or(0);
+    let attack = budget_cents.max(0) + quarter;
+    let mut quote = raid_exposure(world, dataset, defender, region, industry, attack, 0);
+    quote.surcharge_cents =
+        crate::economy::structure::raid_surcharge(world, attacker, defender, budget_cents);
+    quote
+}
+
+/// What a raid with `attack_cents` behind it would risk against `defender`'s division, if the
+/// defender spent `extra_weekly_marketing_cents` more each week. The surcharge is left at zero:
+/// it belongs to a named raider.
+pub fn raid_exposure(
+    world: &World,
+    dataset: &Dataset,
+    defender: Handle,
+    region: u8,
+    industry: u8,
+    attack_cents: i64,
+    extra_weekly_marketing_cents: i64,
+) -> RaidQuote {
+    let quarter = world
+        .firms
+        .get(defender)
+        .map(|f| {
+            (f.policies.marketing_budget_cents.max(0) + extra_weekly_marketing_cents.max(0)) * 13
+        })
+        .unwrap_or(0);
     let defending = division_plants(world, dataset, defender, region, industry);
     let (blocks, book) = division_blocks_and_book(world, &defending);
     let output_value: i64 = defending
@@ -545,8 +569,8 @@ pub fn raid_quote(
         .filter_map(|handle| world.facilities.get(*handle))
         .map(|plant| capacity_value(dataset, plant.recipe, plant.blocks) * 13)
         .sum();
-    let attack = budget_cents.max(0) + quarter(attacker);
-    let defence = (quarter(defender) + output_value * RAID_DEFENCE_FLOOR_BPS / 10_000).max(1);
+    let attack = attack_cents.max(0);
+    let defence = (quarter + output_value * RAID_DEFENCE_FLOOR_BPS / 10_000).max(1);
     let advantage_bps = attack as i128 * 10_000 / defence as i128;
     let stake_bps = RAID_STAKE_MIN_BPS
         + (RAID_STAKE_MAX_BPS - RAID_STAKE_MIN_BPS)
@@ -566,8 +590,6 @@ pub fn raid_quote(
     };
     let chance = (base_chance * (10_000 - taken_bps as i128 * RAID_STAKE_DRAG_BPS as i128 / 10_000)
         / 10_000) as i32;
-    let surcharge =
-        crate::economy::structure::raid_surcharge(world, attacker, defender, budget_cents);
     RaidQuote {
         attack_cents: attack,
         defence_cents: defence,
@@ -575,7 +597,7 @@ pub fn raid_quote(
         blocks_at_stake: at_stake.clamp(0, u8::MAX as i64) as u8,
         price_cents: price,
         stake_bps: taken_bps.clamp(0, 10_000) as i32,
-        surcharge_cents: surcharge,
+        surcharge_cents: 0,
     }
 }
 
