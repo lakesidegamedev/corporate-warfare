@@ -2429,8 +2429,12 @@ mod tests {
         // joined the dataset hash), and again when services and sellers with no import were given
         // more room over reference (130 and 150 percent). In 2.0 it moved again from b2a6baa7...
         // when raids began to be announced four weeks ahead (the warning joined the dataset hash
-        // and the world gained the list of campaigns in progress, save schema 4), and again in 2.0 when
-        // plant auctions joined the dataset hash (four weeks for a break-up or a listing). The Swift
+        // and the world gained the list of campaigns in progress, save schema 4), again when the
+        // demand rules joined the dataset hash (a new seller counts only what its room, inputs and
+        // labour allow, households turn to sellers with stock left and grow toward their budget
+        // where served, demand follows the cycle by product) and a new company began offering at
+        // least the going wage, and again in 2.0 when plant auctions joined the dataset hash (four
+        // weeks for a break-up or a listing). The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2456,7 +2460,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "d2ded129f2e434a82d4ecb6dc5dffcb4c51ed0b97bd37ca07abc99aaa38c22a2"
+            "6ad6fbf7ed2a13f38fe9d9a2784cf3ab1cab28ba9a475905e26106400d6a20e8"
         );
     }
 

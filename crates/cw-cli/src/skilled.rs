@@ -1171,6 +1171,213 @@ pub fn probe_one(
     probe
 }
 
+/// What one new seller built into an opening the engine names sold, against what the opening
+/// said it would: the signal's expected weekly sales and contribution, then the plant's own
+/// weekly made, sold and price for `weeks` weeks after it opens.
+#[derive(Clone, Debug)]
+pub struct EntryProbe {
+    pub recipe: u16,
+    pub region: u8,
+    pub traded: bool,
+    pub room_lots: i64,
+    pub block_lots: i64,
+    pub expected_sold_lots: i64,
+    pub expected_weekly_cents: i64,
+    pub opened_week: Option<u32>,
+    /// (week, made lots, sold lots, own price cents, market cents) after opening.
+    pub weeks: Vec<(u32, i64, i64, i64, i64)>,
+}
+
+impl EntryProbe {
+    pub fn sold_mean(&self) -> i64 {
+        let n = self.weeks.len().max(1) as i64;
+        self.weeks.iter().map(|w| w.2).sum::<i64>() / n
+    }
+    pub fn made_mean(&self) -> i64 {
+        let n = self.weeks.len().max(1) as i64;
+        self.weeks.iter().map(|w| w.1).sum::<i64>() / n
+    }
+}
+
+/// Run the world with no player to `at`, take the `index`th opening on the sector board, found
+/// a company straight into one block of it, and follow the plant `weeks` weeks after it opens.
+pub fn entry_probe(
+    seed: u64,
+    scenario: &str,
+    at: u32,
+    index: usize,
+    weeks: u32,
+) -> Option<EntryProbe> {
+    use cw_sim::economy::{division_report, sectors};
+    let mut session = Session::create(crate::arc::arc_config_pub(seed, scenario)).unwrap();
+    crate::drive_with(
+        &mut session,
+        at,
+        &mut PolicyRunner::new(ReferencePolicy::None, false),
+        &mut |_, _| {},
+    );
+    let openings = cw_sim::economy::capacity::openings(&session.world, &session.dataset, 0);
+    let open = openings.get(index)?.clone();
+    let mut probe = EntryProbe {
+        recipe: open.recipe,
+        region: open.region,
+        traded: open.traded,
+        room_lots: open.room_lots,
+        block_lots: open.block_lots,
+        expected_sold_lots: open.block_lots * open.input_fill_bps / 10_000,
+        expected_weekly_cents: open.weekly_contribution_cents,
+        opened_week: None,
+        weeks: Vec::new(),
+    };
+    let mut runner = PolicyRunner::new(ReferencePolicy::Passive, false);
+    if !runner.submit(
+        &mut session,
+        CommandIntent::FoundFirm {
+            name: "Entrant".to_owned(),
+            region: open.region,
+            capital_cents: open.build_cost_cents * 3 + 50_000_000,
+            recipe: open.recipe,
+            secondary: None,
+        },
+    ) {
+        return Some(probe);
+    }
+    let firm = session.world.investor.primary_group?;
+    let industry = sectors::divisions_of(&session.world, &session.dataset, firm)
+        .first()
+        .map(|d| d.industry)?;
+    let limit = at + 80 + weeks;
+    let mut idle = PolicyRunner::new(ReferencePolicy::None, false);
+    while session.world.tick.0 < limit && probe.weeks.len() < weeks as usize {
+        crate::drive_with(&mut session, 1, &mut idle, &mut |_, _| {});
+        let operating = session.world.firm(firm).is_some_and(|f| {
+            f.facilities.iter().any(|h| {
+                session
+                    .world
+                    .facilities
+                    .get(*h)
+                    .is_some_and(|p| p.status == cw_sim::state::FacilityStatus::Operating)
+            })
+        });
+        if !operating {
+            continue;
+        }
+        probe.opened_week.get_or_insert(session.world.tick.0);
+        let Some(report) = division_report::report(
+            &session.world,
+            &session.dataset,
+            firm,
+            open.region,
+            industry,
+        ) else {
+            continue;
+        };
+        let Some(out) = report.outputs.iter().find(|o| o.product == open.product) else {
+            continue;
+        };
+        if std::env::var("CW_ENTRY_DEBUG").is_ok() {
+            let inputs: Vec<String> = report
+                .inputs
+                .iter()
+                .filter(|i| i.need_milli > 0)
+                .map(|i| {
+                    format!(
+                        "{}:{}% src {}",
+                        session.dataset.products[i.product as usize].id,
+                        i.used_milli * 100 / i.need_milli,
+                        i.source
+                    )
+                })
+                .collect();
+            let lab = &session.world.regions[open.region as usize].labour;
+            let firm_wages = session
+                .world
+                .firm(firm)
+                .map(|f| f.policies.wage_offer)
+                .unwrap_or_default();
+            eprintln!(
+                "  labour {:?} offer {:?}",
+                lab.iter()
+                    .map(|t| (
+                        t.population,
+                        t.employed,
+                        t.reservation_wage_cents,
+                        t.prevailing_wage_cents
+                    ))
+                    .collect::<Vec<_>>(),
+                firm_wages
+            );
+            eprintln!(
+                "  w{} shortage={} plants={:?} inputs [{}]",
+                session.world.tick.0,
+                report.shortage,
+                report
+                    .plants
+                    .iter()
+                    .map(|p| (p.status, p.utilisation_bps, p.staff_bps, p.inputs_short))
+                    .collect::<Vec<_>>(),
+                inputs.join(" ")
+            );
+        }
+        probe.weeks.push((
+            session.world.tick.0,
+            out.made_milli / 1_000,
+            out.sold_milli / 1_000,
+            out.price_cents,
+            out.market_cents,
+        ));
+    }
+    Some(probe)
+}
+
+/// `cw-cli entry --scenario-id S --seed N --at W --top K --weeks N [--verbose]`.
+pub fn entry_all(arguments: &[String]) {
+    let scenario =
+        crate::flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".into());
+    let seed: u64 = crate::flag(arguments, "--seed")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1);
+    let at: u32 = crate::flag(arguments, "--at")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(36);
+    let top: usize = crate::flag(arguments, "--top")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3);
+    let weeks: u32 = crate::flag(arguments, "--weeks")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(26);
+    let verbose = arguments.iter().any(|a| a == "--verbose");
+    let dataset = Session::create(crate::arc::arc_config_pub(seed, &scenario))
+        .unwrap()
+        .dataset
+        .clone();
+    for index in 0..top {
+        let Some(p) = entry_probe(seed, &scenario, at, index, weeks) else {
+            println!("#{index} no opening");
+            continue;
+        };
+        println!(
+            "#{index} {} {} traded={} room={} block={} expected_sold={} expected_wk=${} opened={:?} made_mean={} sold_mean={} ratio={}%",
+            dataset.recipes[p.recipe as usize].id,
+            dataset.regions[p.region as usize].code,
+            p.traded as u8,
+            p.room_lots,
+            p.block_lots,
+            p.expected_sold_lots,
+            p.expected_weekly_cents / 100,
+            p.opened_week,
+            p.made_mean(),
+            p.sold_mean(),
+            p.sold_mean() * 100 / p.expected_sold_lots.max(1)
+        );
+        if verbose {
+            for (week, made, sold, price, market) in &p.weeks {
+                println!("    w{week} made {made} sold {sold} price {price} market {market}");
+            }
+        }
+    }
+}
+
 pub fn probe_all(arguments: &[String]) {
     let scenario =
         crate::flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".into());

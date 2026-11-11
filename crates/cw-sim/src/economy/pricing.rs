@@ -188,6 +188,22 @@ pub fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         }
         return Some(service_wanted_bps_with(&dataset.markets, used_bps));
     }
+    // Under the demand rules a shop prices like a service: on the share of its shelves'
+    // capacity that sold, plus the households it serves that went without, so its price reads
+    // the street (shortage and local competition), not only its own shelf cover.
+    if dataset.demand.retail_reads_street
+        && dataset.products[product as usize].kind.is_consumer_goods()
+    {
+        let capacity = service_capacity(world, dataset, firm, product);
+        if capacity > 0 {
+            let mut used_bps = (sold.saturating_mul(10_000) / capacity).clamp(0, 10_000);
+            let (unmet, wanted) = seller_household_unmet(world, dataset, firm, product);
+            if wanted > 0 && unmet > 0 {
+                used_bps = used_bps.saturating_add(unmet.saturating_mul(10_000) / wanted);
+            }
+            return Some(service_wanted_bps_with(&dataset.markets, used_bps));
+        }
+    }
     let stock = free_stock(world, dataset, firm, product);
     if sold <= 0 {
         return (stock > 0).then_some(7_000);
@@ -1110,6 +1126,8 @@ pub enum PriceDriver {
     /// A service's reference carried by the general price level, against its opening price, in
     /// basis points.
     PriceLevel(i64),
+    /// The business cycle moving demand for the good: the phase and the move in basis points.
+    Cycle(crate::state::CyclePhase, u16, i64),
 }
 
 /// Why a good's price is where it is this week: its move over the last quarter in basis points
@@ -1195,8 +1213,25 @@ pub fn price_drivers(world: &World, dataset: &Dataset, product: u16) -> (i64, Ve
             },
         ));
     }
+    // Demand moved by the business cycle names the phase, under the demand rules.
+    if !dataset.demand.cycle_elasticity.is_empty() {
+        let (phase, bps) = crate::economy::macro_cycle::cycle_demand(world, dataset, product);
+        if bps.abs() >= 300 {
+            drivers.push((bps.abs() * 2, PriceDriver::Cycle(phase, product, bps)));
+        }
+    }
     drivers.sort_by_key(|(weight, _)| std::cmp::Reverse(*weight));
     (change, drivers.into_iter().map(|(_, d)| d).collect())
+}
+
+fn cycle_phase_text(phase: crate::state::CyclePhase) -> &'static str {
+    match phase {
+        crate::state::CyclePhase::Expansion => "Expansion",
+        crate::state::CyclePhase::Boom => "Boom",
+        crate::state::CyclePhase::Slowdown => "Slowdown",
+        crate::state::CyclePhase::Recession => "Recession",
+        crate::state::CyclePhase::Recovery => "Recovery",
+    }
 }
 
 /// The drivers in plain words, one sentence each.
@@ -1229,6 +1264,12 @@ pub fn driver_text(driver: PriceDriver) -> String {
             pct(bps),
             if bps >= 0 { "above" } else { "below" }
         ),
+        PriceDriver::Cycle(phase, _, bps) => format!(
+            "{}: orders are {} {}.",
+            cycle_phase_text(phase),
+            if bps >= 0 { "up" } else { "down" },
+            pct(bps)
+        ),
         PriceDriver::PriceLevel(bps) => format!(
             "Prices and wages across the economy are {} {} their opening level.",
             pct(bps),
@@ -1250,6 +1291,13 @@ pub fn price_reason(world: &World, dataset: &Dataset, product: u16) -> String {
         )
     };
     match drivers.first() {
+        Some(PriceDriver::Cycle(phase, good, bps)) => format!(
+            "{moved} {}: orders for {} are {} {}%.",
+            cycle_phase_text(*phase),
+            dataset.products[*good as usize].name.to_lowercase(),
+            if *bps >= 0 { "up" } else { "down" },
+            (bps.abs() + 50) / 100
+        ),
         Some(driver) => format!("{moved} {}", driver_text(*driver)),
         None => format!("{moved} Supply and demand are in balance."),
     }

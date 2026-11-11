@@ -1799,5 +1799,114 @@
     "household_cover_bps": 8500,
     "household_unmet_bps": 3000,
     "plant_auction_weeks": 4
+  },
+  "demand": {
+    "sell_within_room": true,
+    "latent_growth_bps": 600,
+    "latent_content_bps": 1000,
+    "cycle_elasticity": [
+      [
+        "construction",
+        30000
+      ],
+      [
+        "building_materials",
+        30000
+      ],
+      [
+        "steel",
+        25000
+      ],
+      [
+        "vehicles",
+        25000
+      ],
+      [
+        "components",
+        20000
+      ],
+      [
+        "advertising",
+        25000
+      ],
+      [
+        "freight",
+        20000
+      ],
+      [
+        "timber",
+        20000
+      ],
+      [
+        "pig_iron",
+        20000
+      ],
+      [
+        "ore",
+        18000
+      ],
+      [
+        "goods_retail",
+        15000
+      ],
+      [
+        "goods",
+        15000
+      ],
+      [
+        "lease",
+        8000
+      ],
+      [
+        "telecom",
+        6000
+      ],
+      [
+        "software",
+        10000
+      ],
+      [
+        "food_retail",
+        4000
+      ],
+      [
+        "food_raw",
+        4000
+      ],
+      [
+        "grain",
+        4000
+      ],
+      [
+        "livestock",
+        4000
+      ],
+      [
+        "care",
+        3000
+      ],
+      [
+        "pharmaceuticals",
+        3000
+      ],
+      [
+        "electricity",
+        4000
+      ],
+      [
+        "water",
+        2000
+      ]
+    ],
+    "cycle_default_bps": 12000,
+    "investment_goods": [
+      "construction",
+      "building_materials",
+      "steel",
+      "vehicles",
+      "components"
+    ],
+    "credit_elasticity_bps": 5000,
+    "retail_reads_street": false
   }
 }

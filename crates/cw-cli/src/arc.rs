@@ -368,6 +368,14 @@ pub struct GoodPrice {
     pub traded: bool,
     /// Median over years of (max - min) / reference, in percent.
     pub median_year_range_pct: f64,
+    /// Median over years of (max - min) / the year's own mean price, in percent: the whole
+    /// movement a player sees, world price swings and the cycle included.
+    #[serde(default)]
+    pub median_year_total_range_pct: f64,
+    /// Direction reversals of material weekly moves (half a percent or more) per 52 weeks, as
+    /// the market health test counts them.
+    #[serde(default)]
+    pub swings_per_year: f64,
     pub years: u32,
     pub weeks_at_cap_share_pct: f64,
     pub weeks_at_floor_share_pct: f64,
@@ -477,6 +485,20 @@ pub struct Aggregate {
     pub price_range_traded_pct_median: Option<f64>,
     #[serde(default)]
     pub price_range_local_pct_median: Option<f64>,
+    /// The same split, against each year's own mean price (what a player sees, world swings
+    /// and the cycle included), and the swings: the worst good's and the mean good's direction
+    /// reversals a year (market_health's limits are 10 and 2).
+    #[serde(default)]
+    pub price_total_traded_pct_median: Option<f64>,
+    #[serde(default)]
+    pub price_total_local_pct_median: Option<f64>,
+    #[serde(default)]
+    pub price_swings_per_year_max: Option<f64>,
+    #[serde(default)]
+    pub price_swings_per_year_mean: Option<f64>,
+    /// Per good: (good, traded, median total range, median swings a year) over seeds.
+    #[serde(default)]
+    pub price_total_by_good: Vec<(String, bool, f64, f64)>,
     /// Per good: (good, traded, median range in percent over seeds).
     #[serde(default)]
     pub price_range_by_good: Vec<(String, bool, f64)>,
@@ -615,10 +637,15 @@ struct Life {
     exit: bool,
 }
 
+/// One good's year: (min, max, observations, sum of the week's price anchor, sum of price).
+type PriceYear = (i64, i64, u32, i128, i128);
+
 #[derive(Default)]
 struct PriceTrack {
-    /// (good, year) -> (min, max, observations, sum of the week's price anchor)
-    windows: BTreeMap<(u16, u32), (i64, i64, u32, i128)>,
+    /// (good, year) -> that good's year.
+    windows: BTreeMap<(u16, u32), PriceYear>,
+    /// good -> (last price, last material move's sign, reversals, price weeks)
+    swings: BTreeMap<u16, (i64, i64, u64, u64)>,
     weeks: BTreeMap<u16, (u64, u64, u64)>,
     last_week: u32,
 }
@@ -1319,15 +1346,31 @@ impl Observer {
             }
             for (good, price) in &point.goods {
                 let anchor = cw_sim::economy::pricing::price_anchor(world, &session.dataset, *good);
-                let window =
-                    self.prices
-                        .windows
-                        .entry((*good, year))
-                        .or_insert((i64::MAX, i64::MIN, 0, 0));
+                let window = self.prices.windows.entry((*good, year)).or_insert((
+                    i64::MAX,
+                    i64::MIN,
+                    0,
+                    0,
+                    0,
+                ));
                 window.0 = window.0.min(*price);
                 window.1 = window.1.max(*price);
                 window.2 += 1;
                 window.3 += anchor as i128;
+                window.4 += *price as i128;
+                let swing = self.prices.swings.entry(*good).or_insert((0, 0, 0, 0));
+                if swing.0 > 0 {
+                    swing.3 += 1;
+                    let delta = *price - swing.0;
+                    // Moves under half a percent are not a swing (market_health's rule).
+                    if delta.abs() * 10_000 >= swing.0 * 50 {
+                        if swing.1 != 0 && delta.signum() != swing.1 {
+                            swing.2 += 1;
+                        }
+                        swing.1 = delta.signum();
+                    }
+                }
+                swing.0 = *price;
                 let counts = self.prices.weeks.entry(*good).or_default();
                 counts.0 += 1;
                 if sell.get(good).is_some_and(|cap| *price >= *cap) {
@@ -1480,7 +1523,8 @@ fn finish_career(
     // Prices.
     let mut goods = Vec::new();
     let mut by_good: BTreeMap<u16, Vec<f64>> = BTreeMap::new();
-    for ((good, _year), (min, max, count, anchor_sum)) in &observer.prices.windows {
+    let mut total_by_good: BTreeMap<u16, Vec<f64>> = BTreeMap::new();
+    for ((good, _year), (min, max, count, anchor_sum, price_sum)) in &observer.prices.windows {
         if *count < 13 {
             continue;
         }
@@ -1490,6 +1534,13 @@ fn finish_career(
         let reference = (*anchor_sum / *count as i128).max(1) as i64;
         if let Some(range) = range_pct_x100(*min, *max, reference) {
             by_good.entry(*good).or_default().push(range as f64 / 100.0);
+        }
+        let mean = (*price_sum / *count as i128).max(1) as i64;
+        if let Some(range) = range_pct_x100(*min, *max, mean) {
+            total_by_good
+                .entry(*good)
+                .or_default()
+                .push(range as f64 / 100.0);
         }
     }
     for (good, ranges) in &by_good {
@@ -1502,6 +1553,16 @@ fn finish_career(
                     g.product == *good && (g.sell_price_cents > 0 || g.buy_price_cents > 0)
                 }),
             median_year_range_pct: median_f64(ranges).unwrap_or(0.0),
+            median_year_total_range_pct: total_by_good
+                .get(good)
+                .and_then(|r| median_f64(r))
+                .unwrap_or(0.0),
+            swings_per_year: observer
+                .prices
+                .swings
+                .get(good)
+                .filter(|s| s.3 > 0)
+                .map_or(0.0, |s| (s.2 * 52) as f64 / s.3 as f64),
             years: ranges.len() as u32,
             weeks_at_cap_share_pct: share_x100(cap, weeks) as f64 / 100.0,
             weeks_at_floor_share_pct: share_x100(floor, weeks) as f64 / 100.0,
@@ -1782,7 +1843,7 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
     worst.truncate(5);
 
     // Prices: per good, median over seeds of the career median range; then the median over goods.
-    type GoodSeries = (Vec<f64>, Vec<f64>, Vec<f64>);
+    type GoodSeries = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>);
     let mut per_good: BTreeMap<String, GoodSeries> = BTreeMap::new();
     let mut traded_goods: BTreeMap<String, bool> = BTreeMap::new();
     for c in careers {
@@ -1792,8 +1853,29 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
             slot.0.push(g.median_year_range_pct);
             slot.1.push(g.weeks_at_cap_share_pct);
             slot.2.push(g.weeks_at_floor_share_pct);
+            slot.3.push(g.median_year_total_range_pct);
+            slot.4.push(g.swings_per_year);
         }
     }
+    let total_by_good: Vec<(String, bool, f64, f64)> = per_good
+        .iter()
+        .filter_map(|(good, v)| {
+            Some((
+                good.clone(),
+                traded_goods[good],
+                median_f64(&v.3)?,
+                median_f64(&v.4).unwrap_or(0.0),
+            ))
+        })
+        .collect();
+    let total_class = |traded: bool| -> Vec<f64> {
+        total_by_good
+            .iter()
+            .filter(|(_, t, _, _)| *t == traded)
+            .map(|(_, _, r, _)| *r)
+            .collect()
+    };
+    let swings: Vec<f64> = total_by_good.iter().map(|(_, _, _, s)| *s).collect();
     let good_range: Vec<f64> = per_good.values().filter_map(|v| median_f64(&v.0)).collect();
     let by_good: Vec<(String, bool, f64)> = per_good
         .iter()
@@ -1879,6 +1961,12 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
         price_range_pct_median: median_f64(&good_range),
         price_range_traded_pct_median: median_f64(&traded_range),
         price_range_local_pct_median: median_f64(&local_range),
+        price_total_traded_pct_median: median_f64(&total_class(true)),
+        price_total_local_pct_median: median_f64(&total_class(false)),
+        price_swings_per_year_max: swings.iter().copied().reduce(f64::max),
+        price_swings_per_year_mean: (!swings.is_empty())
+            .then(|| swings.iter().sum::<f64>() / swings.len() as f64),
+        price_total_by_good: total_by_good,
         price_range_by_good: by_good,
         weeks_at_cap_share_pct_median: median_f64(&good_cap),
         weeks_at_floor_share_pct_median: median_f64(&good_floor),
@@ -2080,6 +2168,10 @@ fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
         "price_range_pct_median" => aggregate.price_range_pct_median,
         "price_range_traded_pct_median" => aggregate.price_range_traded_pct_median,
         "price_range_local_pct_median" => aggregate.price_range_local_pct_median,
+        "price_total_traded_pct_median" => aggregate.price_total_traded_pct_median,
+        "price_total_local_pct_median" => aggregate.price_total_local_pct_median,
+        "price_swings_per_year_max" => aggregate.price_swings_per_year_max,
+        "price_swings_per_year_mean" => aggregate.price_swings_per_year_mean,
         "hostile_top3_median" => aggregate.hostile_top3_median,
         "rival_plants_built_per_decade_median" => aggregate.rival_plants_built_per_decade_median,
         "top_ten_block_change_median" => aggregate.top_ten_block_change_median,
@@ -2458,7 +2550,7 @@ pub fn run(arguments: &[String]) {
     }
     let a = &report.aggregate;
     println!(
-        "arc scenario={} loaded={} policy={} seeds={} weeks={} companies={} bust={:?} first={:?} bottom_half={:?} zombie={:?} price_range_pct={:?} traded={:?} local={:?} ms/wk={:.1}",
+        "arc scenario={} loaded={} policy={} seeds={} weeks={} companies={} bust={:?} first={:?} bottom_half={:?} zombie={:?} price_range_pct={:?} traded={:?} local={:?} total_traded={:?} total_local={:?} swings_max={:?} swings_mean={:?} ms/wk={:.1}",
         report.scenario.requested,
         report.scenario.loaded,
         report.policy,
@@ -2472,6 +2564,10 @@ pub fn run(arguments: &[String]) {
         a.price_range_pct_median,
         a.price_range_traded_pct_median,
         a.price_range_local_pct_median,
+        a.price_total_traded_pct_median,
+        a.price_total_local_pct_median,
+        a.price_swings_per_year_max,
+        a.price_swings_per_year_mean,
         a.ms_per_week_mean
     );
     for gate in &report.gates {
