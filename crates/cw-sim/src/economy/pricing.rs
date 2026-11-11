@@ -887,9 +887,10 @@ pub fn price_anchor(world: &World, dataset: &Dataset, product: u16) -> i64 {
     outside_mid(world, product).unwrap_or(reference)
 }
 
-/// Lots in one volume step of a gateway with `room` lots of normal weekly room. The first step
-/// is the normal room itself, traded at the quote; every further step is a share of it, each
-/// dearer to import and cheaper to export than the last. At least one lot.
+/// Lots in one volume step of a gateway with `room` lots of normal weekly room. The first step,
+/// traded at the quote, is the content's first-step share of the room (one share for imports,
+/// another for exports); every further step is the content's step share, each dearer to import
+/// and cheaper to export than the last. At least one lot.
 pub fn step_lots(dataset: &Dataset, room: i64, step: i64, import: bool) -> i64 {
     let markets = &dataset.markets;
     let share = if step > 0 {

@@ -2202,7 +2202,10 @@ mod tests {
         // different names, ages and temperaments), with no change to any rule this fixture exercises. The Swift
         // In 1.9 it moved from de25d78b... when the world gained its rival plan and migration state
         // (the migration references are taken in week one and hashed), with no change to any
-        // other rule this fixture exercises. The Swift
+        // other rule this fixture exercises. In 2.0 it moved from a08ddca2... when the content
+        // gained the market rules (the dataset hash is folded in) and gateways began trading in
+        // volume steps, exports settling at one average price for every seller and goods pricing
+        // around the outside world's middle quote. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2228,7 +2231,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "a08ddca23a2e702a0eb02692ddc605c60c4f5ddf3c33085889c0cfdcb9efce1b"
+            "8440e658a3d36c81c982b882388fa5365b98178b63be820d33af8bcee6ce0e04"
         );
     }
 

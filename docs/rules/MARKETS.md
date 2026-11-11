@@ -132,7 +132,15 @@ shortage can be filled and a producing region's surplus has a buyer. Export room
 use the way infrastructure does: after a week whose exports filled a gateway's capacity, the
 capacity rises by one percent (at least one lot) for every later week, player and rival sellers
 alike. A week that leaves room unused adds nothing, and the outside account's paced cash still
-limits what the room pays for. Gateways record the
+limits what the room pays for. Since 2.0 a gateway trades in volume steps (`markets` in
+`content/initial-balance.json`): the first import step is half its room at the quote and the first
+export step all of it; four more steps of a quarter of the room each cost 10 percent more to import
+or pay 10 percent less to export than the step before, exports never under half the quote, and
+nothing trades past the last step. So a corridor that leans hard on imports pays more for its last
+lots and a glut that overflows the ports sells its last lots cheap: a smooth rising cost instead
+of a hard pin. Every seller exporting through one gateway in a week ships the same share of what it
+offered and is paid the same average price over the steps it filled, so nobody gets the good steps
+by being first in line. Gateways record the
 lots they import and export each week and keep a smoothed import average; that average is
 the "room to build" shown on a state's board and used by rival expansion. No local
 back-to-back transaction can profit from the bid/ask spread.
@@ -199,9 +207,16 @@ against their weekly asks. A good that no plant or household at home buys, that 
 exported last week, is never read as scarce: its shelf is empty because the surplus left at the
 export bid. Any other good no plant or household buys reads the seller's own cover against its
 target both ways: a week too little wants 6 percent more. The gap is held to five weeks either
-way (30 percent). The price then moves a sixth of the way there, at most 2 percent in a week, within
-half to twice reference and never above 95 percent of the cheapest import, so local goods beat
-imports once normal freight is added. Where the corridor's gateways import at least a quarter more
+way (30 percent). Since 2.0 a traded good is priced around the outside world's middle quote, halfway between its
+cheapest import price and its dearest export price before any volume step, instead of its fixed
+catalogue price, so home prices follow world prices and inflation the way the gateways do; a
+good with no gateway and every service keep their reference. Last week's trade at the margin then
+presses on the wanted price: the import premium of the step the last imported lot came from adds
+to it and the export discount of the step the last exported lot went in takes from it, each
+averaged over the good's gateways by lots moved. The price then moves a sixth of the way there, at
+most 2 percent in a week, within half to twice that middle quote and never above 95 percent of
+the cheapest marginal import price (last week's dearest step used), so local goods beat imports
+once normal freight is added. Where the corridor's gateways import at least a quarter more
 than its plants made (smoothed imports at least 125 percent of last week's home output), the seller
 wants that 95 percent import ceiling whatever its own shelf says: buyers pay the import price for
 the rest anyway. Nothing sold with stock on the shelf wants 30 percent under; nothing sold and
@@ -234,6 +249,12 @@ false in older commands). The CFO names any service or carrier division of a han
 that made at least one and a half times what it sold last week, with the weekly cost of the excess
 and a button that hands production back to the plan. Contract deliveries, power dispatched to the
 grid and construction services all count as sales.
+
+The Market query says in plain words why a good's price moved over the last quarter: its move
+against the closing price thirteen weeks earlier and the strongest cause acting on it now, out of
+imports past the normal room, exports past the normal room, buyers short of input cover, sellers
+holding unsold stock, plants opened this quarter, and the world price (or, for a service, the
+general price level) against its opening level.
 
 The corridor price on the Markets board is the average asking price of the firms that make a good,
 each weighted by the lots it sells (plus one), including firms in restructuring, or the cheapest
