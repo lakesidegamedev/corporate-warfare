@@ -1224,20 +1224,70 @@ fn openings(arguments: &[String]) {
         session.world.tick.0,
         cw_sim::economy::sectors::build_price_bps(&session.world, &session.dataset)
     );
+    if arguments.iter().any(|a| a == "--demand") {
+        // What households asked for against what their budget for it could pay for at the
+        // price they last paid (or the public price where nobody sold), region by region.
+        let world = &session.world;
+        let dataset = &session.dataset;
+        for (region, state) in world.regions.iter().enumerate() {
+            let h = &state.households;
+            let budget = h.last_income_cents.max(0) * 90 / 100;
+            for (product, weight) in &h.weights {
+                let wanted = h.wanted_milli.get(product).copied().unwrap_or(0) / 1_000;
+                if wanted <= 0 {
+                    continue;
+                }
+                let unmet = h.unmet_milli.get(product).copied().unwrap_or(0) / 1_000;
+                let category = budget * weight / 10_000;
+                let price = h
+                    .last_sale_price_cents
+                    .get(product)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        cw_sim::economy::capacity::public_price(
+                            world,
+                            dataset,
+                            *product,
+                            region as u8,
+                        )
+                    });
+                let spent = h.spend_cents.get(product).copied().unwrap_or(0);
+                println!(
+                    "DEMAND {:<6} {:<12} wanted={:>6} unmet={:>6} budget=${:>9} price=${:>7} affordable={:>6} spent=${:>9}",
+                    dataset.regions[region].code,
+                    dataset.products[*product as usize].id,
+                    wanted,
+                    unmet,
+                    category / 100,
+                    price / 100,
+                    category / price.max(1),
+                    spent / 100
+                );
+            }
+        }
+        return;
+    }
     if arguments.iter().any(|a| a == "--all") {
         let world = &session.world;
         let dataset = &session.dataset;
+        let rooms = cw_sim::economy::capacity::input_rooms(world, dataset);
         for (index, recipe) in dataset.recipes.iter().enumerate() {
             for region in 0..world.regions.len() as u8 {
-                if let Some(o) =
-                    cw_sim::economy::capacity::opening(world, dataset, region, index as u16, region)
-                    && (o.room_lots > 0 || o.unmet_lots > 0)
+                if let Some(o) = cw_sim::economy::capacity::opening_with(
+                    world,
+                    dataset,
+                    &rooms,
+                    region,
+                    index as u16,
+                    region,
+                ) && (o.room_lots > 0 || o.unmet_lots > 0)
                 {
                     println!(
-                        "ALL {} {} room={} block={} unmet={}/{} price={} vs_ref={} weekly={} cost={} payback={:?}",
+                        "ALL {} {} room={} fill={} block={} unmet={}/{} price={} vs_ref={} weekly={} cost={} payback={:?}",
                         recipe.id,
                         dataset.regions[region as usize].code,
                         o.room_lots,
+                        o.input_fill_bps,
                         o.block_lots,
                         o.unmet_lots,
                         o.wanted_lots,

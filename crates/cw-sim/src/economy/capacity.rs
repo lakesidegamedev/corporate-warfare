@@ -109,6 +109,150 @@ pub fn room_lots(world: &World, dataset: &Dataset, product: u16, region: u8) -> 
     (imports + unmet - coming_lots(world, dataset, product, Some(&regions))).max(0)
 }
 
+/// Lots a week of each corridor good a new plant could still buy, read once per pass
+/// (`input_rooms`). A plant buys on the corridor exchange from any region's sellers, but imports
+/// only through its own region's gateways, so the room has a corridor part and a regional part.
+#[derive(Clone, Debug, Default)]
+pub struct InputRooms {
+    /// By product: what the corridor exported last week (a home buyer outbids the outside
+    /// buyer) and what home makers left idle, less what plants already buying it lacked after
+    /// last week's trade and what plants on order or opened within `ROOM_LAG_WEEKS` will take.
+    /// `i64::MAX` for anything that is not a corridor good (not capped here).
+    corridor: Vec<i64>,
+    /// By region, then product: the import room the region's gateways have left across all their
+    /// volume steps beyond their smoothed imports.
+    imports: Vec<Vec<i64>>,
+}
+
+impl InputRooms {
+    /// Lots a week of `product` a new plant in `region` could still buy.
+    pub fn lots(&self, product: u16, region: u8) -> i64 {
+        let corridor = self.corridor.get(product as usize).copied().unwrap_or(0);
+        if corridor == i64::MAX {
+            return i64::MAX;
+        }
+        let imports = self
+            .imports
+            .get(region as usize)
+            .and_then(|list| list.get(product as usize))
+            .copied()
+            .unwrap_or(0);
+        corridor.max(0).saturating_add(imports)
+    }
+}
+
+/// The corridor's input rooms this week (`InputRooms`).
+pub fn input_rooms(world: &World, dataset: &Dataset) -> InputRooms {
+    let products = dataset.products.len();
+    let mut corridor: Vec<i64> = (0..products as u16)
+        .map(|p| {
+            if self::corridor(dataset, p) {
+                0
+            } else {
+                i64::MAX
+            }
+        })
+        .collect();
+    let mut imports = vec![vec![0i64; products]; world.regions.len()];
+    for gateway in &world.gateways {
+        let p = gateway.product as usize;
+        if corridor.get(p).is_none_or(|room| *room == i64::MAX) {
+            continue;
+        }
+        corridor[p] += gateway.last_export_lots.max(0);
+        if gateway.sell_price_cents > 0
+            && let Some(list) = imports.get_mut(gateway.region as usize)
+        {
+            list[p] += (crate::economy::pricing::room_lots(dataset, gateway.capacity_lots, true)
+                - gateway.smoothed_import_lots)
+                .max(0);
+        }
+    }
+    let mut bought = vec![false; products];
+    for (_, plant) in world.facilities.iter() {
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        let coming = match plant.status {
+            FacilityStatus::Building => true,
+            FacilityStatus::Operating => plant.completes.0 + ROOM_LAG_WEEKS > world.tick.0,
+            _ => false,
+        };
+        for (id, lots) in &recipe.weekly_inputs_lots {
+            if let Some(product) = dataset.product_index.get(id).map(|p| *p as usize)
+                && corridor[product] != i64::MAX
+            {
+                bought[product] |= plant.status == FacilityStatus::Operating;
+                if coming {
+                    corridor[product] -= lots * plant.blocks as i64;
+                }
+            }
+        }
+        if plant.status == FacilityStatus::Operating
+            && let Some(product) = dataset
+                .product_index
+                .get(&recipe.output)
+                .map(|p| *p as usize)
+            && corridor[product] != i64::MAX
+        {
+            let idle = plant.full_weekly_output(dataset).0 - plant.last_output.0;
+            corridor[product] += idle.max(0) / 1_000;
+        }
+    }
+    for (product, room) in corridor.iter_mut().enumerate() {
+        if *room == i64::MAX {
+            continue;
+        }
+        if bought[product] {
+            *room -= crate::economy::pricing::buyer_shortfall(world, dataset, product as u16).0;
+        }
+    }
+    InputRooms { corridor, imports }
+}
+
+/// Share of a block's full output, in basis points, that a new plant of `recipe` in `region`
+/// could get the inputs for: the scarcest corridor-good input's room against what one block
+/// uses. 10,000 when every input is to be had or the strategy buys no corridor good.
+pub fn input_fill_bps(dataset: &Dataset, rooms: &InputRooms, recipe: u16, region: u8) -> i64 {
+    let cap = input_cap_lots(dataset, rooms, recipe, region);
+    let block = dataset.recipes[recipe as usize].weekly_output_lots.max(1);
+    if cap == i64::MAX {
+        return 10_000;
+    }
+    (cap.saturating_mul(10_000) / block).clamp(0, 10_000)
+}
+
+/// Lots of `recipe`'s output a week a new plant in `region` could get the inputs for:
+/// `i64::MAX` when it buys no corridor good.
+pub fn input_cap_lots(dataset: &Dataset, rooms: &InputRooms, recipe: u16, region: u8) -> i64 {
+    let template = &dataset.recipes[recipe as usize];
+    template
+        .weekly_inputs_lots
+        .iter()
+        .filter(|(_, lots)| **lots > 0)
+        .filter_map(|(id, lots)| {
+            let room = rooms.lots(*dataset.product_index.get(id)?, region);
+            (room != i64::MAX)
+                .then(|| room.saturating_mul(template.weekly_output_lots.max(1)) / lots)
+        })
+        .min()
+        .unwrap_or(i64::MAX)
+}
+
+/// Lots a week a new plant of `recipe` in `region` could sell: the room for its output, no more
+/// than its inputs allow (`input_cap_lots`).
+pub fn recipe_room_lots(
+    world: &World,
+    dataset: &Dataset,
+    rooms: &InputRooms,
+    recipe: u16,
+    region: u8,
+) -> i64 {
+    let template = &dataset.recipes[recipe as usize];
+    let Some(product) = dataset.product_index.get(&template.output).copied() else {
+        return 0;
+    };
+    room_lots(world, dataset, product, region).min(input_cap_lots(dataset, rooms, recipe, region))
+}
+
 /// Public price of a product in a state: the gateway import price where one quotes; for a
 /// local product, last week's closing corridor price when the capacity rules are on; else the
 /// reference price. No firm sees another firm's costs or order book.
@@ -153,7 +297,7 @@ pub fn import_netback(world: &World, dataset: &Dataset, product: u16, region: u8
 }
 
 /// Weekly contribution of one block of a strategy in `region`, run from a head office in `home`,
-/// at public prices and the region's wages, after maintenance and land.
+/// at public prices and the region's wages, after maintenance and land, at full output.
 pub fn block_contribution(
     world: &World,
     dataset: &Dataset,
@@ -163,6 +307,25 @@ pub fn block_contribution(
 ) -> i64 {
     let (revenue, inputs, fixed) = block_parts(world, dataset, home, recipe, region);
     revenue - inputs - fixed
+}
+
+/// Weekly contribution of one new block of a strategy in `region`: its goods valued at what they
+/// net where the corridor imports them (`netback_gain`), and run only as far as its inputs can be
+/// bought (`fill_bps`, from `input_fill_bps`). It sells and buys that share of its full output
+/// and inputs and pays its whole staff, upkeep and land regardless, so a shop in a corridor short
+/// of goods reads what it would really earn, not what it would earn with full shelves.
+pub fn new_block_contribution(
+    world: &World,
+    dataset: &Dataset,
+    home: u8,
+    recipe: u16,
+    region: u8,
+    fill_bps: i64,
+) -> i64 {
+    let (revenue, inputs, fixed) = block_parts(world, dataset, home, recipe, region);
+    (revenue - inputs + netback_gain(world, dataset, recipe, region)) * fill_bps.clamp(0, 10_000)
+        / 10_000
+        - fixed
 }
 
 /// One block's weekly revenue and inputs at full output, and its fixed costs (full payroll,
@@ -274,8 +437,12 @@ pub struct Opening {
     pub product: u16,
     /// Whether the output trades on the corridor exchange (else it sells where it is made).
     pub traded: bool,
-    /// Lots a week the market is short of, net of plants coming.
+    /// Lots a week the market is short of, net of plants coming, and no more than the
+    /// corridor's spare inputs could feed (`recipe_room_lots`).
     pub room_lots: i64,
+    /// Share of a block's output its inputs could be bought for, basis points
+    /// (`input_fill_bps`); the contribution below runs the block at this share.
+    pub input_fill_bps: i64,
     /// One block's weekly output.
     pub block_lots: i64,
     /// What a lot fetches: the import netback for a traded good, the public price otherwise.
@@ -301,10 +468,30 @@ pub fn opening(
     recipe: u16,
     region: u8,
 ) -> Option<Opening> {
+    opening_with(
+        world,
+        dataset,
+        &input_rooms(world, dataset),
+        home,
+        recipe,
+        region,
+    )
+}
+
+/// `opening` with the corridor's input rooms read once by the caller (`input_rooms`).
+pub fn opening_with(
+    world: &World,
+    dataset: &Dataset,
+    rooms: &InputRooms,
+    home: u8,
+    recipe: u16,
+    region: u8,
+) -> Option<Opening> {
     let template = dataset.recipes.get(recipe as usize)?;
     let product = dataset.product_index.get(&template.output).copied()?;
     let traded = corridor(dataset, product);
-    let room = room_lots(world, dataset, product, region);
+    let room = recipe_room_lots(world, dataset, rooms, recipe, region);
+    let fill = input_fill_bps(dataset, rooms, recipe, region);
     let (unmet, wanted) = if traded {
         (0, 0)
     } else {
@@ -317,8 +504,7 @@ pub fn opening(
         public_price(world, dataset, product, region)
     };
     let reference = crate::economy::pricing::price_reference(world, dataset, product).max(1);
-    let contribution = block_contribution(world, dataset, home, recipe, region)
-        + netback_gain(world, dataset, recipe, region);
+    let contribution = new_block_contribution(world, dataset, home, recipe, region, fill);
     let cost = crate::economy::sectors::build_price(world, dataset, template.capex_cents);
     Some(Opening {
         recipe,
@@ -326,6 +512,7 @@ pub fn opening(
         product,
         traded,
         room_lots: room,
+        input_fill_bps: fill,
         block_lots: template.weekly_output_lots,
         price_cents: price,
         price_vs_reference_bps: price * 10_000 / reference,
@@ -341,12 +528,14 @@ pub fn opening(
 /// pays back, fastest payback first. What the player's sector board shows.
 pub fn openings(world: &World, dataset: &Dataset, home: u8) -> Vec<Opening> {
     let mut found = Vec::new();
+    let rooms = input_rooms(world, dataset);
     for (index, template) in dataset.recipes.iter().enumerate() {
         if template.storage_class.is_some() {
             continue;
         }
         for region in 0..world.regions.len() as u8 {
-            let Some(open) = opening(world, dataset, home, index as u16, region) else {
+            let Some(open) = opening_with(world, dataset, &rooms, home, index as u16, region)
+            else {
                 continue;
             };
             if open.room_lots * 5 >= template.weekly_output_lots && open.payback_weeks.is_some() {

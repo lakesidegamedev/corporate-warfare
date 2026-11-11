@@ -1236,8 +1236,14 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
             let ratio = (reference * 10_000 / last).clamp(5_000, 20_000);
             let base = baseline.get(&product).copied().unwrap_or(0);
             let demand = world.demand_ratio_bps(region_index as u8, Some(product));
-            let requested = (base * ratio / 10_000).max(0) * demand / 10_000 * 1_000;
+            // What households ask for is never more than their budget for it buys at the price
+            // they last paid: demand they could not pay for is not unmet, it is the price doing
+            // its work, and it must not read as room to build or as a shortage to price on.
+            let affordable = category_budget.saturating_mul(1_000) / last;
+            let requested =
+                ((base * ratio / 10_000).max(0) * demand / 10_000 * 1_000).min(affordable);
             if requested <= 0 {
+                world.regions[region_index].households.savings_cents += category_budget;
                 continue;
             }
             let mut offers: Vec<Offer> = Vec::new();
@@ -1287,7 +1293,10 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
                 .unmet_milli
                 .insert(product, (requested - offered).max(0));
             if offers.is_empty() {
-                // Unspent budget stays with the household, never with a phantom seller.
+                // Unspent budget stays with the household, never with a phantom seller: it goes
+                // back to savings like any category's unspent budget, so the savings supplement
+                // drawn for it is not lost.
+                world.regions[region_index].households.savings_cents += category_budget;
                 continue;
             }
             let requests = vec![Request {

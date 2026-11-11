@@ -1896,21 +1896,20 @@ fn strategic_candidates(world: &World, dataset: &Dataset, firm: Handle) -> Vec<C
         && let Some((recipe, region, npv)) = best_expansion(world, dataset, firm, room_tenths)
         && (!capacity_rules || staffed_in(world, firm, region))
     {
-        let capex = if capacity_rules {
-            cw_sim::economy::sectors::build_cost(world, dataset, firm, region, recipe, 1)
-                .total_cents()
+        let (blocks, capex) = if capacity_rules {
+            build_size(world, dataset, firm, recipe, region, reserve)
         } else {
-            dataset.recipes[recipe as usize].capex_cents
+            (1, dataset.recipes[recipe as usize].capex_cents)
         };
         if entity.book.cash() > reserve * 2 + capex {
             candidates.push(Candidate {
-                score: weights[1] * npv,
+                score: weights[1] * npv * blocks as i64,
                 target: recipe as u64,
                 intent: CommandIntent::BuildFacility {
                     firm,
                     region,
                     recipe,
-                    blocks: 1,
+                    blocks,
                 },
             });
         }
@@ -1929,17 +1928,16 @@ fn strategic_candidates(world: &World, dataset: &Dataset, firm: Handle) -> Vec<C
         && idle_payout(world, dataset, firm).is_some()
         && let Some((recipe, region, npv)) = best_entry(world, dataset, firm)
     {
-        let cost = cw_sim::economy::sectors::build_cost(world, dataset, firm, region, recipe, 1)
-            .total_cents();
+        let (blocks, cost) = build_size(world, dataset, firm, recipe, region, reserve);
         if entity.book.cash() > reserve * 2 + cost {
             candidates.push(Candidate {
-                score: weights[1] * npv / 2,
+                score: weights[1] * npv * blocks as i64 / 2,
                 target: recipe as u64,
                 intent: CommandIntent::BuildFacility {
                     firm,
                     region,
                     recipe,
-                    blocks: 1,
+                    blocks,
                 },
             });
         }
@@ -2197,7 +2195,6 @@ fn structural_contribution(world: &World, dataset: &Dataset, firm: Handle) -> i6
 struct Memo {
     room: BTreeMap<(u16, u8), i64>,
     public_price: BTreeMap<(u16, u8), i64>,
-    import_netback: BTreeMap<(u16, u8), Option<i64>>,
     /// Holders of each (region, industry) cell with their shares.
     cells: BTreeMap<(u8, u8), cw_sim::economy::sectors::Cell>,
     /// Imports against home output per good (`pricing::import_dependence_bps`).
@@ -2211,6 +2208,11 @@ struct Memo {
     liquid_all: BTreeMap<u8, i64>,
     /// The state reserve's stance on each good, which reads the whole corridor's price.
     reserve_phase: BTreeMap<u16, cw_sim::economy::reserve::Phase>,
+    /// Lots of each corridor good a new plant could still buy (`capacity::input_rooms`), one
+    /// list for the pass (the key is unit).
+    input_rooms: BTreeMap<(), cw_sim::economy::capacity::InputRooms>,
+    /// A new block's contribution (`new_block_contribution`), keyed like `block_contribution`.
+    new_block_contribution: BTreeMap<(u8, u16, u8), i64>,
 }
 
 thread_local! {
@@ -2282,20 +2284,6 @@ fn public_price(world: &World, dataset: &Dataset, product: u16, region: u8) -> i
 
 fn public_price_now(world: &World, dataset: &Dataset, product: u16, region: u8) -> i64 {
     cw_sim::economy::capacity::public_price(world, dataset, product, region)
-}
-
-/// What a plant in `region` nets per lot of a good by replacing imports: the best importing
-/// gateway's price less freight from the plant. None when nothing of the good is imported.
-fn import_netback(world: &World, dataset: &Dataset, product: u16, region: u8) -> Option<i64> {
-    Memo::read(
-        |m| &mut m.import_netback,
-        (product, region),
-        || import_netback_now(world, dataset, product, region),
-    )
-}
-
-fn import_netback_now(world: &World, dataset: &Dataset, product: u16, region: u8) -> Option<i64> {
-    cw_sim::economy::capacity::import_netback(world, dataset, product, region)
 }
 
 /// Room to build: lots of the product imported per week, smoothed. Goods trade on one corridor
@@ -2391,6 +2379,100 @@ fn block_contribution_now(
     cw_sim::economy::capacity::block_contribution(world, dataset, entity.region, recipe, region)
 }
 
+/// Weekly contribution of one new block (`capacity::new_block_contribution`): goods valued at
+/// their import netback, the block run only as far as the corridor's spare inputs allow.
+fn new_block_contribution(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    recipe: u16,
+    region: u8,
+) -> i64 {
+    let Some(entity) = world.firms.get(firm) else {
+        return 0;
+    };
+    let home = entity.region;
+    Memo::read(
+        |m| &mut m.new_block_contribution,
+        (home, recipe, region),
+        || {
+            let fill = cw_sim::economy::capacity::input_fill_bps(
+                dataset,
+                &input_rooms(world, dataset),
+                recipe,
+                region,
+            );
+            cw_sim::economy::capacity::new_block_contribution(
+                world, dataset, home, recipe, region, fill,
+            )
+        },
+    )
+}
+
+/// The most blocks a rival orders in one new plant.
+const MAX_BUILD_BLOCKS: i64 = 8;
+
+/// How many blocks a rival builds into an opening, and what they cost: as many whole blocks as
+/// the room (net of plants coming, within what spare inputs feed) holds, at least one and at most
+/// `MAX_BUILD_BLOCKS`, fewer when its cash past twice its reserve does not cover them or the order
+/// would need a board vote. One plant
+/// the size of the gap, not a string of one-block plants each paying its own staff, upkeep and
+/// land. (Not `ExpandFacility`: an expansion takes the whole plant out of service while the new
+/// blocks are built, so a rival adds a new plant beside it.)
+fn build_size(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    recipe: u16,
+    region: u8,
+    reserve: i64,
+) -> (u8, i64) {
+    let template = &dataset.recipes[recipe as usize];
+    let cost = |blocks: u8| {
+        cw_sim::economy::sectors::build_cost(world, dataset, firm, region, recipe, blocks)
+            .total_cents()
+    };
+    let output = dataset.product_index.get(&template.output).copied();
+    let whole = output
+        .map(|output| recipe_room(world, dataset, recipe, output, region))
+        .unwrap_or(0)
+        / template.weekly_output_lots.max(1);
+    let (cash, debt) = world
+        .firms
+        .get(firm)
+        .map(|f| (f.book.cash(), f.book.debt()))
+        .unwrap_or((0, 0));
+    // Nor more than the board lets management order without a vote.
+    let mut blocks = whole.clamp(1, MAX_BUILD_BLOCKS) as u8;
+    while blocks > 1
+        && (cash <= reserve * 2 + cost(blocks)
+            || cw_sim::economy::governance::approval_required(world, firm, debt, cost(blocks)))
+    {
+        blocks -= 1;
+    }
+    (blocks, cost(blocks))
+}
+
+/// Lots of each corridor good a new plant could still buy, read once per pass.
+fn input_rooms(world: &World, dataset: &Dataset) -> cw_sim::economy::capacity::InputRooms {
+    Memo::read(
+        |m| &mut m.input_rooms,
+        (),
+        || cw_sim::economy::capacity::input_rooms(world, dataset),
+    )
+}
+
+/// Room for a new plant of a strategy in a state: the room for its output (`room`), no more than
+/// the corridor's spare inputs could feed (`capacity::input_cap_lots`).
+fn recipe_room(world: &World, dataset: &Dataset, recipe: u16, output: u16, region: u8) -> i64 {
+    room(world, dataset, output, region).min(cw_sim::economy::capacity::input_cap_lots(
+        dataset,
+        &input_rooms(world, dataset),
+        recipe,
+        region,
+    ))
+}
+
 /// The best new plant for the firm: a strategy of its primary (or secondary) sector in the state
 /// with the most room for its output, where imports cover at least four fifths of a block's
 /// output (planned capacity at most 1.25 times reachable unmet demand). Ranked by three years of
@@ -2444,7 +2526,7 @@ fn best_expansion(
                     .iter()
                     .any(|holder| player_controlled(world, *holder));
             if !invading
-                && room(world, dataset, output, region) * 10
+                && recipe_room(world, dataset, index as u16, output, region) * 10
                     < template.weekly_output_lots * room_tenths
             {
                 continue;
@@ -2468,31 +2550,16 @@ fn best_expansion(
             )
             .total_cents();
             let financing = cost * world.macro_state.policy_rate_bps as i64 * horizon / 52 / 10_000;
-            // A good is sold where it is imported: value the output at what it nets there after
-            // freight instead of at this state's own quote, so plants go near the demand.
-            let netback: i64 = template
-                .outputs()
-                .filter_map(|(id, lots)| {
-                    let product = dataset.product_index.get(id).copied()?;
-                    if dataset.products[product as usize].kind != cw_data::ProductKind::Goods {
-                        return None;
-                    }
-                    Some(
-                        import_netback(world, dataset, product, region)
-                            .map(|net| net - public_price(world, dataset, product, region))
-                            .unwrap_or(0)
-                            * lots,
-                    )
-                })
-                .sum();
+            // A good is sold where it is imported: the contribution values the output at what it
+            // nets there after freight instead of at this state's own quote, so plants go near
+            // the demand, and runs the block only as far as its inputs can be bought.
             let price_war = if invading {
                 // A tenth off the output's price for the fight.
                 block_revenue(world, dataset, template, region) / 10
             } else {
                 0
             };
-            let mut npv = (block_contribution(world, dataset, firm, index as u16, region)
-                + netback
+            let mut npv = (new_block_contribution(world, dataset, firm, index as u16, region)
                 - price_war)
                 * horizon
                 - cost
@@ -2565,12 +2632,12 @@ fn best_entry(world: &World, dataset: &Dataset, firm: Handle) -> Option<(u16, u8
         };
         for region in 0..world.regions.len() as u8 {
             if world.politics.quota_active.contains(&(region, output))
-                || room(world, dataset, output, region) * 10 < template.weekly_output_lots * tenths
+                || recipe_room(world, dataset, index as u16, output, region) * 10
+                    < template.weekly_output_lots * tenths
             {
                 continue;
             }
-            let weekly = block_contribution(world, dataset, firm, index as u16, region)
-                + cw_sim::economy::capacity::netback_gain(world, dataset, index as u16, region);
+            let weekly = new_block_contribution(world, dataset, firm, index as u16, region);
             if weekly <= 0 {
                 continue;
             }
@@ -3936,8 +4003,10 @@ mod tests {
         // Plastics trade on the corridor exchange, so the plant may sit in any state that nets
         // more after freight to Pennsylvania; a site that nets less than Pennsylvania itself is
         // never chosen over it.
-        let net_there = import_netback(&world, &dataset, plastics, region).unwrap();
-        let net_pa = import_netback(&world, &dataset, plastics, pa).unwrap();
+        let net_there =
+            cw_sim::economy::capacity::import_netback(&world, &dataset, plastics, region).unwrap();
+        let net_pa =
+            cw_sim::economy::capacity::import_netback(&world, &dataset, plastics, pa).unwrap();
         assert!(
             net_there <= net_pa,
             "freight is charged against distant sites"

@@ -19,12 +19,31 @@ One signal per strategy and state, read by the AI and exposed by `Session::capac
 - Services and retail goods: imports into the regions a plant there serves, plus the household
   demand that found no seller there last week, valued at the last closing price.
 - Plants on order, or opened in the last eight weeks, are taken off the room.
+- Inputs: a plant can only sell what it can buy the inputs for. For each corridor good a strategy
+  buys, the room a new plant could still get is what the corridor exported last week, what home
+  makers left idle, and the unused import room (all volume steps, beyond smoothed imports) of the
+  gateways in the plant's own region (a plant imports only through its own region), less what
+  plants already buying it lacked after last week's trade and what plants coming will take
+  (`input_rooms`). The opening's room is no more than the scarcest input feeds, and a block's
+  contribution runs at that share of full output while paying its whole staff, upkeep and land
+  (`input_fill_bps`, `new_block_contribution`).
 - A block's weekly contribution at public prices and regional wages, today's build cost and the
   payback in weeks.
 
+## Household demand is spending power
+Households ask for each product from a fixed baseline, moved by the price against reference and
+the regional demand ratio, and never for more than their weekly budget for it (90 percent of last
+week's income times the product's spending weight) buys at the price they last paid. So unmet
+demand is money households would pay at today's price that found no seller. A category's budget
+that finds no seller, or that sellers could not fill, goes back to the households' savings.
+
 ## Rivals build and close
 - Growth: after a quarter of results, profitable, staffed to nine tenths in the target region, with
-  cash over twice the reserve plus the build cost. Room needed: half a block for keen builders,
+  cash over twice the reserve plus the build cost. A rival orders one plant the size of the gap:
+  as many whole blocks as the room holds, one to eight, fewer when cash past twice its reserve
+  does not cover them or the order would need a board vote (capex over a quarter of assets).
+  It does not expand an existing plant, because an expansion takes the whole plant out of service
+  while the new blocks are built. Room needed: half a block for keen builders,
   1.2 blocks for the cautious, between for the rest. No cap on plants: past four plants each plant
   shortens the payback horizon by 8 weeks (156 down to at least 52).
 - Entry: a builder (growth weight 3 or more) with idle cash may open a business outside its own
