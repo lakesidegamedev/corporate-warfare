@@ -1054,17 +1054,30 @@ fn city_lot(scene: &Scene, m: &mut Mesh, clear: &Clear, i: i32, j: i32) -> Optio
     let ox = (hash(i, j, 0xC18) % (LOT_CELLS - fw + 1) as u32) as i32;
     let oy = (hash(i, j, 0xC19) % (LOT_CELLS - fh + 1) as u32) as i32;
     let (cx0, cy0) = (lx + ox, ly + oy);
-    // Every cell under the footprint is block ground of the city, read with that cell's own zone.
+    // Every cell under the footprint is block ground of the city. The shader reads the zone (and
+    // so the street layout) per pixel, and a ground texel's edge can cross a cell, so each cell is
+    // read at its middle and near its four corners with the zone found there: any part of the cell
+    // that some zone draws as a street holds at least one of those points.
+    const AT: [(f32, f32); 5] = [
+        (0.5, 0.5),
+        (0.001, 0.001),
+        (0.999, 0.001),
+        (0.001, 0.999),
+        (0.999, 0.999),
+    ];
     for cy in cy0..cy0 + fh {
         for cx in cx0..cx0 + fw {
-            let gc = ground_at(scene, km(cx), km(cy))?;
-            let c_core = gc.base == G_CORE;
-            if gc.base != G_URBAN && !c_core {
-                return None;
-            }
-            let (tone, green) = city_cell(c_core, gc.zone, cx, cy);
-            if tone < 0 || green != 0 {
-                return None;
+            for (fx, fy) in AT {
+                let (px, py) = ((cx as f32 + fx) * CELL_KM, (cy as f32 + fy) * CELL_KM);
+                let gc = ground_at(scene, px, py)?;
+                let c_core = gc.base == G_CORE;
+                if gc.base != G_URBAN && !c_core {
+                    return None;
+                }
+                let (tone, green) = city_cell(c_core, gc.zone, cx, cy);
+                if tone < 0 || green != 0 {
+                    return None;
+                }
             }
         }
     }
