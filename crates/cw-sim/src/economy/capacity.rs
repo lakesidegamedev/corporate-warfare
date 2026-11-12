@@ -48,18 +48,17 @@ fn served(dataset: &Dataset, product: u16, region: u8) -> Vec<u8> {
 /// Weekly lots of `product` from plants on order, or opened within `ROOM_LAG_WEEKS`, in
 /// `regions` (every region when None).
 pub fn coming_lots(world: &World, dataset: &Dataset, product: u16, regions: Option<&[u8]>) -> i64 {
-    let id = &dataset.products[product as usize].id;
     world
         .facilities
         .iter()
         .map(|(_, plant)| plant)
+        .filter(|plant| dataset.recipe_tables.primary(product, plant.recipe))
         .filter(|plant| regions.is_none_or(|list| list.contains(&plant.region)))
         .filter(|plant| match plant.status {
             FacilityStatus::Building => true,
             FacilityStatus::Operating => plant.completes.0 + ROOM_LAG_WEEKS > world.tick.0,
             _ => false,
         })
-        .filter(|plant| &dataset.recipes[plant.recipe as usize].output == id)
         .map(|plant| {
             dataset.recipes[plant.recipe as usize].weekly_output_lots * plant.blocks as i64
         })
@@ -144,6 +143,7 @@ pub fn idle_lots(world: &World, dataset: &Dataset, product: u16, regions: &[u8])
         .facilities
         .iter()
         .map(|(_, plant)| plant)
+        .filter(|plant| dataset.recipe_tables.makes(product, plant.recipe))
         .filter(|plant| {
             plant.status == FacilityStatus::Operating && regions.contains(&plant.region)
         })
@@ -251,16 +251,14 @@ pub fn input_rooms(world: &World, dataset: &Dataset) -> InputRooms {
     }
     let mut bought = vec![false; products];
     for (_, plant) in world.facilities.iter() {
-        let recipe = &dataset.recipes[plant.recipe as usize];
         let coming = match plant.status {
             FacilityStatus::Building => true,
             FacilityStatus::Operating => plant.completes.0 + ROOM_LAG_WEEKS > world.tick.0,
             _ => false,
         };
-        for (id, lots) in &recipe.weekly_inputs_lots {
-            if let Some(product) = dataset.product_index.get(id).map(|p| *p as usize)
-                && corridor[product] != i64::MAX
-            {
+        for (product, lots) in dataset.recipe_tables.inputs(plant.recipe) {
+            let product = *product as usize;
+            if corridor[product] != i64::MAX {
                 bought[product] |= plant.status == FacilityStatus::Operating;
                 if coming {
                     corridor[product] -= lots * plant.blocks as i64;
@@ -269,9 +267,9 @@ pub fn input_rooms(world: &World, dataset: &Dataset) -> InputRooms {
         }
         if plant.status == FacilityStatus::Operating
             && let Some(product) = dataset
-                .product_index
-                .get(&recipe.output)
-                .map(|p| *p as usize)
+                .recipe_tables
+                .output_product(plant.recipe)
+                .map(|p| p as usize)
             && corridor[product] != i64::MAX
         {
             let idle = plant.full_weekly_output(dataset).0 - plant.last_output.0;
@@ -373,25 +371,23 @@ pub fn input_fill_bps(dataset: &Dataset, rooms: &InputRooms, recipe: u16, region
 /// `i64::MAX` when it buys no corridor good.
 pub fn input_cap_lots(dataset: &Dataset, rooms: &InputRooms, recipe: u16, region: u8) -> i64 {
     let template = &dataset.recipes[recipe as usize];
+    let inputs = dataset.recipe_tables.inputs(recipe);
     // A service its buyers there went short of fills a new block's need in the same share.
-    let service_cap = template
-        .weekly_inputs_lots
+    let service_cap = inputs
         .iter()
-        .filter(|(_, lots)| **lots > 0)
-        .filter_map(|(id, _)| {
-            let product = *dataset.product_index.get(id)?;
-            let fill = rooms.service_fill_bps(product, region);
+        .filter(|(_, lots)| *lots > 0)
+        .filter_map(|(product, _)| {
+            let fill = rooms.service_fill_bps(*product, region);
             (fill < 10_000)
                 .then(|| template.weekly_output_lots.max(1).saturating_mul(fill) / 10_000)
         })
         .min()
         .unwrap_or(i64::MAX);
-    template
-        .weekly_inputs_lots
+    inputs
         .iter()
-        .filter(|(_, lots)| **lots > 0)
-        .filter_map(|(id, lots)| {
-            let room = rooms.lots(*dataset.product_index.get(id)?, region);
+        .filter(|(_, lots)| *lots > 0)
+        .filter_map(|(product, lots)| {
+            let room = rooms.lots(*product, region);
             (room != i64::MAX)
                 .then(|| room.saturating_mul(template.weekly_output_lots.max(1)) / lots)
         })

@@ -275,6 +275,12 @@ pub struct RecipeTables {
     uses: Vec<bool>,
     /// Whether the recipe makes the product, as its output or a by-product.
     makes: Vec<bool>,
+    /// Whether the recipe's primary output is the product.
+    primary: Vec<bool>,
+    /// By recipe: its inputs that are products, as (product, weekly lots per block), in id order,
+    /// and the product index of its primary output.
+    inputs: Vec<Vec<(u16, i64)>>,
+    output_product: Vec<Option<u16>>,
     /// Whether any recipe names the product among its inputs, by product.
     any_use: Vec<bool>,
 }
@@ -287,8 +293,29 @@ impl RecipeTables {
             input_lots: vec![0; products.len() * n],
             uses: vec![false; products.len() * n],
             makes: vec![false; products.len() * n],
+            primary: vec![false; products.len() * n],
+            inputs: Vec::with_capacity(n),
+            output_product: Vec::with_capacity(n),
             any_use: vec![false; products.len()],
         };
+        for recipe in recipes {
+            tables.inputs.push(
+                recipe
+                    .weekly_inputs_lots
+                    .iter()
+                    .filter_map(|(id, lots)| {
+                        let at = products.iter().position(|p| &p.id == id)?;
+                        Some((at as u16, *lots))
+                    })
+                    .collect(),
+            );
+            tables.output_product.push(
+                products
+                    .iter()
+                    .position(|p| p.id == recipe.output)
+                    .map(|at| at as u16),
+            );
+        }
         for (p, product) in products.iter().enumerate() {
             for (r, recipe) in recipes.iter().enumerate() {
                 let at = p * n + r;
@@ -298,6 +325,7 @@ impl RecipeTables {
                     tables.any_use[p] = true;
                 }
                 tables.makes[at] = recipe.makes(&product.id);
+                tables.primary[at] = recipe.output == product.id;
             }
         }
         tables
@@ -307,6 +335,21 @@ impl RecipeTables {
     pub fn input_lots(&self, product: u16, recipe: u16) -> Option<i64> {
         let at = product as usize * self.recipes + recipe as usize;
         self.uses[at].then(|| self.input_lots[at])
+    }
+
+    /// The recipe's inputs that are products with their weekly lots per block, in id order.
+    pub fn inputs(&self, recipe: u16) -> &[(u16, i64)] {
+        &self.inputs[recipe as usize]
+    }
+
+    /// The product index of the recipe's primary output.
+    pub fn output_product(&self, recipe: u16) -> Option<u16> {
+        self.output_product[recipe as usize]
+    }
+
+    /// Whether the product is the recipe's primary output.
+    pub fn primary(&self, product: u16, recipe: u16) -> bool {
+        self.primary[product as usize * self.recipes + recipe as usize]
     }
 
     /// Whether any recipe uses the product as an input.
