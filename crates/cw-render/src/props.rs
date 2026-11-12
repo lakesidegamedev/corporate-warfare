@@ -370,7 +370,7 @@ fn city_cell(core: bool, zone: u8, tx: i32, ty: i32) -> (i32, i32) {
     let bh = ihash(sx.1 * 7 + 3, sy.1 * 13 + 5) % 100;
     let th = ihash(tx + 17, ty + 29) % 100;
     if core {
-        return (if bh < 72 { 1 } else { 0 }, 0);
+        return (i32::from(bh < 72), 0);
     }
     if zone == ZONE_OUTER {
         if bh < 30 {
@@ -388,12 +388,12 @@ fn city_cell(core: bool, zone: u8, tx: i32, ty: i32) -> (i32, i32) {
         return (0, 0);
     }
     if zone == ZONE_INDUSTRIAL {
-        return (if bh < 22 { 1 } else { 0 }, 0);
+        return (i32::from(bh < 22), 0);
     }
     if bh < 7 {
         return (0, if th < 10 { 2 } else { 3 });
     }
-    (if bh < 30 { 1 } else { 0 }, 0)
+    (i32::from(bh < 30), 0)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1203,7 +1203,7 @@ fn shed(b: &mut Build, hw: f32, hd: f32, snow: bool, r: u32) {
         };
         b.put(a, c, roof);
     }
-    if (r >> 15) % 4 == 0 {
+    if (r >> 15).is_multiple_of(4) {
         let s = 0.003;
         b.put(
             [hw * 0.6 - s, -s, top],
