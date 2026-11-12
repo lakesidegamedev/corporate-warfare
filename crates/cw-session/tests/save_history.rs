@@ -10,7 +10,8 @@
 //! |---|---|---|---|
 //! | `v1.9.0` | tag `v1.9.0` | 3 | careers, raid campaigns, plant auctions, capacity rules |
 //! | `v1.10-preview` | `v1.10.0-preview.2` engine | 3 | the same |
-//! | `2.0-<n>` | merge commits of the 2.0 branch | 3 or 4 | whatever landed after them |
+//! | `2.0 <sha>` | merge commits of the 2.0 branch, in order: `d82a1f3` (rivals that build), `637312c` (raid campaigns, layout 4), `4e25ea5` (demand), `8ea05c4` (auctions and mergers), `5299caa` (world prices), `123ac61` (careers) | 3 or 4 | whatever landed after them |
+//! | `2.0 preview.1` | tag `v2.0.0-preview.1` (engine of `d14c361`) | 4 | the later balance changes |
 //!
 //! Every fixture is checked four ways: it opens at the layout and week it was written at; no
 //! career is forced on it (a save with no career plays on as a sandbox); it plays 52 weeks with
@@ -64,7 +65,60 @@ const FIXTURES: &[Fixture] = &[
         3,
         "ruhr-rhine-1991"
     ),
-    // CHAIN
+    fixture!(
+        "v1.10-preview2",
+        "v1.10-preview2-silicon-valley-1995-sandbox-week6.cwsave",
+        3,
+        "silicon-valley-1995"
+    ),
+    fixture!(
+        "2.0 d82a1f3",
+        "2.0-d82a1f3-texas-1981-sandbox-week6.cwsave",
+        3,
+        "texas-1981"
+    ),
+    fixture!(
+        "2.0 637312c",
+        "2.0-637312c-ruhr-rhine-1991-sandbox-week6.cwsave",
+        4,
+        "ruhr-rhine-1991"
+    ),
+    fixture!(
+        "2.0 4e25ea5",
+        "2.0-4e25ea5-great-lakes-2000-sandbox-week6.cwsave",
+        4,
+        "great-lakes-2000"
+    ),
+    fixture!(
+        "2.0 8ea05c4",
+        "2.0-8ea05c4-texas-1981-sandbox-week6.cwsave",
+        4,
+        "texas-1981"
+    ),
+    fixture!(
+        "2.0 5299caa",
+        "2.0-5299caa-ruhr-rhine-1991-sandbox-week6.cwsave",
+        4,
+        "ruhr-rhine-1991"
+    ),
+    fixture!(
+        "2.0 123ac61",
+        "2.0-123ac61-silicon-valley-1995-sandbox-week6.cwsave",
+        4,
+        "silicon-valley-1995"
+    ),
+    fixture!(
+        "2.0 preview.1",
+        "2.0-preview1-great-lakes-2000-sandbox-week6.cwsave",
+        4,
+        "great-lakes-2000"
+    ),
+    fixture!(
+        "2.0 preview.1",
+        "2.0-preview1-texas-1981-sandbox-week6.cwsave",
+        4,
+        "texas-1981"
+    ),
 ];
 
 /// The header fields of a save, read by hand from the documented envelope: schema and week.
@@ -121,10 +175,12 @@ fn every_earlier_save_opens_at_the_week_and_layout_it_was_written() {
             session.world.facilities.iter().count() > 0,
             "{what}: plants survive"
         );
-        assert!(
-            session.world.raids.campaigns.is_empty(),
-            "{what}: no raid campaign is invented"
-        );
+        if fixture.layout < 4 {
+            assert!(
+                session.world.raids.campaigns.is_empty(),
+                "{what}: no raid campaign is invented"
+            );
+        }
     }
 }
 
