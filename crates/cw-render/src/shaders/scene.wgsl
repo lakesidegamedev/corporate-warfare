@@ -325,7 +325,7 @@ fn axis_street(t: i32, band: i32, salt: i32, span: i32, lo: i32, rng: u32, width
 
 // Returns (tone, green): tone -2 avenue, -1 street, 0 block, 1 light block; green 0 none, 1 lawn,
 // 2 tree, 3 dark lawn of a park.
-fn city_texel(cls: u32, zone: u32, tx: i32, ty: i32) -> vec2<i32> {
+fn city_texel(cls: u32, zone: u32, tx: i32, ty: i32, aw: i32, streets: bool) -> vec2<i32> {
     var span = 8;
     var lo = 2;
     var rng = 4u;
@@ -336,7 +336,8 @@ fn city_texel(cls: u32, zone: u32, tx: i32, ty: i32) -> vec2<i32> {
     // Avenues: two texels wide, continuous over the whole map.
     let avx = imod(tx - i32(ihash(tx >> 6, 91) % 5u), av);
     let avy = imod(ty - i32(ihash(ty >> 6, 92) % 5u), av);
-    if (avx < 2 || avy < 2) { return vec2<i32>(select(-2, -1, cls == 5u && zone != 1u), 0); }
+    if (avx < aw || avy < aw) { return vec2<i32>(select(-2, -1, cls == 5u && zone != 1u), 0); }
+    if (!streets) { return vec2<i32>(0, 0); }
     let sx = axis_street(tx, ty >> 6, 11, span, lo, rng, 1);
     let sy = axis_street(ty, tx >> 6, 23, span, lo, rng, 1);
     if (sx.x == 1 || sy.x == 1) { return vec2<i32>(-1, 0); }
@@ -596,7 +597,20 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
             let ty = i32(floor(in.world.y / g.tex.x));
             var tv = 0;
             if (cls >= 5u) {
-                let ct = city_texel(cls, variant_at(tc) & 3u, tx, ty);
+                // Streets are laid out on a fixed lattice of the world (a cell is about 31 m, a
+                // block four to twenty cells), so a city block is the same piece of ground at
+                // every zoom. Streets show while a cell is at least a pixel wide; further out
+                // only the avenues, at one pixel; further still the city is its flat colour.
+                let ckm = 0.03125;
+                let cpx = ckm / max(length(dpx.xy), 1e-6);
+                var ct = vec2<i32>(0, 0);
+                let cx = i32(floor(in.world.x / ckm));
+                let cy = i32(floor(in.world.y / ckm));
+                if (cpx >= 1.0) {
+                    ct = city_texel(cls, variant_at(tc) & 3u, cx, cy, 2, true);
+                } else if (cpx >= 0.16) {
+                    ct = city_texel(cls, variant_at(tc) & 3u, cx, cy, i32(ceil(1.2 / cpx)), false);
+                }
                 tv = clamp(ct.x, -2, 1);
                 if (night && ct.y == 0 && ct.x >= 0) {
                     let lamp = city_light(cls, variant_at(tc) & 3u, tx, ty, 1u);
