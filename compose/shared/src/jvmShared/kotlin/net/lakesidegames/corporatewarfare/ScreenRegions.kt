@@ -60,7 +60,7 @@ fun RegionsScreen(store: GameStore, startPick: UInt? = null) {
     val chosen = rows.firstOrNull { it.board.index == pick } ?: rows.firstOrNull { it.myBlocks > 0 } ?: rows.firstOrNull()
     val act = LocalActions.current
     BoxWithConstraints(Modifier.fillMaxSize().padding(8.dp)) {
-        val wide = maxWidth >= 900.dp
+        val wide = maxWidth >= 900.dp || LocalPhonePanes.current != null
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DataGrid(
                 "Regions", rows, regionColumns(), key = { it.board.index },

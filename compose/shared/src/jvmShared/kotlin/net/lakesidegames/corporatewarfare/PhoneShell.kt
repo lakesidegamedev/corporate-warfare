@@ -56,18 +56,20 @@ class PhoneNav {
     /** An action opened with its fields filled in, or all actions. */
     var action by mutableStateOf<Pair<String, Map<String, String>>?>(null)
     var allActions by mutableStateOf(false)
+    /** Detail panes of the open place: shown as a page of their own when a row is tapped. */
+    val panes = PhonePanes()
 
     fun tabOf(p: Place): PhoneTab = PhoneTab.entries.firstOrNull { p.group in it.groups } ?: PhoneTab.More
 
     /** Opens a place under its own bottom bar entry, closing whatever sheet was over the screen. */
     fun open(p: Place) {
-        closeSheets()
+        closeSheets(); panes.open = false
         if (p == Place.Map) { tab = PhoneTab.Map; place = null; return }
         tab = tabOf(p); place = p
         Tutorial.visited(tutorialPage(p))
     }
 
-    fun goTab(t: PhoneTab) { closeSheets(); tab = t; place = null }
+    fun goTab(t: PhoneTab) { closeSheets(); panes.open = false; tab = t; place = null }
     fun closeSheets() { alerts = false; find = false; pulled = false; action = null; allActions = false }
     val sheetOpen: Boolean get() = alerts || find || action != null || allActions
 }
@@ -85,6 +87,7 @@ fun PhoneShell(store: GameStore, nav: PhoneNav, onSettings: () -> Unit, onMenu: 
     BackAction {
         when {
             nav.sheetOpen -> nav.closeSheets()
+            nav.panes.open -> nav.panes.open = false
             nav.pulled -> nav.pulled = false
             nav.place != null -> nav.place = null
             nav.tab != PhoneTab.Map -> nav.goTab(PhoneTab.Map)
@@ -108,11 +111,16 @@ fun PhoneShell(store: GameStore, nav: PhoneNav, onSettings: () -> Unit, onMenu: 
             PhoneStrip(store, nav)
             Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
             if (nav.pulled) PhonePullDown(store, nav)
-            PauseBanner(store, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+            PauseBanner(store, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), compact = true)
             TutorialPanel(compact = true, modifier = Modifier.fillMaxWidth(), researchHint = store.research?.let { r -> store.selectedFirmDto?.let { Tutorial.researchHint(it.cashCents, r) } })
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                androidx.compose.runtime.CompositionLocalProvider(LocalActions provides { cmd, preset -> nav.action = cmd to preset }) {
+                androidx.compose.runtime.CompositionLocalProvider(LocalActions provides { cmd, preset -> nav.action = cmd to preset }, LocalPhonePanes provides nav.panes) {
                     PhoneBody(store, nav, onSettings, onMenu)
+                    // A tapped row's detail pane, as a page with a back arrow.
+                    if (nav.panes.open && nav.panes.entries.isNotEmpty()) Column(Modifier.fillMaxSize().background(Palette.ink)) {
+                        PhoneBackBar("Back to the list") { nav.panes.open = false }
+                        nav.panes.entries.toList().forEach { e -> DetailPaneBody(e.title, Modifier.fillMaxWidth().weight(1f)) { e.content?.invoke(this) } }
+                    }
                 }
                 if (SidePanes.items.isNotEmpty()) PhoneSidePanes()
             }

@@ -36,9 +36,12 @@ fun SplitOrStack(
                 right(Modifier.weight(rightWeight).fillMaxHeight())
             }
         } else {
-            Column(Modifier.fillMaxWidth().fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                left(Modifier.fillMaxWidth().height(leftPhone))
-                right(Modifier.fillMaxWidth().height(rightPhone))
+            // Stacked: the pane stays under its grid here, so the phone shell does not lift it onto a page of its own.
+            androidx.compose.runtime.CompositionLocalProvider(LocalStackedPane provides true) {
+                Column(Modifier.fillMaxWidth().fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    left(Modifier.fillMaxWidth().height(leftPhone))
+                    right(Modifier.fillMaxWidth().height(rightPhone))
+                }
             }
         }
     }

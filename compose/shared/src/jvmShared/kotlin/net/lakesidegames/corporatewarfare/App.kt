@@ -664,7 +664,7 @@ private fun ChipRow(steps: List<Int>, prefix: String = "", onPick: (Int) -> Unit
  * every other pause has Continue. Shown wherever the time controls are, never only in the Inbox.
  */
 @Composable
-fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
+fun PauseBanner(store: GameStore, modifier: Modifier = Modifier, compact: Boolean = false) {
     val info = store.overview?.pauseInfo ?: return
     var card by remember { mutableStateOf<ULong?>(null) }
     val event = info.eventId?.let { id -> store.events.firstOrNull { it.id == id } }
@@ -685,7 +685,7 @@ fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
                 OutlinedButton(onClick = { store.dismissPause() }, enabled = !store.busy) { Text("Continue", color = Palette.primaryText) }
             }
         }
-        Text(info.detail, color = Palette.secondary, fontSize = 12.sp)
+        if (!compact) Text(info.detail, color = Palette.secondary, fontSize = 12.sp)
     }
     val open = card?.let { id -> store.events.firstOrNull { it.id == id } }
     if (open != null) {

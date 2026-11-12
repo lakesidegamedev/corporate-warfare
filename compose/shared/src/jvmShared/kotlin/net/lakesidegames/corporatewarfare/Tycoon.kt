@@ -622,8 +622,10 @@ private fun RailLine(text: String, note: String?, tone: Color, onClick: () -> Un
 
 /** A row of headline figures above a screen: label over value, tabular, no cards. */
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 fun FigureLine(vararg figures: Triple<String, String, Color>) {
-    Row(Modifier.fillMaxWidth().background(Palette.panel).border(1.dp, Palette.stroke).padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+    // The figures wrap onto more lines when the width runs out (a phone), and stay on one line when they fit.
+    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().background(Palette.panel).border(1.dp, Palette.stroke).padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         figures.forEach { (label, value, tone) ->
             Explain(Words.about(label)) {
                 Column(Modifier.padding(horizontal = 4.dp)) {
@@ -635,9 +637,19 @@ fun FigureLine(vararg figures: Triple<String, String, Color>) {
     }
 }
 
-/** A titled side pane that scrolls on its own: the detail half of a split. */
+/**
+ * A titled side pane that scrolls on its own: the detail half of a split. On a phone it is not drawn beside the grid:
+ * it waits in [PhonePanes] and the phone shell opens it as a page when a row is tapped.
+ */
 @Composable
 fun DetailPane(title: String, modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val host = LocalPhonePanes.current
+    if (host != null && !LocalStackedPane.current) { PhonePaneEntry(host, title, content); return }
+    DetailPaneBody(title, modifier, content)
+}
+
+@Composable
+internal fun DetailPaneBody(title: String, modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.border(1.dp, Palette.stroke).background(Palette.panel)) {
         Text(
             title.uppercase(), color = Palette.primaryText, fontFamily = Pixel.font, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -664,7 +676,9 @@ fun CompanyOverviewScreen(store: GameStore, divisionRows: List<DivisionDto> = st
     var editing by remember { mutableStateOf<ProductLineDto?>(null) }
     val cur = firm.currency
     val last = store.history.lastOrNull()
-    Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // On a phone the page scrolls and the three tables take a fixed height each; the division's detail is a page of its own.
+    val phone = LocalPhonePanes.current != null
+    Column(if (phone) Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp) else Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FigureLine(
             Triple("Company cash", Format.compact(firm.cashCents, cur), Palette.primaryText),
             Triple("Equity", Format.compact(firm.equityCents, cur), Palette.primaryText),
@@ -677,7 +691,7 @@ fun CompanyOverviewScreen(store: GameStore, divisionRows: List<DivisionDto> = st
             Triple("Revenue, last period", Format.compact(last?.revenueCents ?: 0, cur), Palette.primaryText),
             Triple("Net income, last period", Format.compact(last?.netIncomeCents ?: 0, cur), tint(last?.netIncomeCents ?: 0)),
         )
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(if (phone) Modifier.fillMaxWidth().height(1000.dp) else Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             // Left: the tables. A table is as tall as its rows, up to 38 percent of the page, and the
             // room it does not use goes to the results table below, which scrolls when it is long.
             BoxWithConstraints(Modifier.weight(1.3f).fillMaxHeight()) {
@@ -834,7 +848,7 @@ fun GoodsScreen(store: GameStore, startPick: UInt? = null) {
     val flows = rememberEngine(store, store.overview?.tick) { h -> h.goodsSeries().associateBy { it.product } }.orEmpty()
     val closes = rememberEngine(store, store.overview?.tick) { h -> h.goodsPriceSeries().associate { it.id.toUInt() to it.values } }.orEmpty()
     BoxWithConstraints(Modifier.fillMaxSize().padding(8.dp)) {
-        val wide = maxWidth >= 900.dp
+        val wide = maxWidth >= 900.dp || LocalPhonePanes.current != null
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DataGrid(
                 "Goods", goods, goodsColumns(shares, flows, closes), key = { it.product },

@@ -29,7 +29,7 @@ fun FreightScreen(store: GameStore) {
     var pick by remember { mutableStateOf<String?>(null) }
     val chosen = lanes.firstOrNull { laneKey(it) == pick } ?: lanes.firstOrNull { laneIsMine(it) } ?: lanes.maxByOrNull { it.usedLots }
     BoxWithConstraints(Modifier.fillMaxSize().padding(8.dp)) {
-        val wide = maxWidth >= 900.dp
+        val wide = maxWidth >= 900.dp || LocalPhonePanes.current != null
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DataGrid(
                 "Freight lanes", lanes, laneColumns(store), key = ::laneKey,
