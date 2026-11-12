@@ -120,7 +120,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
     var updates by remember { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
-        if (wide) GlobeBackdrop(Modifier.fillMaxSize(), offsetX = 0.22f, calm = true)
+        if (wide) GlobeBackdrop(Modifier.fillMaxSize(), offsetX = 0.22f, calm = true, focus = last?.info?.scenario?.ifEmpty { null })
         Column(
             Modifier.then(if (wide) Modifier.align(Alignment.CenterStart) else Modifier.fillMaxHeight()).width(if (wide) 520.dp else maxWidth)
                 .then(if (wide) Modifier.padding(start = 56.dp, top = 32.dp, bottom = 32.dp).pixelFrame(Palette.ink, Palette.stroke, shadow = 6.dp) else Modifier)
