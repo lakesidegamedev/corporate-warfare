@@ -286,12 +286,22 @@ pub struct RecipeTables {
     /// By `industry * products + product`: whether a recipe of the industry makes the product.
     industry_makes: Vec<bool>,
     products: usize,
+    /// By region, the regions a market there can draw on: itself only, its state (itself first),
+    /// and its power grid (itself first, then every region that keeps books in the same money).
+    supply_own: Vec<Vec<u8>>,
+    supply_state: Vec<Vec<u8>>,
+    supply_grid: Vec<Vec<u8>>,
     /// Whether any recipe names the product among its inputs, by product.
     any_use: Vec<bool>,
 }
 
 impl RecipeTables {
-    fn build(products: &[Product], recipes: &[Recipe]) -> RecipeTables {
+    fn build(
+        products: &[Product],
+        recipes: &[Recipe],
+        regions: &[Region],
+        region_currency: &[u8],
+    ) -> RecipeTables {
         let n = recipes.len();
         let mut tables = RecipeTables {
             recipes: n,
@@ -304,6 +314,9 @@ impl RecipeTables {
             industry: Vec::with_capacity(n),
             industry_makes: vec![false; INDUSTRIES.len() * products.len()],
             products: products.len(),
+            supply_own: Vec::new(),
+            supply_state: Vec::new(),
+            supply_grid: Vec::new(),
             any_use: vec![false; products.len()],
         };
         for recipe in recipes {
@@ -347,6 +360,27 @@ impl RecipeTables {
                 tables.primary[at] = recipe.output == product.id;
             }
         }
+        let currency = |r: usize| region_currency.get(r).copied().unwrap_or(0);
+        for (r, region) in regions.iter().enumerate() {
+            let me = r as u8;
+            tables.supply_own.push(vec![me]);
+            let mut state = vec![me];
+            state.extend(
+                regions
+                    .iter()
+                    .enumerate()
+                    .filter(|(o, other)| *o != r && other.state() == region.state())
+                    .map(|(o, _)| o as u8),
+            );
+            tables.supply_state.push(state);
+            let mut grid = vec![me];
+            grid.extend(
+                (0..regions.len())
+                    .filter(|o| *o != r && currency(*o) == currency(r))
+                    .map(|o| o as u8),
+            );
+            tables.supply_grid.push(grid);
+        }
         tables
     }
 
@@ -359,6 +393,21 @@ impl RecipeTables {
     /// The recipe's inputs that are products with their weekly lots per block, in id order.
     pub fn inputs(&self, recipe: u16) -> &[(u16, i64)] {
         &self.inputs[recipe as usize]
+    }
+
+    /// The region itself, as a one-region market.
+    pub fn supply_own(&self, region: u8) -> &[u8] {
+        &self.supply_own[region as usize]
+    }
+
+    /// The region's state, the region first.
+    pub fn supply_state(&self, region: u8) -> &[u8] {
+        &self.supply_state[region as usize]
+    }
+
+    /// The region's power grid, the region first.
+    pub fn supply_grid(&self, region: u8) -> &[u8] {
+        &self.supply_grid[region as usize]
     }
 
     /// Whether any recipe of the industry makes the product.
@@ -597,7 +646,12 @@ impl Dataset {
             return Err(errors);
         }
         let mut dataset = dataset;
-        dataset.recipe_tables = RecipeTables::build(&dataset.products, &dataset.recipes);
+        dataset.recipe_tables = RecipeTables::build(
+            &dataset.products,
+            &dataset.recipes,
+            &dataset.regions,
+            &dataset.region_currency,
+        );
         dataset.hash = dataset.compute_hash();
         Ok(dataset)
     }

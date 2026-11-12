@@ -218,7 +218,8 @@ fn opening_stock(world: &World) -> BTreeMap<(Handle, u16, u8), i64> {
 /// `markets::grid_regions`), keyed by the area's lowest region.
 fn grid_key(dataset: &Dataset, region: u8) -> u8 {
     crate::economy::markets::supply_regions(dataset, region, dataset.product_index["electricity"])
-        .into_iter()
+        .iter()
+        .copied()
         .min()
         .unwrap_or(region)
 }

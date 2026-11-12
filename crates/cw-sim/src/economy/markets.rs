@@ -265,7 +265,8 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
                 .max(1_000);
         // Contractors anywhere in the state can take the region's public works.
         let sellers: Vec<(Handle, u8)> = supply_regions(dataset, region as u8, service)
-            .into_iter()
+            .iter()
+            .copied()
             .flat_map(|from| {
                 world
                     .firms
@@ -462,7 +463,7 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
 
         let mut offers: Vec<Offer> = Vec::new();
         let mut seller_handles: Vec<OfferSource> = Vec::new();
-        for from in supply_regions(dataset, region, product) {
+        for from in supply_regions(dataset, region, product).iter().copied() {
             for (handle, firm) in world.firms.iter() {
                 if !firm.operative() {
                     continue;
@@ -1201,28 +1202,21 @@ fn statewide(dataset: &Dataset, product: u16) -> bool {
 }
 
 /// Regions whose stock can be offered in `region`'s market, the market's own region first.
-pub(crate) fn supply_regions(dataset: &Dataset, region: u8, product: u16) -> Vec<u8> {
+pub(crate) fn supply_regions(dataset: &Dataset, region: u8, product: u16) -> &[u8] {
     if dataset.products[product as usize].id == "electricity" {
-        return grid_regions(dataset, region);
+        return dataset.recipe_tables.supply_grid(region);
     }
     if !statewide(dataset, product) {
-        return vec![region];
+        return dataset.recipe_tables.supply_own(region);
     }
-    let state = dataset.regions[region as usize].state();
-    let mut regions = vec![region];
-    regions.extend(
-        dataset
-            .regions_in_state(state)
-            .into_iter()
-            .filter(|other| *other != region),
-    );
-    regions
+    dataset.recipe_tables.supply_state(region)
 }
 
 /// The regions on one power grid with `region`, its own first: every region that keeps its books
 /// in the same money. A grid is wired across state lines, so a plant draws on the generators of
 /// the whole currency area, not only the ones in its own county; a plant in a region with no
 /// generator used to get no power at all while generators elsewhere left theirs unsold.
+#[cfg(test)]
 pub(crate) fn grid_regions(dataset: &Dataset, region: u8) -> Vec<u8> {
     let currency = crate::economy::fx::region_currency(dataset, region);
     let mut regions = vec![region];
@@ -1315,7 +1309,10 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
             }
             let mut offers: Vec<Offer> = Vec::new();
             let mut sources: Vec<OfferSource> = Vec::new();
-            for from in supply_regions(dataset, region_index as u8, product) {
+            for from in supply_regions(dataset, region_index as u8, product)
+                .iter()
+                .copied()
+            {
                 for (handle, firm) in world.firms.iter() {
                     if !firm.operative() {
                         continue;
@@ -1524,7 +1521,10 @@ fn clear_government(world: &mut World, dataset: &Dataset) {
             }
             let mut offers = Vec::new();
             let mut sources = Vec::new();
-            for from in supply_regions(dataset, region as u8, product) {
+            for from in supply_regions(dataset, region as u8, product)
+                .iter()
+                .copied()
+            {
                 for (handle, firm) in world.firms.iter() {
                     if !firm.operative() {
                         continue;
@@ -2610,5 +2610,35 @@ mod tests {
             brand_sensitive: true,
         }];
         assert!(allocate(10_000, &offers, &requests).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod supply_table_tests {
+    use super::*;
+
+    /// The tables built at load give the same markets the plain rules do, for every bundled
+    /// scenario, region and kind of product.
+    #[test]
+    fn supply_tables_match_the_plain_rules() {
+        for scenario in cw_data::scenarios() {
+            let dataset = Dataset::load_scenario(&scenario.id).unwrap();
+            for region in 0..dataset.regions.len() as u8 {
+                assert_eq!(
+                    dataset.recipe_tables.supply_grid(region),
+                    grid_regions(&dataset, region).as_slice()
+                );
+                let state = dataset.regions[region as usize].state();
+                let mut plain = vec![region];
+                plain.extend(
+                    dataset
+                        .regions_in_state(state)
+                        .into_iter()
+                        .filter(|other| *other != region),
+                );
+                assert_eq!(dataset.recipe_tables.supply_state(region), plain.as_slice());
+                assert_eq!(dataset.recipe_tables.supply_own(region), &[region]);
+            }
+        }
     }
 }

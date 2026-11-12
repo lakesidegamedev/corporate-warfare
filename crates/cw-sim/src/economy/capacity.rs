@@ -38,9 +38,9 @@ pub fn household_good(dataset: &Dataset, product: u16) -> bool {
 }
 
 /// The regions a plant of a local product in `region` sells into.
-fn served(dataset: &Dataset, product: u16, region: u8) -> Vec<u8> {
+fn served(dataset: &Dataset, product: u16, region: u8) -> &[u8] {
     if !dataset.capacity.local_room {
-        return vec![region];
+        return dataset.recipe_tables.supply_own(region);
     }
     crate::economy::markets::supply_regions(dataset, region, product)
 }
@@ -123,7 +123,7 @@ pub fn room_lots(world: &World, dataset: &Dataset, product: u16, region: u8) -> 
     // that went without beside idle sellers went without for their budget, not for want of a
     // plant, and are no room for a new one.
     let spare = if unmet + business > 0 {
-        let area: Vec<u8> = if business > 0 { supplied } else { regions };
+        let area: &[u8] = if business > 0 { supplied } else { regions };
         idle_lots(world, dataset, product, &area)
     } else {
         0
