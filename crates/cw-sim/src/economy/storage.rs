@@ -280,13 +280,7 @@ pub fn reserved_milli(
         if facility.region != region {
             continue;
         }
-        let recipe = &dataset.recipes[facility.recipe as usize];
-        if let Some(weekly) = recipe
-            .weekly_inputs_lots
-            .iter()
-            .find(|(id, _)| dataset.product_index[*id] == product)
-            .map(|(_, qty)| *qty)
-        {
+        if let Some(weekly) = dataset.recipe_tables.input_lots(product, facility.recipe) {
             need += weekly
                 * facility.blocks as i64
                 * plant_cover_weeks(world, dataset, firm, facility, product)

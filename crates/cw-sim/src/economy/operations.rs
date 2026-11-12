@@ -394,4 +394,16 @@ mod industry_index_tests {
         }
         assert_eq!(super::industry_index("nonsense"), None);
     }
+
+    #[test]
+    fn the_dataset_industry_table_matches_the_index() {
+        assert_eq!(cw_data::INDUSTRIES, super::INDUSTRY_NAMES);
+        let dataset = cw_data::Dataset::load().unwrap();
+        for (at, recipe) in dataset.recipes.iter().enumerate() {
+            assert_eq!(
+                dataset.recipe_tables.industry(at as u16),
+                super::industry_index(&recipe.industry)
+            );
+        }
+    }
 }
