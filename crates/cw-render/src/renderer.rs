@@ -939,7 +939,7 @@ impl Renderer {
         let frame = c.props.frame;
         let started = Instant::now();
         let p = &mut c.props;
-        let mut build = |p: &mut PropCache, k: props::ChunkKey| {
+        let build = |p: &mut PropCache, k: props::ChunkKey| {
             let m = props::chunk_mesh(scene, &p.index, k);
             p.chunks.insert(k, (upload(device, &m, "props"), frame));
         };

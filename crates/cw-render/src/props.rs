@@ -958,6 +958,10 @@ pub fn city_street_at(scene: &Scene, x: f32, y: f32) -> bool {
     city_cell(core, g.zone, cx, cy).0 < 0
 }
 
+/// The prop placement's check that a spot is free: (x, y, half side) to the ground height under it,
+/// the lowest ground round it, and the distances to the nearest road and river.
+type Clear<'a> = dyn Fn(f32, f32, f32) -> Option<(f32, f32, f32, f32, f32)> + 'a;
+
 /// Whether a band (`stride`) draws the city's buildings.
 fn city_band(stride: u8) -> bool {
     stride as f32 * 12.0 <= CITY_MAX_WIDTH_KM
@@ -975,13 +979,7 @@ enum CityKind {
 /// Its footprint is a whole number of lattice cells inside the lot, every one of them block ground
 /// of the city (never a street, an avenue, a park or another zone's street), and the spot must be
 /// clear of roads, rivers, water and the placed buildings like every prop.
-fn city_lot(
-    scene: &Scene,
-    m: &mut Mesh,
-    clear: &dyn Fn(f32, f32, f32) -> Option<(f32, f32, f32, f32, f32)>,
-    i: i32,
-    j: i32,
-) -> Option<Placed> {
+fn city_lot(scene: &Scene, m: &mut Mesh, clear: &Clear, i: i32, j: i32) -> Option<Placed> {
     let (lx, ly) = (i * LOT_CELLS, j * LOT_CELLS);
     let km = |c: i32| (c as f32 + 0.5) * CELL_KM;
     let mid = LOT_CELLS / 2;
