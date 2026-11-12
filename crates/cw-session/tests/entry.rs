@@ -7,8 +7,10 @@
 //! opening said it could sell: its block's output at the share its inputs and its room allow.
 //! The oracle is the company's own booked sales of the good in every market, not the division
 //! report the board's figures come from.
-//! An entrant plays no defence, so a rival may take its only plant; one of the twelve may be
-//! lost that way without failing the test.
+//! An entrant plays no defence, so a rival may take its only plant; two of the twelve may be
+//! lost that way without failing the test (one before the 2.0 balance pass opened Texas rivals
+//! at 70 percent of their size; since then two undefended Texas farm entrants are raided in their
+//! 23rd week, after selling what the board promised).
 
 use cw_session::{PriceSetup, ScenarioConfig, Session};
 use cw_sim::commands::{CommandEnvelope, CommandIntent};
@@ -127,7 +129,7 @@ fn a_new_seller_sells_what_its_opening_promised() {
                     .is_some_and(|f| f.facilities.is_empty());
             if weeks.len() < 2 * QUARTER && lost {
                 // The entrant plays no defence (the test resolves every card with its default),
-                // so a rival can take its only plant. That is not a sales fault; at most one of
+                // so a rival can take its only plant. That is not a sales fault; at most two of
                 // the twelve may be lost this way.
                 println!(
                     "{scenario} {recipe} {region}: lost its plant after {} weeks",
@@ -155,5 +157,5 @@ fn a_new_seller_sells_what_its_opening_promised() {
         }
     }
     assert!(failures.is_empty(), "{failures:#?}");
-    assert!(taken <= 1, "{taken} entrants lost their plant to a rival");
+    assert!(taken <= 2, "{taken} entrants lost their plant to a rival");
 }
