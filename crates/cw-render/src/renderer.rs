@@ -1152,12 +1152,25 @@ impl Renderer {
         // Road widths in render pixels, one set per zoom band (0 hides the class). Interstates
         // are always there, main roads and railways join as the camera closes in, and every
         // width is a whole number of pixels, odd so the line has a centre pixel.
-        let (inter_px, main_px, rail_px) = match camera.width_km {
-            w if w > 1500.0 => (1.0, 0.0, 0.0),
-            w if w > 900.0 => (3.0, 0.0, 0.0),
-            w if w > 450.0 => (3.0, 0.0, 1.0),
-            w if w > 80.0 => (5.0, 1.0, 3.0),
-            _ => (7.0, 3.0, 3.0),
+        // Widths follow the camera smoothly: a road has a (generous) real width and is never
+        // thinner than a readable line, so nothing pops as the camera moves in or out.
+        let scale_px =
+            |real_km: f32, min_px: f32, max_px: f32| (real_km / px_km).clamp(min_px, max_px);
+        let w = camera.width_km;
+        let inter_px = if w > 1500.0 {
+            1.0
+        } else {
+            scale_px(0.30, 2.0, 9.0)
+        };
+        let main_px = if w > 450.0 {
+            0.0
+        } else {
+            scale_px(0.14, 1.2, 5.0)
+        };
+        let rail_px = if w > 900.0 {
+            0.0
+        } else {
+            scale_px(0.10, 1.0, 3.0)
         };
         let detail = if camera.width_km <= style.road_detail_km {
             1.0
