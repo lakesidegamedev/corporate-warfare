@@ -34,6 +34,10 @@ pub struct Vertex {
     pub local: [f32; 3],
     /// Position on the face, 0 to 1 each way (building outlines); unused for terrain.
     pub uv: [f32; 2],
+    /// The building this vertex belongs to: where it stands (km) and how wide it is (km). The
+    /// vertex shader keeps a building from shrinking below a readable size on screen by scaling
+    /// it about this point. A width of zero (terrain, roads, props) means never scaled.
+    pub anchor: [f32; 4],
 }
 
 const UV: [[f32; 2]; 4] = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
@@ -44,7 +48,23 @@ pub const VERTEX_BYTES: usize = std::mem::size_of::<Vertex>();
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
+    /// The anchor given to the vertices pushed from now on (see [`Vertex::anchor`]).
+    pub anchor: [f32; 4],
 }
+
+/// How much a building `size_km` wide is enlarged about its base so it stays `min_px` pixels
+/// wide when a pixel covers `km_px` kilometres: 1 up close (true size), growing smoothly as the
+/// camera pulls away, but never wider than `max_km`.
+pub fn grow_k(size_km: f32, km_px: f32, min_px: f32, max_km: f32) -> f32 {
+    if size_km <= 0.0 {
+        return 1.0;
+    }
+    (min_px * km_px / size_km).clamp(1.0, (max_km / size_km).max(1.0))
+}
+
+/// The widest a plant is ever drawn, in kilometres: its landmark size at the zooms the game is
+/// played at. Plants are stood this far apart, so they never overlap however far they grow.
+pub const LANDMARK_KM: f32 = 5.0;
 
 impl Mesh {
     fn quad(&mut self, p: [[f32; 3]; 4], normal: [f32; 3], colour: [u8; 4], local: [[f32; 3]; 4]) {
@@ -56,6 +76,7 @@ impl Mesh {
                 colour,
                 local: local[i],
                 uv: UV[i],
+                anchor: self.anchor,
             });
         }
         self.indices
@@ -578,6 +599,17 @@ pub fn buildings_where(scene: &Scene, keep: impl Fn(usize, &Placement) -> bool) 
         let (z_top, z_low) = (level_z_km(scene, hi), level_z_km(scene, lo));
         let (s, c) = p.yaw.to_radians().sin_cos();
         let v = scene.voxel_km * p.scale;
+        // Only companies' plants keep a minimum size on screen; the scenery stays true to scale.
+        m.anchor = if p.owner == Owner::Scenery {
+            [0.0; 4]
+        } else {
+            [
+                cx,
+                cy,
+                z_top,
+                model.footprint[0].max(model.footprint[1]) * v,
+            ]
+        };
         let rot = move |n: [f32; 3]| [n[0] * c - n[1] * s, n[0] * s + n[1] * c, n[2]];
         let tf = move |q: [f32; 3]| {
             [
@@ -650,6 +682,7 @@ pub fn buildings_where(scene: &Scene, keep: impl Fn(usize, &Placement) -> bool) 
             }
         }
     }
+    m.anchor = [0.0; 4];
     m
 }
 
@@ -1265,6 +1298,7 @@ pub fn roads(scene: &Scene, band: usize) -> RoadMesh {
                     colour,
                     local: [side, end, along],
                     uv: [other_along, 0.0],
+                    anchor: [0.0; 4],
                 });
             }
             m.indices

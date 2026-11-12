@@ -21,6 +21,7 @@ struct Globals {
     palette: array<vec4<f32>, PALETTE_LEN>,
     day: array<vec4<f32>, PALETTE_LEN>,
     anim: vec4<f32>,       // animation clock in seconds (wrapped), cloud drift (image u, v), unused
+    grow: vec4<f32>,       // km a pixel covers at the target, a plant's minimum width in pixels, widest it may grow to in km
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
@@ -39,7 +40,17 @@ struct VIn {
     @location(2) colour: vec4<f32>,
     @location(3) local: vec3<f32>,
     @location(4) uv: vec2<f32>,
+    @location(5) anchor: vec4<f32>,
 };
+
+// A company's plant keeps a minimum width on screen: it is scaled about its base.
+fn grown(v: VIn) -> vec3<f32> {
+    if (v.anchor.w <= 0.0 || g.grow.y <= 0.0) {
+        return v.pos;
+    }
+    let k = clamp(g.grow.y * g.grow.x / v.anchor.w, 1.0, max(g.grow.z / v.anchor.w, 1.0));
+    return v.anchor.xyz + (v.pos - v.anchor.xyz) * k;
+}
 
 struct VOut {
     @builtin(position) clip: vec4<f32>,
@@ -54,8 +65,9 @@ struct VOut {
 @vertex
 fn vs_main(v: VIn) -> VOut {
     var o: VOut;
-    o.clip = g.view_proj * vec4<f32>(v.pos, 1.0);
-    o.world = v.pos;
+    let pos = grown(v);
+    o.clip = g.view_proj * vec4<f32>(pos, 1.0);
+    o.world = pos;
     o.normal = v.normal;
     o.colour = v.colour.rgb;
     o.kind = u32(round(v.colour.a * 255.0));
@@ -66,7 +78,7 @@ fn vs_main(v: VIn) -> VOut {
 
 @vertex
 fn vs_shadow(v: VIn) -> @builtin(position) vec4<f32> {
-    return g.light_vp * vec4<f32>(v.pos, 1.0);
+    return g.light_vp * vec4<f32>(grown(v), 1.0);
 }
 
 fn pal(ramp: u32, step: i32) -> vec3<f32> {

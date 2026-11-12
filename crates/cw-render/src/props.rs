@@ -455,6 +455,7 @@ impl<'a> Build<'a> {
                 colour: [rgb[0], rgb[1], rgb[2], KIND_PROP],
                 local: [0.0; 3],
                 uv: UV[i],
+                anchor: [0.0; 4],
             });
         }
         self.m
