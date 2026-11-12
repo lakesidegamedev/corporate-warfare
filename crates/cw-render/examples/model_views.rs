@@ -258,15 +258,17 @@ fn main() {
             heading_deg: v.heading,
             fov_deg: 28.0,
         };
+        let clean = std::env::var("CW_CLEAN").is_ok();
         let style = Style {
-            pixel_scale: 2,
+            pixel_scale: if clean { 1 } else { 2 },
             ..if night {
                 Style::night()
             } else {
                 Style::default()
             }
         };
-        let f = renderer.render_to_rgba(scene, &cam, &style, 1200, 750);
+        let (rw, rh) = if clean { (2400, 1500) } else { (1200, 750) };
+        let f = renderer.render_to_rgba(scene, &cam, &style, rw, rh);
         let rgb: Vec<u8> = f
             .rgba
             .chunks_exact(4)

@@ -97,11 +97,36 @@ fn lonlat(xy: vec2<f32>) -> vec2<f32> {
     return vec2<f32>(g.proj.x + xy.x / g.proj.z, g.proj.y + xy.y / g.proj.w);
 }
 
+fn mask_texel(x: i32, y: i32) -> vec4<f32> {
+    let c = clamp(vec2<i32>(x, y), vec2<i32>(0, 0), vec2<i32>(i32(g.mask_dim.x) - 1, i32(g.mask_dim.y) - 1));
+    return textureLoad(mask_tex, c, 0) * 255.0;
+}
+
+fn water_kind(m: vec4<f32>) -> bool {
+    return m.b > 0.5 && m.b < 2.5;
+}
+
+// The mask at a point, with a smooth shoreline: the four texels round the point vote with eased
+// bilinear weights on water against land, and the heaviest texel of the winning side is returned.
+// So a coast is a clean rounded line at every zoom, never a staircase of mask cells, and the
+// answer is still one whole texel (region, kind) with nothing blended.
 fn mask_at(ll: vec2<f32>) -> vec4<f32> {
     let ppd = g.mask_dim.z;
-    let x = clamp(i32(floor((ll.x - g.mask_b.x) * ppd)), 0, i32(g.mask_dim.x) - 1);
-    let y = clamp(i32(floor((g.mask_b.w - ll.y) * ppd)), 0, i32(g.mask_dim.y) - 1);
-    return textureLoad(mask_tex, vec2<i32>(x, y), 0) * 255.0;
+    let p = vec2<f32>((ll.x - g.mask_b.x) * ppd, (g.mask_b.w - ll.y) * ppd) - vec2<f32>(0.5, 0.5);
+    let b = vec2<i32>(floor(p));
+    let f0 = p - floor(p);
+    let f = f0 * f0 * (3.0 - 2.0 * f0);
+    let t = array<vec4<f32>, 4>(mask_texel(b.x, b.y), mask_texel(b.x + 1, b.y), mask_texel(b.x, b.y + 1), mask_texel(b.x + 1, b.y + 1));
+    let w = array<f32, 4>((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    var wet = 0.0;
+    for (var i = 0; i < 4; i++) { if (water_kind(t[i])) { wet += w[i]; } }
+    let want = wet > 0.5;
+    var best = -1.0;
+    var out = t[0];
+    for (var i = 0; i < 4; i++) {
+        if (water_kind(t[i]) == want && w[i] > best) { best = w[i]; out = t[i]; }
+    }
+    return out;
 }
 
 fn is_water(m: vec4<f32>) -> bool {
@@ -150,24 +175,22 @@ fn class_at(tc: vec2<i32>) -> u32 {
 // to zero at the band edge (ordered dither), so a transition is a few pixels of stipple and
 // the middle of a patch is always one flat colour.
 fn ground_class(tcf: vec2<f32>, fw: vec2<f32>, frag: vec2<f32>, band: f32) -> u32 {
-    let tc = vec2<i32>(floor(tcf));
-    let f = tcf - floor(tcf);
-    let own = class_at(tc);
-    if (band <= 0.0) { return own; }
-    let rate = max(fw, vec2<f32>(1e-4, 1e-4));
-    var best_d = 1e9;
-    var other = own;
-    let dist = array<f32, 4>((1.0 - f.x) / rate.x, f.x / rate.x, (1.0 - f.y) / rate.y, f.y / rate.y);
-    let step = array<vec2<i32>, 4>(vec2<i32>(1, 0), vec2<i32>(-1, 0), vec2<i32>(0, 1), vec2<i32>(0, -1));
+    // The four texels round the point vote with eased bilinear weights and the heaviest class
+    // wins: a border between two kinds of ground is a clean rounded line, not a staircase.
+    let p = tcf - vec2<f32>(0.5, 0.5);
+    let b = vec2<i32>(floor(p));
+    let f0 = p - floor(p);
+    let f = f0 * f0 * (3.0 - 2.0 * f0);
+    let c = array<u32, 4>(class_at(b), class_at(b + vec2<i32>(1, 0)), class_at(b + vec2<i32>(0, 1)), class_at(b + vec2<i32>(1, 1)));
+    let w = array<f32, 4>((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    var best = -1.0;
+    var out = c[0];
     for (var i = 0; i < 4; i++) {
-        let n = class_at(tc + step[i]);
-        if (n != own && dist[i] < best_d) { best_d = dist[i]; other = n; }
+        var sum = 0.0;
+        for (var j = 0; j < 4; j++) { if (c[j] == c[i]) { sum += w[j]; } }
+        if (sum > best) { best = sum; out = c[i]; }
     }
-    if (best_d < band) {
-        let p = 0.5 * (1.0 - best_d / band);
-        if (bayer8(frag) < p) { return other; }
-    }
-    return own;
+    return out;
 }
 
 fn variant_at(tc: vec2<i32>) -> u32 {
