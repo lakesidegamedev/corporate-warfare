@@ -1067,7 +1067,8 @@ fn settle_raid(
     Ok(record)
 }
 
-/// Remove up to `wanted` blocks from a defender's plants, largest first, never its last block.
+/// Remove up to `wanted` blocks from a defender's plants, largest first. A division's last block
+/// can go (the quote's chance falls as the share of the whole company at stake grows).
 /// Returns the blocks taken and their capex and accumulated depreciation.
 fn take_blocks(
     world: &mut World,
