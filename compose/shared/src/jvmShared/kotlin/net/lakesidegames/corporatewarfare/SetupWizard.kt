@@ -64,7 +64,7 @@ object Privacy {
         "No account is needed and nothing that names you, contacts you or identifies your device is sent.",
         "The snapshot is used only to balance the game.",
         "Saves and settings stay on this device.",
-        "You can switch this off here, or later in Settings under Analytics.",
+        "You can switch this off here, or later in Settings under Data and privacy.",
     )
 }
 
@@ -229,7 +229,7 @@ fun rememberSetupVisuals(): SetupVisuals {
 }
 
 internal enum class SetupStep(val title: String) {
-    Welcome("Welcome"), Graphics("Graphics"), Updates("Updates"), Privacy("Privacy"), Start("Start")
+    Welcome("Welcome"), Graphics("Graphics"), Updates("Updates"), Privacy("Market data"), Start("Tutorial")
 }
 
 /**
@@ -247,6 +247,7 @@ fun SetupWizard(
     onDone: () -> Unit,
     visuals: SetupVisuals = rememberSetupVisuals(),
     startStep: Int = 0,
+    onNewCareer: () -> Unit = {},
 ) {
     val steps = remember(updater) { SetupStep.entries.filter { it != SetupStep.Updates || updater != null } }
     var index by remember { mutableStateOf(startStep.coerceIn(0, steps.lastIndex)) }
@@ -300,7 +301,7 @@ fun SetupWizard(
                     Text(if (firstRun) "Skip" else "Cancel", color = Palette.secondary, fontFamily = Pixel.font)
                 }
                 Spacer(Modifier.weight(1f))
-                if (index < steps.lastIndex) GoldButton("Next") { index++ } else GoldButton("Play") { finish(apply = true) }
+                if (index < steps.lastIndex) GoldButton("Next") { index++ } else GoldButton(if (firstRun) "New career" else "Done") { finish(apply = true); if (firstRun) onNewCareer() }
             }
         }
     }
@@ -387,14 +388,10 @@ private fun UpdatesStep(draft: SetupDraft) {
 @Composable
 private fun PrivacyStep(draft: SetupDraft) {
     Panel {
-        Heading("Privacy")
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Share anonymous market data", color = Palette.primaryText)
-                Body(Privacy.explanation)
-            }
-            Switch(checked = draft.analytics, onCheckedChange = { draft.analytics = it }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold))
-        }
+        Heading("Market data")
+        Text("Send an anonymous market snapshot every five game weeks?", color = Palette.primaryText)
+        Body(Privacy.explanation + " It is used to balance prices and markets in later versions.")
+        Choices(listOf(true, false), draft.analytics, { if (it) "Yes, send it" else "No, keep it here" }) { draft.analytics = it }
         Eyebrow("What that means")
         Privacy.points.forEach { Body("- $it") }
     }
@@ -403,21 +400,17 @@ private fun PrivacyStep(draft: SetupDraft) {
 @Composable
 private fun StartStep(draft: SetupDraft, saveFolder: String?) {
     Panel {
-        Heading("Start")
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Guided tutorial", color = Palette.primaryText)
-                Body("Eight short steps that tick off as you play. Turn it off if you know the game; it is under Settings if you change your mind.")
-            }
-            Switch(checked = draft.tutorial, onCheckedChange = { draft.tutorial = it }, colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold))
-        }
+        Heading("Tutorial")
+        Text("Show the guided tutorial in your first career?", color = Palette.primaryText)
+        Body("Eight short steps that tick off as you play. Settings can start it again later.")
+        Choices(listOf(true, false), draft.tutorial, { if (it) "Yes, guide me" else "No, I know the game" }) { draft.tutorial = it }
         if (saveFolder != null) {
             Eyebrow("Where your saves are kept")
             Text(saveFolder, color = Palette.primaryText, fontSize = 13.sp)
             Body("Back this folder up to keep your careers safe.")
         }
         Spacer(Modifier.height(4.dp))
-        Body("Graphics: ${draft.preset.title}. Anonymous data: ${if (draft.analytics) "on" else "off"}. Tutorial: ${if (draft.tutorial) "on" else "off"}.", Palette.primaryText)
+        Body("Graphics: ${draft.preset.title}. Market snapshot: ${if (draft.analytics) "on" else "off"}. Tutorial: ${if (draft.tutorial) "on" else "off"}. Next: choose your first career.", Palette.primaryText)
     }
 }
 

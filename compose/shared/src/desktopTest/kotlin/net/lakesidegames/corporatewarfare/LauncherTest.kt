@@ -134,6 +134,13 @@ class LauncherTest {
     }
 
     @Test
+    fun settingsSaysThePlainThingWhenLauncherManaged() {
+        val s = LauncherSession(mapOf("LAKESIDE_LAUNCHER" to "1", "LAKESIDE_LAUNCHER_VERSION" to "0.5.0"))
+        assertTrue(s.updatesNote().startsWith("The Lakeside launcher keeps this copy up to date."))
+        assertTrue(s.updatesNote().contains("0.5.0"))
+    }
+
+    @Test
     fun theCodeIsRedeemedOnceEvenWhenItFails() {
         val seen = mutableListOf<String>()
         val s = LauncherSession(mapOf("LAKESIDE_LAUNCHER" to "1", "LAKESIDE_HANDOFF_CODE" to "one-time")) { seen += it; null }

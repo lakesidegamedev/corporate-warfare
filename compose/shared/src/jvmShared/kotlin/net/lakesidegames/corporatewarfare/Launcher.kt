@@ -143,15 +143,6 @@ internal fun AccountEntry(session: LauncherSession = LauncherSession.current) {
 }
 
 /** Settings, Updates when the launcher runs the game: plain words, no controls. */
-@Composable
-internal fun LauncherUpdatesSection(session: LauncherSession = LauncherSession.current) {
-    Panel {
-        Eyebrow("Updates")
-        Text("The Lakeside launcher keeps this copy up to date.", color = Palette.primaryText)
-        Text(
-            "Updates and versions are chosen in the launcher. Nothing about you or your game is sent to look for them." +
-                if (session.launcherVersion.isNotEmpty()) " Launcher ${session.launcherVersion}." else "",
-            color = Palette.secondary, fontSize = 12.sp,
-        )
-    }
-}
+internal fun LauncherSession.updatesNote(): String =
+    "The Lakeside launcher keeps this copy up to date. Updates and versions are chosen in the launcher, and nothing about you or your game is sent to look for them." +
+        if (launcherVersion.isNotEmpty()) " Launcher $launcherVersion." else ""

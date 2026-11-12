@@ -124,6 +124,19 @@ fun main() {
 private fun game() = application {
     Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
     GpuMapHost.opener = ::openDesktopGpuMap
+    // Load's Export and Import use the system file dialog.
+    SaveTransfer.chooseExport = { suggested ->
+        val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Export a save", java.awt.FileDialog.SAVE).apply { file = suggested; isVisible = true }
+        dialog.file?.let { java.io.File(dialog.directory, if (it.endsWith(".cwsave")) it else "$it.cwsave") }
+    }
+    SaveTransfer.chooseImport = {
+        val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Import saves", java.awt.FileDialog.LOAD).apply {
+            isMultipleMode = true
+            setFilenameFilter { _, name -> name.endsWith(".cwsave") }
+            isVisible = true
+        }
+        dialog.files.toList()
+    }
     installDirectSurface()
     MeshCanvas.draw = desktopMeshDraw
     MapBake.enabled = true

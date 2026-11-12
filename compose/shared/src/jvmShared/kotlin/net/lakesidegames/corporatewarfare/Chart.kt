@@ -266,7 +266,7 @@ fun Chart(
                 // Weekly points labelled by quarter would repeat a quarter; each is written once.
                 if (!labels.add(label)) continue
                 val text = measurer.measure(label, labelStyle)
-                val tx = (centre(week) - text.size.width / 2f).coerceIn(0f, size.width - text.size.width)
+                val tx = (centre(week) - text.size.width / 2f).coerceIn(0f, (size.width - text.size.width).coerceAtLeast(0f))
                 if (used.any { abs(it - tx) < text.size.width + 4 }) continue
                 used += tx
                 drawText(text, topLeft = Offset(tx, size.height - text.size.height))
