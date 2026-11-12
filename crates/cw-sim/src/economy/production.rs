@@ -624,11 +624,11 @@ fn run_facility(
     let focus_bps = crate::economy::operations::input_bps(world, dataset, handle);
     // Input limits, excluding electricity which is a service allocated above.
     let mut input_limit = ratio;
-    for (product_id, weekly) in &recipe.weekly_inputs_lots {
-        if product_id == "electricity" {
+    for (code, weekly) in dataset.recipe_tables.inputs(facility.recipe) {
+        let (code, weekly) = (*code, weekly);
+        if dataset.products[code as usize].id == "electricity" {
             continue;
         }
-        let code = dataset.product_index[product_id];
         if dataset.products[code as usize].kind.is_service() {
             // Services cannot be stockpiled: they expire each week and markets clear after
             // production, so a non-electric service input is bought in the week it is used
@@ -700,11 +700,11 @@ fn run_facility(
 
     // Consume inputs once, carrying their actual moving-average cost.
     let mut material_cost = 0i64;
-    for (product_id, weekly) in &recipe.weekly_inputs_lots {
-        if product_id == "electricity" {
+    for (code, weekly) in dataset.recipe_tables.inputs(facility.recipe) {
+        let (code, weekly) = (*code, weekly);
+        if dataset.products[code as usize].id == "electricity" {
             continue;
         }
-        let code = dataset.product_index[product_id];
         // Recipe quantities are whole lots; one lot is 1000 milli-lots. Availability and
         // consumption must use the same unit or the plant consumes a thousandth of its recipe.
         let need = MilliLots::from_lots(weekly * facility.blocks as i64)

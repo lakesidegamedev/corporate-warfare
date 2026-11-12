@@ -347,12 +347,11 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
         if !firm.operative() {
             continue;
         }
-        let recipe = &dataset.recipes[facility.recipe as usize];
-        for (product_id, weekly) in &recipe.weekly_inputs_lots {
-            if product_id == "electricity" {
+        for (code, weekly) in dataset.recipe_tables.inputs(facility.recipe) {
+            let (code, weekly) = (*code, weekly);
+            if dataset.products[code as usize].id == "electricity" {
                 continue;
             }
-            let code = dataset.product_index[product_id];
             let cover =
                 crate::economy::storage::plant_cover_weeks(world, dataset, firm, facility, code);
             let demand = world.demand_ratio_bps(facility.region, Some(code));

@@ -70,7 +70,6 @@ pub fn free_stock(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         .filter(|((p, _), _)| *p == product)
         .map(|(_, lot)| lot.qty.lots())
         .sum();
-    let id = &dataset.products[product as usize].id;
     // Lots the firm's own plants keep as input cover, each at its own stock target.
     let cover: i64 = entity
         .facilities
@@ -78,10 +77,9 @@ pub fn free_stock(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         .filter_map(|handle| world.facilities.get(*handle))
         .filter(|plant| plant.status == crate::state::FacilityStatus::Operating)
         .map(|plant| {
-            dataset.recipes[plant.recipe as usize]
-                .weekly_inputs_lots
-                .get(id)
-                .copied()
+            dataset
+                .recipe_tables
+                .input_lots(product, plant.recipe)
                 .unwrap_or(0)
                 * plant.blocks as i64
                 * crate::economy::storage::plant_cover_weeks(world, dataset, entity, plant, product)
