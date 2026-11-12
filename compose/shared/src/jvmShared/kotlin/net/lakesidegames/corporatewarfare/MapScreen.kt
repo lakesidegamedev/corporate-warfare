@@ -170,6 +170,23 @@ private fun animatedHeights(target: Map<String, Double>, animate: Boolean): Map<
 private fun blendHeights(a: Map<String, Double>, b: Map<String, Double>, f: Float): Map<String, Double> =
     (a.keys + b.keys).associateWith { (a[it] ?: 0.0) + ((b[it] ?: 0.0) - (a[it] ?: 0.0)) * f }
 
+/** What the last map frame drew, for the tests: which map, at what zoom, and whether a picture was there to show. */
+internal object MapDrawProbe {
+    @Volatile var gpuFrames = 0L; private set
+    @Volatile var classicFrames = 0L; private set
+    @Volatile var lastGpu = false; private set
+    @Volatile var lastZoom = 0.0; private set
+    /** The 3D map drew with a finished frame of its own (false: only the sea under a frame not yet there). */
+    @Volatile var lastHadFrame = false; private set
+    /** The classic map showed an old picture carried to the camera instead of one drawn for it. */
+    @Volatile var lastWarped = false; private set
+
+    fun note(gpu: Boolean, zoom: Double, hadFrame: Boolean, warped: Boolean) {
+        if (gpu) gpuFrames++ else classicFrames++
+        lastGpu = gpu; lastZoom = zoom; lastHadFrame = hadFrame; lastWarped = warped
+    }
+}
+
 /**
  * The world map with its own camera and zoom buttons: a globe when zoomed out that flattens onto
  * the scenario as you zoom in, tilting into 3D. Tapping a region reports it through [onSelect].
@@ -449,8 +466,10 @@ fun WorldMapView(
                     gpu.request(gc, size.width.toInt(), size.height.toInt(), true)
                     // The newest frame carried to this camera, so the ground, names, badges and building boxes all agree.
                     // On a native surface the card has drawn this very camera already, so there is nothing to carry or warp.
-                    val shown = if (gpu.direct) gc else drawGpuFrame(gpu, gc) ?: gc
+                    val framed = if (gpu.direct) gc else drawGpuFrame(gpu, gc)
+                    val shown = framed ?: gc
                     gpuWasOn[0] = true
+                    MapDrawProbe.note(gpu = true, zoom = cam.zoom, hadFrame = framed != null, warped = false)
                     // Names and division badges, projected by the camera of the frame on screen so nothing slides.
                     gpu.version
                     // The Freight mode's lanes, their hubs placed by the same camera as the ground under them.
@@ -549,7 +568,8 @@ fun WorldMapView(
                     structures = MapLayerSet.PartSpec(listOf(layer, shaded, selected, store.mapDivisions, plants, economy, acquired, flat, sun, heights, week), 400, paintStructures),
                     traffic = traffic, effects = effects,
                 )
-                layers.draw(this, cam, pitch, frame, geometry, Color(0xFF05090E))
+                val report = layers.draw(this, cam, pitch, frame, geometry, Color(0xFF05090E))
+                MapDrawProbe.note(gpu = false, zoom = cam.zoom, hadFrame = true, warped = report.warped)
                 if (graphics.showFps) {
                     val rate = fps.tick(System.nanoTime())
                     // The backend and the map's pixel size sit beside the rate; software drawing is flagged.

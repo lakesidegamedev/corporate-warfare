@@ -169,8 +169,9 @@ private fun arcOf(lane: LaneDto, hub: (String) -> Offset?): Arc? {
  * drawn. Sea lanes are dashed. A dark casing keeps the stack readable on any
  * ground; the picked lane is outlined in white and lanes away from a selected region fade.
  */
-internal fun DrawScope.drawLanes(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>, focus: String?, picked: String? = null, plinth: Double = 0.0) =
+internal fun DrawScope.drawLanes(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>, focus: String?, picked: String? = null, plinth: Double = 0.0) {
     drawLanes(map, lanes, focus, picked) { code -> map.anchor(code)?.let { projection.project(it, plinth) } }
+}
 
 /** The lanes with their hubs placed by [hub]: the 3D map passes its own projection, so the lanes sit on the ground it drew. */
 internal fun DrawScope.drawLanes(map: WorldMap, lanes: List<LaneDto>, focus: String?, picked: String?, hub: (String) -> Offset?) {
