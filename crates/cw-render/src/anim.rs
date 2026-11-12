@@ -887,6 +887,7 @@ mod tests {
                     colour: [1, 2, 3],
                     trim: false,
                     windows: None,
+                    shape: crate::data::Shape::Box,
                 },
                 crate::data::VoxelBox {
                     min: [3.0, 3.0, 5.0],
@@ -894,6 +895,7 @@ mod tests {
                     colour: [1, 2, 3],
                     trim: false,
                     windows: None,
+                    shape: crate::data::Shape::Box,
                 },
             ],
             footprint: [16.0, 16.0],
@@ -922,6 +924,7 @@ mod tests {
                 colour: [0x7A, 0x7F, 0x86],
                 trim: false,
                 windows: None,
+                shape: crate::data::Shape::Box,
             }],
             footprint: [16.0, 16.0],
         };

@@ -190,6 +190,63 @@ pub struct VoxelBox {
     /// Window rows on the side faces, by day and lit at night. `None` leaves it to the mesh's
     /// size rule (the classic models); the GPU map's plant models always say.
     pub windows: Option<bool>,
+    /// The solid drawn inside the box (a plain box unless the model says otherwise).
+    pub shape: Shape,
+}
+
+/// The solids a model is built from. Each fills the box it is given; round ones are twelve
+/// sided, so every face stays flat and hard edged.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Shape {
+    #[default]
+    Box,
+    /// Upright and round. `bottom` and `top` are the radius at each end as a share of the box
+    /// (1, 1 a tank; 1, 0 a cone; 1, 0.65 a tapering stack).
+    Round {
+        bottom: f32,
+        top: f32,
+    },
+    /// A round tank or pipe lying along x or along y.
+    RoundX,
+    RoundY,
+    /// A pitched roof with its ridge along x or along y.
+    GableX,
+    GableY,
+    /// Four sloping sides meeting at a point.
+    Pyramid,
+}
+
+impl Shape {
+    pub fn parse(name: &str) -> Shape {
+        match name {
+            "cyl" => Shape::Round {
+                bottom: 1.0,
+                top: 1.0,
+            },
+            "cone" => Shape::Round {
+                bottom: 1.0,
+                top: 0.0,
+            },
+            "taper" => Shape::Round {
+                bottom: 1.0,
+                top: 0.62,
+            },
+            "flare" => Shape::Round {
+                bottom: 0.72,
+                top: 1.0,
+            },
+            "dome" => Shape::Round {
+                bottom: 1.0,
+                top: 0.45,
+            },
+            "cylx" => Shape::RoundX,
+            "cyly" => Shape::RoundY,
+            "gablex" => Shape::GableX,
+            "gabley" => Shape::GableY,
+            "pyr" => Shape::Pyramid,
+            _ => Shape::Box,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -511,6 +568,7 @@ fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
     #[derive(Deserialize)]
     #[serde(untagged)]
     enum RawBox {
+        Shaped(f32, f32, f32, f32, f32, f32, String, bool, bool, String),
         Full(f32, f32, f32, f32, f32, f32, String, bool, bool),
         Trim(f32, f32, f32, f32, f32, f32, String, bool),
         Plain(f32, f32, f32, f32, f32, f32, String),
@@ -528,15 +586,22 @@ fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
                 .boxes
                 .iter()
                 .map(|b| {
-                    let (v, colour, trim, windows) = match b {
+                    let (v, colour, trim, windows, shape) = match b {
+                        RawBox::Shaped(a, b, c, d, e, f, col, t, w, sh) => (
+                            [*a, *b, *c, *d, *e, *f],
+                            col,
+                            *t,
+                            Some(*w),
+                            Shape::parse(sh),
+                        ),
                         RawBox::Full(a, b, c, d, e, f, col, t, w) => {
-                            ([*a, *b, *c, *d, *e, *f], col, *t, Some(*w))
+                            ([*a, *b, *c, *d, *e, *f], col, *t, Some(*w), Shape::Box)
                         }
                         RawBox::Trim(a, b, c, d, e, f, col, t) => {
-                            ([*a, *b, *c, *d, *e, *f], col, *t, None)
+                            ([*a, *b, *c, *d, *e, *f], col, *t, None, Shape::Box)
                         }
                         RawBox::Plain(a, b, c, d, e, f, col) => {
-                            ([*a, *b, *c, *d, *e, *f], col, false, None)
+                            ([*a, *b, *c, *d, *e, *f], col, false, None, Shape::Box)
                         }
                     };
                     VoxelBox {
@@ -545,6 +610,7 @@ fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
                         colour: hex(colour),
                         trim,
                         windows,
+                        shape,
                     }
                 })
                 .collect();
@@ -1209,6 +1275,7 @@ impl Scene {
                         colour: [0x6F, 0xA8, 0x3B],
                         trim: false,
                         windows: None,
+                        shape: crate::data::Shape::Box,
                     },
                     VoxelBox {
                         min: [-2.0, -2.0, 1.0],
@@ -1216,6 +1283,7 @@ impl Scene {
                         colour: [0xB2, 0x3A, 0x2E],
                         trim: false,
                         windows: None,
+                        shape: crate::data::Shape::Box,
                     },
                 ],
                 footprint: [6.0, 6.0],
