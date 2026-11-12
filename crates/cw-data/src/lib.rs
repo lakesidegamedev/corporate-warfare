@@ -260,6 +260,55 @@ pub struct Dataset {
     /// A scenario whose roster crowds the shared corridor workforce sets it (2.0 balance pass).
     pub rival_blocks_bps: i64,
     pub hash: String,
+    /// Recipe-by-product lookup tables derived from `recipes`, so hot loops skip string keys.
+    pub recipe_tables: RecipeTables,
+}
+
+/// Dense tables over (product, recipe), derived once from the recipes at load. Not content:
+/// they are never saved or hashed.
+#[derive(Clone, Debug, Default)]
+pub struct RecipeTables {
+    recipes: usize,
+    /// Weekly input lots per block of a product, by `product * recipes + recipe`, and whether
+    /// the recipe names the product among its inputs at all.
+    input_lots: Vec<i64>,
+    uses: Vec<bool>,
+    /// Whether the recipe makes the product, as its output or a by-product.
+    makes: Vec<bool>,
+}
+
+impl RecipeTables {
+    fn build(products: &[Product], recipes: &[Recipe]) -> RecipeTables {
+        let n = recipes.len();
+        let mut tables = RecipeTables {
+            recipes: n,
+            input_lots: vec![0; products.len() * n],
+            uses: vec![false; products.len() * n],
+            makes: vec![false; products.len() * n],
+        };
+        for (p, product) in products.iter().enumerate() {
+            for (r, recipe) in recipes.iter().enumerate() {
+                let at = p * n + r;
+                if let Some(lots) = recipe.weekly_inputs_lots.get(&product.id) {
+                    tables.input_lots[at] = *lots;
+                    tables.uses[at] = true;
+                }
+                tables.makes[at] = recipe.makes(&product.id);
+            }
+        }
+        tables
+    }
+
+    /// The recipe's weekly input lots of the product per block, None when it does not use it.
+    pub fn input_lots(&self, product: u16, recipe: u16) -> Option<i64> {
+        let at = product as usize * self.recipes + recipe as usize;
+        self.uses[at].then(|| self.input_lots[at])
+    }
+
+    /// Whether the recipe makes the product.
+    pub fn makes(&self, product: u16, recipe: u16) -> bool {
+        self.makes[product as usize * self.recipes + recipe as usize]
+    }
 }
 
 impl Dataset {
@@ -457,12 +506,14 @@ impl Dataset {
             opening_macro,
             rival_blocks_bps: balance.rival_blocks_bps,
             hash: String::new(),
+            recipe_tables: RecipeTables::default(),
         };
         let errors = dataset.validate();
         if !errors.is_empty() {
             return Err(errors);
         }
         let mut dataset = dataset;
+        dataset.recipe_tables = RecipeTables::build(&dataset.products, &dataset.recipes);
         dataset.hash = dataset.compute_hash();
         Ok(dataset)
     }

@@ -407,9 +407,11 @@ pub fn business_unmet_in(
         {
             continue;
         }
-        let recipe = &dataset.recipes[plant.recipe as usize];
-        made = made.saturating_add(plant.last_made(dataset, id).0);
-        let Some(weekly) = recipe.weekly_inputs_lots.get(id).copied() else {
+        let tables = &dataset.recipe_tables;
+        if tables.makes(product, plant.recipe) {
+            made = made.saturating_add(plant.last_made(dataset, id).0);
+        }
+        let Some(weekly) = tables.input_lots(product, plant.recipe) else {
             continue;
         };
         if !world.firms.get(plant.firm).is_some_and(|f| f.operative()) {
@@ -527,18 +529,13 @@ pub fn service_wanted_bps_with(rules: &cw_data::MarketRules, used_bps: i64) -> i
 /// plants in one state share their stock, so each firm and state is counted once against the
 /// sum of its plants' targets. Speculative held stock is not cover.
 pub fn buyer_shortfall(world: &World, dataset: &Dataset, product: u16) -> (i64, i64) {
-    let id = &dataset.products[product as usize].id;
     let mut targets: std::collections::BTreeMap<(Handle, u8), i64> = Default::default();
     let mut need = 0i64;
     for (_, plant) in world.facilities.iter() {
         if plant.status != crate::state::FacilityStatus::Operating {
             continue;
         }
-        let Some(weekly) = dataset.recipes[plant.recipe as usize]
-            .weekly_inputs_lots
-            .get(id)
-            .copied()
-        else {
+        let Some(weekly) = dataset.recipe_tables.input_lots(product, plant.recipe) else {
             continue;
         };
         let Some(entity) = world.firms.get(plant.firm).filter(|f| f.operative()) else {
@@ -588,6 +585,7 @@ pub fn import_dependence_bps(world: &World, dataset: &Dataset, product: u16) -> 
     let made: i64 = world
         .facilities
         .iter()
+        .filter(|(_, plant)| dataset.recipe_tables.makes(product, plant.recipe))
         .map(|(_, plant)| plant.last_made(dataset, id).lots())
         .sum();
     Some(dependence_bps(imported, made))
