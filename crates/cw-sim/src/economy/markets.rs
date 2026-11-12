@@ -738,14 +738,23 @@ fn clear_goods_exchange(
     }
     // The reserve's release is an emergency sale that takes orders first, then the cheapest
     // delivered price as usual.
-    pairs.sort_by_key(|(price, seller, buyer, _, source)| {
-        (
-            !matches!(source, Source::Reserve(_)),
-            *price,
-            *seller,
-            *buyer,
-        )
-    });
+    // Sorted by key with the original position last, which is the same order as a stable sort on
+    // the key, on small keys instead of whole pairings.
+    let mut order: Vec<(bool, i64, u64, u64, u32)> = pairs
+        .iter()
+        .enumerate()
+        .map(|(at, (price, seller, buyer, _, source))| {
+            (
+                !matches!(source, Source::Reserve(_)),
+                *price,
+                *seller,
+                *buyer,
+                at as u32,
+            )
+        })
+        .collect();
+    order.sort_unstable();
+    let pairs: Vec<Pairing> = order.iter().map(|key| pairs[key.4 as usize]).collect();
     let mut import_left: BTreeMap<(usize, i64), i64> = BTreeMap::new();
     // Work through the pairings one price tier and source at a time. Buyers tied on the same
     // source at the same delivered price share it in proportion to what each still wants and

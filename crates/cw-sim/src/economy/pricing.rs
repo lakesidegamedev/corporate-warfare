@@ -41,6 +41,31 @@ pub fn outputs(world: &World, dataset: &Dataset, firm: Handle) -> BTreeSet<u16> 
 /// weeks on the books averages over the weeks it has, so a young firm's sales are not read as a
 /// fraction of what they are.
 pub fn weekly_sold(world: &World, firm: Handle, product: u16) -> i64 {
+    // Within the weekly pricing pass no sale is booked, so the answer holds for the pass.
+    let cached = SOLD_PASS.with(|pass| {
+        pass.borrow()
+            .as_ref()
+            .and_then(|map| map.get(&(firm.0, product)).copied())
+    });
+    if let Some(sold) = cached {
+        return sold;
+    }
+    let sold = weekly_sold_scan(world, firm, product);
+    SOLD_PASS.with(|pass| {
+        if let Some(map) = pass.borrow_mut().as_mut() {
+            map.insert((firm.0, product), sold);
+        }
+    });
+    sold
+}
+
+thread_local! {
+    /// `weekly_sold` answers for the weekly pricing pass in progress on this thread, if any.
+    static SOLD_PASS: std::cell::RefCell<Option<std::collections::HashMap<(u64, u16), i64>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn weekly_sold_scan(world: &World, firm: Handle, product: u16) -> i64 {
     world
         .firms
         .get(firm)
@@ -1048,6 +1073,18 @@ pub fn posture_price(world: &World, dataset: &Dataset, firm: Handle, product: u1
 /// The player's automatic pricing: every good a player company makes, unless the player set
 /// its price by hand, follows the sell-through rule each week.
 pub fn weekly(world: &mut World, dataset: &Dataset) {
+    struct PassGuard;
+    impl Drop for PassGuard {
+        fn drop(&mut self) {
+            SOLD_PASS.with(|pass| *pass.borrow_mut() = None);
+        }
+    }
+    SOLD_PASS.with(|pass| *pass.borrow_mut() = Some(Default::default()));
+    let _guard = PassGuard;
+    weekly_pass(world, dataset);
+}
+
+fn weekly_pass(world: &mut World, dataset: &Dataset) {
     // Rivals always plan production this way; the player's companies do unless set by hand.
     let rivals: Vec<Handle> = world
         .firms
