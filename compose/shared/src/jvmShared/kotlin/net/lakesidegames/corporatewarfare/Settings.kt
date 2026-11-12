@@ -359,7 +359,7 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                 Eyebrow("Tutorial")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        if (Tutorial.finished) "Tutorial complete" else "${Tutorial.done.size} of ${Tutorial.steps.size} steps done",
+                        if (Tutorial.finished) "Tutorial complete" else "${Tutorial.active.count { it.id in Tutorial.done }} of ${Tutorial.active.size} steps done",
                         color = Palette.primaryText,
                         modifier = Modifier.weight(1f),
                     )

@@ -21,7 +21,7 @@ projects. Never connect this game to AHD production databases or services.
 ## Execution loop
 
 1. Read STATUS, owner decisions and requirement states. Inspect git/worktrees, active
-   checks and the product kanban. Understand any concurrent ownership before touching it.
+   checks and the task tracker. Understand any concurrent ownership before touching it.
 2. Pick the earliest small unblocked packet whose dependencies are satisfied. State its
    acceptance criterion and identify an independent test oracle.
 3. Implement the full behaviour, smallest useful tests and necessary UI/data changes.
@@ -33,7 +33,7 @@ projects. Never connect this game to AHD production databases or services.
    Never weaken protection. Keep one coherent work owner and next move.
 6. Update requirement evidence with tested commit, procedure, artifact and limitations.
    Mark done only after dependencies and the relevant platform/human gate have evidence.
-7. Update STATUS and report material progress to the ops kanban. Continue to the next
+7. Update STATUS and report material progress to the task tracker. Continue to the next
    unblocked packet without asking routine implementation permission.
 
 ## Context-loss checkpoint
@@ -41,8 +41,8 @@ projects. Never connect this game to AHD production databases or services.
 Maintain STATUS with current branch/commit, packet, exact next command/task, changed
 contracts, checks queued/running, recent failures and named blockers. Keep it short.
 Commit it before a session ends. Do not use a dirty worktree, chat history or model memory
-as the only store of current work. GitHub issue text defines repository tasks; kanban
-tracks current lane/progress. Synchronise updates without duplicating contradictory status.
+as the only store of current work. GitHub issue text defines repository tasks; the task
+tracker holds current lane and progress. Synchronise updates without duplicating contradictory status.
 
 ## Blockers and anti-drift
 
