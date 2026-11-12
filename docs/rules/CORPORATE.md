@@ -138,7 +138,8 @@ returns after its year with a smaller cost base. A firm whose judged plants all 
 plan and is liquidated; the player's request to restructure is refused for the same reason. The
 firm stays in restructuring for its full 52 weeks: a bill it defers meanwhile joins its overdue
 payables and does not turn the plan back into a four-week grace and a second haircut.
-Otherwise liquidate assets at 40 percent carrying value through finite outside buyer
+Otherwise liquidate. Each plant that could still run goes to a four week break-up auction
+(AUCTIONS.md); other assets are sold at 40 percent carrying value through finite outside buyer
 funds. Insufficient buyers delay sale, never mint cash. Parent guarantee shortfalls become
 claims against guarantor up to the contracted cap. No implied guarantee for siblings.
 
@@ -148,7 +149,8 @@ has no plant operating, building or retooling, holds no stake in another company
 trade payables, accruals, prepayments, insurance claims or provisions outstanding, and its
 cash plus 40 percent of the carrying value of everything else covers every loan, bond, deposit,
 arrear and accrued tax in full. Accrued tax is paid to the state, then the liquidation above
-runs: assets sold at 40 percent to finite outside buyers, creditors paid by seniority (in
+runs: idle plants go to the break-up auction, other assets are sold at 40 percent to finite
+outside buyers, creditors paid by seniority (in
 full, by the test), the residual to shareholders pro rata, and the company is dissolved. The
 player and rivals meet the same test. A rival proposes it after thirteen closed weeks without
 a sale when every plant has been mothballed for 26 weeks, or when it has had no plant at all
@@ -185,15 +187,14 @@ A plant in the firm's home region is the input baseline; another region of the h
 specialized sector types use 3 and 1.5 percent fewer.
 
 `RaidMarket` spends a marketing budget against a rival's division in a cell the raider also
-operates in. Attack strength is the budget plus thirteen weeks of standing marketing; defence is
-thirteen weeks of the defender's marketing plus five percent of its division's quarterly output
-value. One percent of the defender's plants are at stake at even strength, rising linearly to
-twenty percent at two to one. Success probability is attack over attack plus defence, clamped
-to 5..95 percent, from the deterministic raid stream. The budget buys advertising whatever
-happens; on success the raider takes the plants into its own division at its own strategy and
-pays the defender half their book value. A group cannot raid itself. The 1.7 raid
-rules below replace the one-plant floor and the cooldown. Rival AI raids when the
-chance-weighted three-year contribution of the captured plants exceeds the campaign and price.
+operates in. Since 2.0 a raid is announced and decided four weeks later, and its strength, stake
+and chance are the formulas in [RAIDS.md](RAIDS.md), which replace the 1.2 figures (the stake
+rises to the whole division at five to one, and the chance is dragged down by the stake). The
+budget buys advertising whatever happens; on success the raider takes the plants into its own
+division at its own strategy and pays the defender half their book value. A group cannot raid
+itself. The 1.7 raid rules below replace the one-plant floor and the cooldown. Rival AI raids
+when the chance-weighted three-year contribution of the captured plants exceeds the campaign
+and price.
 
 ## Board objectives (1.2.0), replaced in 1.9
 
@@ -682,9 +683,10 @@ Richest's multiples are set per scenario from how fast a careful founder grows t
 fair price, less personal loans) at the end over the net worth when the career started. For a
 helm start the starting fortune is the net worth just after buying control, so the fortune the
 start scaled up is not counted as a gain. The multiples are per career length in
-`richest.multiples` (5 years: 3.2, 4.5 and 5.9 times; 20 years: 100, 400 and 1,225 times). The
-10 year row is calibrated on the careful founder's Great Lakes careers (bronze in about half,
-gold in one of ten); the other lengths compound the same yearly growth and are not measured.
+`richest.multiples` (the Great Lakes row: 5 years 4.1, 5 and 6.3 times; 20 years 289, 625 and
+1,600 times) and replaced per scenario in `richest.scenarios`. Each 10 year row is calibrated on
+the careful founder's careers in that scenario (bronze in about four careers of ten, gold above
+every measured career); the other lengths compound the same yearly growth and are not measured.
 Biggest's places are per start in `biggest.founder` and `biggest.helm`; `bronze_top_bps` gives
 bronze to a company in that top share of the league (rank r is in the top share s of n
 companies when r is at most n times s rounded up). Survivor and Dominant have one scale.
