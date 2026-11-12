@@ -38,7 +38,7 @@ increases with every upload.
   under `worktrees/<branch>`, merged by squash pull request after Verify and Apple smoke pass.
 - Commit subjects use Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`,
   `refactor:`), present tense, under 72 characters, with a body that explains the why.
-- Heavy checks on the shared host go through the check scheduler (see `AGENTS.md`).
+- Run heavy checks one at a time (see `AGENTS.md`).
 
 ## Cutting a release
 
