@@ -241,7 +241,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     }
 
     /** A new career from the new-game screen. */
-    fun startCareer(options: uniffi.cw_ffi.NewGameDto) = perform {
+    fun startCareer(options: uniffi.cw_ffi.NewGameDto, companyName: String? = null) = perform {
+        foundingName = companyName
         val opened: SaveInfo? = null
         val handle = withContext(engine) { SessionHandle.start(options) }
         session = handle
@@ -255,7 +256,8 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     }
 
     /** A new career with a start, an ambition and a length (2.0). */
-    fun startCareerWith(options: uniffi.cw_ffi.NewGameDto, career: uniffi.cw_ffi.CareerOptionsDto) = perform {
+    fun startCareerWith(options: uniffi.cw_ffi.NewGameDto, career: uniffi.cw_ffi.CareerOptionsDto, companyName: String? = null) = perform {
+        foundingName = companyName
         val opened: SaveInfo? = null
         val handle = withContext(engine) { SessionHandle.startCareer(options, career) }
         session = handle
@@ -267,6 +269,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         reload()
         ready = true
     }
+
+    /** The company name chosen on the New career screen for a founder start, used to fill the founding form once. */
+    var foundingName: String? = null
 
     /** Where custom scenarios are kept, beside the saves. */
     val customDir: String get() = File(saveDir, "custom-scenarios").path

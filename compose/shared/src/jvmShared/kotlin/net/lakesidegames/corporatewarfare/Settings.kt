@@ -32,6 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -121,8 +126,24 @@ class AppSettings(private val file: File) : ViewPrefs {
         },
     ); private set
 
+    /** The version whose changes the player has been shown on the main menu. A first install starts at the running version, so nothing is shown. */
+    var whatsNewSeen: String? = props.getProperty("whatsNewSeen") ?: if (existedAtLaunch) null else BuildInfo.VERSION
+        private set
+
+    /** Whether the main menu should show the What's new panel for [version]. */
+    fun whatsNewDue(version: String): Boolean = WhatsNew.due(whatsNewSeen, version)
+
+    fun markWhatsNewSeen(version: String) { whatsNewSeen = version; store() }
+
     /** Finished or left careers, newest first: a few lines each, for the main menu's Hall of Careers. */
     var careers by mutableStateOf(loadCareers()); private set
+
+    init {
+        KeyBindings.load(props.stringPropertyNames().filter { it.startsWith("key.") }.associate { it.removePrefix("key.") to props.getProperty(it) })
+    }
+
+    /** Rebind a key. Null when done, else the reason in plain words. */
+    fun bindKey(action: String, name: String): String? = KeyBindings.bind(action, name).also { if (it == null) store() }
 
     /** Keep a career's summary. A career left again replaces its earlier line instead of adding one. */
     fun recordCareer(summary: CareerSummary) {
@@ -138,7 +159,7 @@ class AppSettings(private val file: File) : ViewPrefs {
         ?: java.util.UUID.randomUUID().toString().also { props.setProperty("installId", it); store() }
 
     /** Mark setup finished (or What's new dismissed); never touches any other choice. */
-    fun finishSetup() { setupFlag = "true"; setupState = SetupState.Done; store() }
+    fun finishSetup() { setupFlag = "true"; setupState = SetupState.Done; whatsNewSeen = BuildInfo.VERSION; store() }
 
     fun chooseGraphics(value: GraphicsConfig) { graphics = value; graphicsChosen = true; store() }
 
@@ -182,7 +203,8 @@ class AppSettings(private val file: File) : ViewPrefs {
             SettingsSection.Interface -> { uiScale = 1f; classicLayout = false }
             SettingsSection.Data -> analytics = true
             SettingsSection.Updates -> { autoUpdate = true; updateChannel = UpdateChannel.build }
-            SettingsSection.Keys, SettingsSection.About -> Unit
+            SettingsSection.Keys -> KeyBindings.reset()
+            SettingsSection.About -> Unit
         }
         store()
     }
@@ -234,6 +256,9 @@ class AppSettings(private val file: File) : ViewPrefs {
         props.setProperty("briefCollapsed", briefCollapsed.toString())
         props.stringPropertyNames().filter { it.startsWith("dock.") }.forEach { props.remove(it) }
         docks.forEach { (id, share) -> props.setProperty("dock.$id", share.toString()) }
+        props.stringPropertyNames().filter { it.startsWith("key.") }.forEach { props.remove(it) }
+        KeyBindings.changed().forEach { (id, name) -> props.setProperty("key.$id", name) }
+        whatsNewSeen?.let { props.setProperty("whatsNewSeen", it) }
         props.setProperty("uiScale", uiScale.toString())
         props.setProperty("windowMode", windowMode.name)
         props.setProperty("resolution", "${resolution.first}x${resolution.second}")
@@ -280,7 +305,7 @@ class AppSettings(private val file: File) : ViewPrefs {
 
 /** The sections of Settings, down the side. There is no Sound section: the game has no sound yet. */
 enum class SettingsSection(val title: String, val resettable: Boolean) {
-    Game("Game", true), Graphics("Graphics", true), Interface("Interface", true), Keys("Controls and keys", false),
+    Game("Game", true), Graphics("Graphics", true), Interface("Interface", true), Keys("Controls and keys", true),
     Data("Data and privacy", true), Updates("Updates", true), About("About", false),
 }
 
@@ -383,7 +408,7 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                             if (query.isBlank() && section.resettable) MenuBarButton("Reset section") { settings.resetSection(section); if (section == SettingsSection.Updates) updater?.channelChanged() }
                         }
                         if (query.isBlank() && section == SettingsSection.Keys) {
-                            Text("Keys cannot be changed yet; this is the full list.", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                            Text("Click a key, then press the new one. A key that is already in use is refused. Reset section restores the original keys.", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                         }
                         Spacer(Modifier.height(10.dp))
                         if (shown.isEmpty()) Text("No setting matches \"$query\".", color = Palette.secondary, fontSize = 13.sp)
@@ -445,6 +470,41 @@ private fun SettingLine(row: SettingRow, wide: Boolean) {
         }
         Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
+    }
+}
+
+@Composable
+private fun KeyCap(name: String) {
+    Text(name, color = Palette.gold, fontSize = 13.sp, fontFamily = Pixel.font, modifier = Modifier.clip(Pixel.small).background(Palette.panelRaised).padding(horizontal = 10.dp, vertical = 5.dp))
+}
+
+/** One rebindable key: shows the key, and on a click waits for the next key press. Esc cancels. */
+@Composable
+private fun KeyRebind(action: KeyBindings.Action, settings: AppSettings) {
+    var waiting by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(waiting) { if (waiting) runCatching { focus.requestFocus() } }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        message?.let { Text(it, color = Palette.warning, fontSize = 12.sp, modifier = Modifier.widthIn(max = 320.dp)) }
+        if (waiting) {
+            Text(
+                "Press a key (Esc cancels)", color = Palette.ink, fontSize = 13.sp, fontFamily = Pixel.font,
+                modifier = Modifier.clip(Pixel.small).background(Palette.gold).padding(horizontal = 10.dp, vertical = 5.dp)
+                    .focusRequester(focus).focusable()
+                    .onPreviewKeyEvent { e ->
+                        if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent true
+                        if (e.key != androidx.compose.ui.input.key.Key.Escape) {
+                            val name = KeyBindings.nameOf(e.key)
+                            message = if (name == null) "That key cannot be used. Pick a letter, a digit, Space or F1 to F12." else settings.bindKey(action.id, name)
+                        }
+                        waiting = false
+                        true
+                    },
+            )
+        } else {
+            Box(Modifier.clickable { message = null; waiting = true }) { KeyCap(KeyBindings.keyOf(action.id)) }
+        }
     }
 }
 
@@ -520,14 +580,17 @@ private fun settingRows(store: GameStore, settings: AppSettings, desktop: Boolea
         "old 1.x",
     ) { OnOff(settings.classicLayout) { settings.chooseClassicLayout(it) } }
 
-    val keys = listOf(
-        "Space" to "Play or pause time", "N" to "Next week", "1, 2, 3" to "Time at normal, fast or fastest speed",
+    listOf(
         "Esc" to "Close the open screen, or open the game menu", "Ctrl K" to "Find a place, a good, a company, a view or an action",
         "Ctrl M" to "Dock the map beside the screen, or undock it",
-    ) + Place.entries.filter { it.key.isNotEmpty() }.sortedBy { it.key.drop(1).toIntOrNull() ?: 99 }.map { it.key to "Open ${it.title}" }
-    keys.forEach { (key, what) ->
-        rows += SettingRow(SettingsSection.Keys, what, "", "key shortcut $key") {
-            Text(key, color = Palette.gold, fontSize = 13.sp, fontFamily = Pixel.font, modifier = Modifier.clip(Pixel.small).background(Palette.panelRaised).padding(horizontal = 10.dp, vertical = 5.dp))
+    ).forEach { (key, what) ->
+        rows += SettingRow(SettingsSection.Keys, what, "This key is fixed.", "key shortcut $key") {
+            KeyCap(key)
+        }
+    }
+    KeyBindings.actions.forEach { action ->
+        rows += SettingRow(SettingsSection.Keys, action.label, "", "key shortcut rebind ${KeyBindings.keyOf(action.id)}") {
+            KeyRebind(action, settings)
         }
     }
 

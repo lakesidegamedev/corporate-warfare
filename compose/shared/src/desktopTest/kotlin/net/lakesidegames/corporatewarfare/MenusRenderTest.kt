@@ -44,12 +44,16 @@ class MenusRenderTest {
         both("main-first", settings) { StartScreen(fresh, updater, onSettings = {}, onQuit = {}) }
         both("main", settings) { StartScreen(career, updater, onSettings = {}, onQuit = {}) }
         both("load", settings) { LoadGameScreen(career) {} }
+        val news = WhatsNew.topChanges(BuildChangelog.text, BuildInfo.VERSION)
+        both("whats-new", settings) { WhatsNewPanel(BuildInfo.VERSION, news, onClose = {}, onFull = {}) }
+        both("changelog", settings) { ChangelogScreen(BuildChangelog.text) {} }
         both("scenarios", settings) { ScenariosScreen(fresh, {}, {}, {}, { _, _ -> }) }
         both("new-1-scenario", settings) { NewGameScreen(fresh, startStep = 0, onBack = {}) }
         both("new-2-start", settings, settleMs = 2500) { NewGameScreen(fresh, startStep = 1, startHelm = true, onBack = {}) }
         both("new-3-ambition", settings) { NewGameScreen(fresh, startStep = 2, startAmbition = "richest", onBack = {}) }
         both("new-4-world", settings) { NewGameScreen(fresh, startStep = 3, onBack = {}) }
         both("new-5-chief", settings) { NewGameScreen(fresh, startStep = 4, onBack = {}) }
+        both("new-5-company", settings) { NewGameScreen(fresh, startStep = 4, startFounder = true, onBack = {}) }
         for (section in listOf(SettingsSection.Game, SettingsSection.Graphics, SettingsSection.Keys, SettingsSection.Data, SettingsSection.Updates)) {
             both("settings-${section.name.lowercase()}", settings) { SettingsScreen(career, settings, desktop = true, updater = updater, onSetupAgain = {}, startSection = section) {} }
         }
