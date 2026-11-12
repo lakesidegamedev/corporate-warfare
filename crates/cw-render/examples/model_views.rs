@@ -273,6 +273,19 @@ fn main() {
             (1200, 750)
         };
         let f = renderer.render_to_rgba(scene, &cam, &style, rw, rh);
+        // Frame time once everything is built: the mean of five more frames of the same view.
+        let t = std::time::Instant::now();
+        let mut stats = f.stats;
+        for _ in 0..5 {
+            stats = renderer.render_to_rgba(scene, &cam, &style, rw, rh).stats;
+        }
+        println!(
+            "timing {} {:.1} ms per frame, {} vertices, {} draw calls",
+            v.name,
+            t.elapsed().as_secs_f64() * 1000.0 / 5.0,
+            stats.vertices,
+            stats.draw_calls
+        );
         let rgb: Vec<u8> = f
             .rgba
             .chunks_exact(4)
