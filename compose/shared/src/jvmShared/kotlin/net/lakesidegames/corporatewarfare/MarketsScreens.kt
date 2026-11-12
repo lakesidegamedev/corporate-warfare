@@ -62,6 +62,21 @@ internal val ScreenViews: List<Triple<String, String, Pair<List<ViewState>, Plac
     Triple("divisions", "Divisions", DivisionViews to Place.Overview),
     Triple("lines", "Product lines", LineViews to Place.Overview),
     Triple("results", "Results", ResultViews to Place.Overview),
+    Triple("finance", "Finance statements", FinanceViews to Place.Finance),
+    Triple("debt", "Debt and bonds", DebtViews to Place.Finance),
+    Triple("owners", "Owners and shares", OwnerViews to Place.Finance),
+    Triple("people-posts", "Executives", PostViews to Place.People),
+    Triple("people-hire", "People to hire", CandidateViews to Place.People),
+    Triple("people-board", "Board votes", VoteViews to Place.People),
+    Triple("plants", "Plants", PlantViews to Place.Plants),
+    Triple("research-levels", "Research levels", LevelViews to Place.Research),
+    Triple("holdings", "Shares held", HoldingViews to Place.Portfolio),
+    Triple("controlled", "Companies you control", ControlledViews to Place.Portfolio),
+    Triple("bonds", "Bonds held", BondHeldViews to Place.Portfolio),
+    Triple("career-chapters", "Career chapters", ChapterViews to Place.Career),
+    Triple("career-years", "Career year by year", YearViews to Place.Career),
+    Triple("hall-achievements", "Achievements", AchievementViews to Place.Hall),
+    Triple("hall-earlier", "Earlier careers", EarlierViews to Place.Hall),
 )
 
 // MARK: Openings

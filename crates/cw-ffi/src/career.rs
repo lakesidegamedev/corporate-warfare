@@ -221,3 +221,158 @@ impl From<dto::CareerSummaryDto> for CareerSummaryDto {
         }
     }
 }
+
+/// One ambition for the new-game screen: its name, one plain sentence and what each medal takes,
+/// worked out from the content table for the chosen start and length (no number is typed into an app).
+#[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
+pub struct AmbitionGuideDto {
+    /// "richest", "biggest", "dominant" or "survivor".
+    pub key: String,
+    pub name: String,
+    pub sentence: String,
+    pub bronze: String,
+    pub silver: String,
+    pub gold: String,
+}
+
+fn times_words(bps: i64) -> String {
+    let tenths = bps / 1_000;
+    if tenths % 10 == 0 {
+        format!("{} times", tenths / 10)
+    } else {
+        format!("{}.{} times", tenths / 10, tenths % 10)
+    }
+}
+
+fn place_words(n: u32) -> String {
+    if n == 1 {
+        "first place".to_owned()
+    } else {
+        format!("the top {n}")
+    }
+}
+
+fn top_share_words(bps: i64) -> String {
+    match bps {
+        5_000 => "the top half".to_owned(),
+        2_500 => "the top quarter".to_owned(),
+        b => format!("the top {} percent", b / 100),
+    }
+}
+
+/// The four ambitions with their medals for a start ("founder" or "helm") and a career length in
+/// years (0 takes the default).
+pub fn ambition_guide(start: &str, years: u32) -> Vec<AmbitionGuideDto> {
+    let t = cw_data::careers::career_table();
+    let years = if years == 0 { t.default_years } else { years };
+    let m = t.richest.for_years(years);
+    let places = if start == "helm" {
+        &t.biggest.helm
+    } else {
+        &t.biggest.founder
+    };
+    let bronze_places = if places.bronze == 0 {
+        format!(
+            "Finish in {} of the league by value",
+            top_share_words(places.bronze_top_bps)
+        )
+    } else {
+        format!(
+            "Finish in {} of the league by value",
+            place_words(places.bronze)
+        )
+    };
+    let d = &t.dominant;
+    let dominant = |bps: i64| {
+        format!(
+            "Hold {} percent of one industry's output for {} quarters in a row",
+            bps / 100,
+            d.quarters
+        )
+    };
+    let start_word = if start == "helm" {
+        "the net worth you have just after buying control"
+    } else {
+        "the fortune you start with"
+    };
+    vec![
+        AmbitionGuideDto {
+            key: "richest".to_owned(),
+            name: "Richest".to_owned(),
+            sentence: "Grow your own fortune as far as you can.".to_owned(),
+            bronze: format!("End with {} {}", times_words(m.bronze_bps), start_word),
+            silver: format!("End with {} {}", times_words(m.silver_bps), start_word),
+            gold: format!("End with {} {}", times_words(m.gold_bps), start_word),
+        },
+        AmbitionGuideDto {
+            key: "biggest".to_owned(),
+            name: "Biggest".to_owned(),
+            sentence: "Run the largest company in the league.".to_owned(),
+            bronze: bronze_places,
+            silver: format!(
+                "Finish in {} of the league by value",
+                place_words(places.silver)
+            ),
+            gold: format!(
+                "Finish in {} of the league by value",
+                place_words(places.gold)
+            ),
+        },
+        AmbitionGuideDto {
+            key: "dominant".to_owned(),
+            name: "Dominant".to_owned(),
+            sentence:
+                "Own a market: lead one industry year after year. Gold ends the career early."
+                    .to_owned(),
+            bronze: dominant(d.bronze_bps),
+            silver: dominant(d.silver_bps),
+            gold: dominant(d.gold_bps),
+        },
+        AmbitionGuideDto {
+            key: "survivor".to_owned(),
+            name: "Survivor".to_owned(),
+            sentence: "Come through the booms and busts with a company still standing.".to_owned(),
+            bronze: "End with a solvent company you control".to_owned(),
+            silver: format!(
+                "Also rank in {} of the league",
+                top_share_words(t.survivor.silver_top_bps)
+            ),
+            gold: format!(
+                "Also rank in {} of the league",
+                top_share_words(t.survivor.gold_top_bps)
+            ),
+        },
+    ]
+}
+
+/// The career lengths the content offers, in years, and the default.
+pub(crate) fn career_lengths() -> (Vec<u32>, u32) {
+    let t = cw_data::careers::career_table();
+    (t.lengths_years.clone(), t.default_years)
+}
+
+#[derive(uniffi::Record, Clone, Debug, PartialEq, Eq)]
+pub struct CareerLengthsDto {
+    pub years: Vec<u32>,
+    pub default_years: u32,
+}
+
+#[cfg(test)]
+mod guide_tests {
+    use super::*;
+
+    #[test]
+    fn the_guide_reads_the_content() {
+        let g = ambition_guide("founder", 10);
+        assert_eq!(g.len(), 4);
+        assert_eq!(g[0].bronze, "End with 10 times the fortune you start with");
+        assert_eq!(g[0].gold, "End with 35 times the fortune you start with");
+        assert_eq!(g[1].bronze, "Finish in the top half of the league by value");
+        assert_eq!(g[1].gold, "Finish in the top 3 of the league by value");
+        let h = ambition_guide("helm", 5);
+        assert_eq!(h[1].gold, "Finish in first place of the league by value");
+        assert!(h[0].silver.contains("4.5 times"));
+        assert!(g[2].bronze.contains("20 percent"));
+        assert_eq!(career_lengths().0, vec![5, 10, 20]);
+    }
+}

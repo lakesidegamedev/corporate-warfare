@@ -81,6 +81,8 @@ class AppSettings(private val file: File) : ViewPrefs {
     var pauseOnWarnings by mutableStateOf(props.getProperty("pauseOnWarnings")?.toBoolean() ?: false); private set
     /** Open the weekly brief by itself when a new week starts with time paused or at 1x. Desktop only. */
     var showBriefEachWeek by mutableStateOf(props.getProperty("showBriefEachWeek")?.toBoolean() ?: false); private set
+    /** Desktop: use the 1.x page layout instead of the 2.0 layout (kept for 2.0 only). */
+    var classicLayout by mutableStateOf(props.getProperty("classicLayout")?.toBoolean() ?: false); private set
     /** The brief panel at the top of the CEO Office is folded away. */
     var briefCollapsed by mutableStateOf(props.getProperty("briefCollapsed")?.toBoolean() ?: false); private set
     /** Pages with the map docked beside them, and how much of the width the map takes (0.2 to 0.8), per page id. */
@@ -146,6 +148,7 @@ class AppSettings(private val file: File) : ViewPrefs {
     fun chooseReportingCurrency(value: String) { reportingCurrency = value; store() }
     fun choosePauseOnWarnings(value: Boolean) { pauseOnWarnings = value; store() }
     fun chooseShowBriefEachWeek(value: Boolean) { showBriefEachWeek = value; store() }
+    fun chooseClassicLayout(value: Boolean) { classicLayout = value; store() }
     fun chooseBriefCollapsed(value: Boolean) { briefCollapsed = value; store() }
     /** Dock the map beside a page with the given share of the width, or undock it with null. */
     fun chooseDock(pageId: String, share: Float?) {
@@ -197,6 +200,7 @@ class AppSettings(private val file: File) : ViewPrefs {
         props.setProperty("reportingCurrency", reportingCurrency)
         props.setProperty("pauseOnWarnings", pauseOnWarnings.toString())
         props.setProperty("showBriefEachWeek", showBriefEachWeek.toString())
+        props.setProperty("classicLayout", classicLayout.toString())
         props.setProperty("briefCollapsed", briefCollapsed.toString())
         props.stringPropertyNames().filter { it.startsWith("dock.") }.forEach { props.remove(it) }
         docks.forEach { (id, share) -> props.setProperty("dock.$id", share.toString()) }
@@ -275,6 +279,17 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                         )
                     }
                     if (desktop) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Classic layout", color = Palette.primaryText)
+                                Text("Go back to the page layout from version 1. It is kept for this release only, then removed.", color = Palette.secondary, fontSize = 12.sp)
+                            }
+                            Switch(
+                                checked = settings.classicLayout,
+                                onCheckedChange = { settings.chooseClassicLayout(it) },
+                                colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
+                            )
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("Show the brief each week", color = Palette.primaryText)

@@ -161,12 +161,13 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                     store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         if (maxWidth >= DesktopBreakpoint) {
                             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                                if (NewShell.enabled) TycoonShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
+                                if (NewShell.enabled(settings)) TycoonShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
                                 else DesktopShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
                                 if (settings.showBriefEachWeek) BriefWeeklyHost(store)
                             }
                         }
                         else MainScreen(store, onSettings = { showSettings = true })
+                        EndOfCareerHost(store, onNewCareer = { store.openNewGame = true; store.exitToMenu() }, onMainMenu = { store.exitToMenu() })
                     }
                     else -> StartScreen(store, updater, onSettings = { showSettings = true }, onQuit = onQuit)
                 }

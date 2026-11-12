@@ -228,6 +228,18 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         ready = true
     }
 
+    /** A new career with a start, an ambition and a length (2.0). */
+    fun startCareerWith(options: uniffi.cw_ffi.NewGameDto, career: uniffi.cw_ffi.CareerOptionsDto) = perform {
+        val handle = withContext(engine) { SessionHandle.startCareer(options, career) }
+        session = handle
+        selectedFirm = withContext(engine) {
+            if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
+            handle.overview().primaryFirm
+        }
+        reload()
+        ready = true
+    }
+
     /** Where custom scenarios are kept, beside the saves. */
     val customDir: String get() = File(saveDir, "custom-scenarios").path
 
@@ -287,6 +299,9 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
     fun refresh() = perform { reload() }
 
     /** Save, stop time and close the career; the main menu offers it again under Continue. */
+    /** Set when the end of career screen asks for a new career: the main menu then opens the new-game screen. */
+    var openNewGame by mutableStateOf(false)
+
     fun exitToMenu() = perform {
         runJob?.cancel()
         runJob = null
