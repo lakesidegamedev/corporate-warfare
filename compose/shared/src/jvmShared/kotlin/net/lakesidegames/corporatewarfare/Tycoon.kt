@@ -207,7 +207,7 @@ fun TycoonShell(store: GameStore, onSettings: () -> Unit, onMenu: () -> Unit = {
 }
 
 /** The tutorial's page id (the 1.x name its steps are written against) for a place of the 2.0 layout. */
-private fun tutorialPage(p: Place): String = when (p) {
+internal fun tutorialPage(p: Place): String = when (p) {
     Place.Overview, Place.Office -> "office"
     Place.Research -> "research"
     Place.Economy, Place.Goods, Place.Exchange -> "markets"
@@ -222,7 +222,7 @@ private fun keyName(k: Key): String = when (k) {
 }
 
 @Composable
-private fun PlaceContent(store: GameStore, place: Place, leaguePick: ULong?, onLeaguePick: (ULong) -> Unit, open: (Place) -> Unit, openRival: (ULong) -> Unit, goodsPick: UInt? = null) {
+internal fun PlaceContent(store: GameStore, place: Place, leaguePick: ULong?, onLeaguePick: (ULong) -> Unit, open: (Place) -> Unit, openRival: (ULong) -> Unit, goodsPick: UInt? = null) {
     when (place) {
         Place.Overview -> CompanyOverviewScreen(store)
         Place.Goods -> key(goodsPick) { GoodsScreen(store, goodsPick) }
@@ -391,7 +391,7 @@ object RailState {
  * are not shown. Folded, the rail is a column of three counts that open their tab.
  */
 @Composable
-fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onRival: (ULong) -> Unit, onGood: (UInt) -> Unit = { onOpen(Place.Goods) }) {
+fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onRival: (ULong) -> Unit, onGood: (UInt) -> Unit = { onOpen(Place.Goods) }, sheet: Boolean = false) {
     val o = store.overview
     val decisions = store.events.filter { it.mandatory }
     // Only what the player can act on: raids and rival moves from the last 13 weeks. Older ones live in the dossier.
@@ -411,7 +411,7 @@ fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onR
     val needs = decisions.size + alerts.size + store.unreadLetters + fired.size + if (o?.pauseInfo != null) 1 else 0
     GridDemo.railTab?.let { RailState.tab = it }
     val tabs = listOf(Triple("Needs you", "!", needs), Triple("Watch", "*", Watchlist.items.size), Triple("Feed", "~", raids.size + moves.size))
-    if (GridPrefs.railFolded) {
+    if (GridPrefs.railFolded && !sheet) {
         // Folded: a mark and a count per tab; a click opens the rail on that tab.
         Column(modifier.background(Palette.panel).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             GridButton("<", false, 9.sp) { GridPrefs.foldRail(false, prefs) }
@@ -435,7 +435,7 @@ fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onR
         Row(Modifier.fillMaxWidth().background(Palette.ink).padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             tabs.forEach { (name, _, n) -> GridButton(if (n > 0) "$name $n" else name, RailState.tab == name, 9.sp) { RailState.tab = name } }
             Spacer(Modifier.weight(1f))
-            GridButton(">", false, 9.sp) { GridPrefs.foldRail(true, prefs) }
+            if (!sheet) GridButton(">", false, 9.sp) { GridPrefs.foldRail(true, prefs) }
         }
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
             when (RailState.tab) {
@@ -455,7 +455,7 @@ private fun watchFigure(store: GameStore, id: String): Pair<String, Long>? = whe
 }
 
 /** The watch alerts that have fired this week, as lines for Needs you. */
-private fun firedWatchAlerts(store: GameStore): List<String> = Watchlist.alerts.mapNotNull { (id, a) ->
+internal fun firedWatchAlerts(store: GameStore): List<String> = Watchlist.alerts.mapNotNull { (id, a) ->
     val (name, value) = watchFigure(store, id) ?: return@mapNotNull null
     if (!a.fired(value)) null else "$name is ${if (a.above) "above" else "below"} ${Format.money(a.level)}: now ${Format.money(value)}"
 }

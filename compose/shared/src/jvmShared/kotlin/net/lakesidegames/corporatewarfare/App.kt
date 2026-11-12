@@ -87,6 +87,7 @@ val LocalAppSettings = androidx.compose.runtime.staticCompositionLocalOf<AppSett
 fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null, saveFolder: String? = null) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     var showSettings by remember { mutableStateOf(false) }
+    val phoneNav = remember { PhoneNav() }
     // Set up again, or the wizard a 1.8 player chose from What's new.
     var rerunSetup by remember { mutableStateOf(false) }
     // The desktop game menu (Escape): pauses time while open and resumes it at the same speed after.
@@ -165,6 +166,9 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                                 else DesktopShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
                                 if (settings.showBriefEachWeek) BriefWeeklyHost(store)
                             }
+                        }
+                        else if (NewShell.enabled(settings)) Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                            PhoneShell(store, phoneNav, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
                         }
                         else MainScreen(store, onSettings = { showSettings = true })
                         EndOfCareerHost(store, onNewCareer = { store.openNewGame = true; store.exitToMenu() }, onMainMenu = { store.exitToMenu() })
