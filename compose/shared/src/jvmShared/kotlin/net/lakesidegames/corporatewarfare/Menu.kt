@@ -140,6 +140,15 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
                         .border(1.dp, Palette.stroke, Pixel.shape).padding(12.dp),
                 ) { UpdatePanel(updater) }
             }
+            AccountEntry()
+            if (LauncherSession.current.managed) {
+                Text(
+                    "The Lakeside launcher keeps this copy up to date.",
+                    color = Palette.secondary.copy(alpha = 0.7f),
+                    fontSize = 11.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            }
             Text(
                 "Version ${BuildInfo.VERSION}" + if (BuildInfo.CHANNEL == "preview") " · tester preview" else "",
                 color = Palette.secondary.copy(alpha = 0.7f),

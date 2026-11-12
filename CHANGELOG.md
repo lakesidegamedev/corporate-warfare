@@ -15,6 +15,10 @@ Corporate Warfare 2.0 is the biggest change since the first release. The company
 
 ### Added
 
+- The game now works with the Lakeside launcher on Windows and Linux. When the launcher starts the game, it keeps the game up to date, so the game's own update checks, channel choice and version list switch off and Settings, Updates says so in plain words. If you are signed in to the launcher, the main menu and Settings show "Signed in as your name". Nothing else changes: you never need an account, the game never checks that you own it, and it plays fully offline. Anonymous statistics are untouched and are never linked to your account. See docs/rules/LAUNCHER.md.
+- The game's own updater now checks the SHA-256 checksum of a download against the one GitHub publishes, and throws away and refuses a file that does not match. Older releases that publish no checksum still install after the size check, and the update panel says so.
+- A release that has no installer attached now tells you that version is delivered through the Lakeside launcher or your store, instead of showing an error.
+- Full releases no longer put their installers on the public release page by default. The installers and a checksum list are kept as workflow files for the Lakeside side to collect. Tester previews are unchanged. See docs/RELEASING.md.
 - The 3D map is now the map. It is on by default (Settings, Graphics, "3D map"; the classic flat map stays for computers with no usable graphics card). A plant keeps its true size up close and never shrinks below a readable size as you pull back, and plants stand far enough apart that they never overlap or stand in the water.
 - Plant models are built from proper solids instead of stacked boxes: round tanks and silos with domed lids, waisted cooling towers, round banded chimneys, sawtooth factory roofs and pitched barn roofs.
 - City streets lie on a fixed grid of the real world, with blocks about 150 metres across, so a city is the same city at every zoom. The small streets drop out as you pull back, then the avenues.

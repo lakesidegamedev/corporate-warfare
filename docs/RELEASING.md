@@ -141,8 +141,30 @@ gh release create v2.0.0 -R lakesidegamedev/corporate-warfare --title "Corporate
 ```
 
 Publishing the release runs `release-others.yml`: it builds the signed Android bundle and APK
-and the Windows, Linux and Mac packages and attaches them to the release. Watch it with
+and the Windows, Linux and Mac packages. Watch it with
 `gh run list --workflow release-others.yml --limit 1`; it does not run for a pre-release.
+
+Corporate Warfare is a paid game, so a full release does NOT put its installers on the public
+release. The workflow has an input `attach_installers` that defaults to off, and a published-release
+run never sets it. What it always does, whatever the input:
+
+- keeps every installer as a workflow artifact (`installers-android`, `installers-ubuntu-latest`,
+  `installers-windows-latest`, `installers-mac`, kept 90 days), each with a `SHA256SUMS-*.txt` file
+  listing the SHA-256 of every file in it, for the Lakeside side to fetch into its own storage;
+- builds and signs exactly as before.
+
+To fetch them: `gh run download <run-id> -R lakesidegamedev/corporate-warfare -D <empty folder>`,
+then check each file against its sums file.
+
+To attach the installers to the public release anyway (for example to re-publish a free build), run
+the workflow by hand: `gh workflow run release-others.yml -R lakesidegamedev/corporate-warfare
+-f tag=v2.0.0 -f attach_installers=true`. Tester previews (`preview.yml`) still attach their
+installers to the pre-release; that stays until the owner decides otherwise. Existing releases are
+never edited by these workflows.
+
+A release with no installer attached is normal. The in-game updater then says "this version is
+delivered through the Lakeside launcher or your store" instead of showing an error. A game started
+from the Lakeside launcher has its own updater switched off; see `docs/rules/LAUNCHER.md`.
 
 iPhone, iPad and Mac (App Store Connect build): dispatch the Release workflow on the tag with
 the next unused build number (the last one is recorded under `evidence/releases/`):

@@ -13,7 +13,7 @@ Order: [markets and weekly settlement](MARKETS.md), [corporate state machines](C
 2.0 pages, each stating the content file its numbers live in: [capacity and openings](CAPACITY.md),
 [raids as campaigns](RAIDS.md), [plant auctions, listings and mergers](AUCTIONS.md),
 [power on a grid](POWER.md), [world prices and their weather](WORLD-PRICES.md) and
-[the 2.0 layout](LAYOUT.md). Where an older section disagrees with a 2.0 page, the 2.0 page wins.
+[the 2.0 layout](LAYOUT.md) and [the Lakeside launcher handoff](LAUNCHER.md). Where an older section disagrees with a 2.0 page, the 2.0 page wins.
 
 Machine-readable initial parameters:
 [initial-balance.json](../../content/initial-balance.json). Execution checklist:
