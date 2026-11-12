@@ -366,7 +366,7 @@ def construction(s):
     for i in range(2 + s):
         m.tank(-0.5 + i * 3.4, -7.5, 3.0, 5.5, c("rock", 3), c("rock", 1))
     for i in range(3):
-        m.b(1.5 + i * 3.2, 4, PAD_Z, 4.2 + i * 3.2, 8, PAD_Z + 1.0 + i * 0.5, c("soil", 2))
+        m.b(1.5 + i * 3.2, 4, PAD_Z, 4.2 + i * 3.2, 8, PAD_Z + 1.4 + i * 0.6, c("soil", 2), shape="pyr")
     if s >= 2:
         m.b(-2, 6.5, PAD_Z, 0.5, 10, PAD_Z + 2.0, c("signal", 3))
     m.truck(7.5, -11.2, c("gold", 3), c("soil", 3))
@@ -387,7 +387,7 @@ def site(s):
     m.crane(8, -1, 8 + 2 * n + 3, 9, rot=1)
     m.b(-11, 8, PAD_Z, -4, 11, PAD_Z + 1.2, c("signal", 3))  # site cabin
     m.b(-11, 8, PAD_Z + 1.2, -4, 11, PAD_Z + 1.5, c("cloud", 3))
-    m.b(8.5, -10.5, PAD_Z, 11, -7, PAD_Z + 1.0, c("soil", 2))  # sand heap
+    m.b(8.5, -10.5, PAD_Z, 11, -7, PAD_Z + 1.6, c("soil", 2), shape="cone")  # sand heap
     m.b(-4, 8.5, PAD_Z, -0.5, 11, PAD_Z + 0.7, c("gold", 2))  # pallets
     return m
 
@@ -397,7 +397,7 @@ def defense(s):
     m = start()
     m.b(-11.5, -11.5, PAD_Z, 11.5, -9.5, PAD_Z + 0.2, c("rock", 1))  # apron strip
     m.shed(-10, -6, 0, 5, 3.0, c("forest", 1), c("forest", 0), trim=True)
-    m.b(-8, -6, PAD_Z + 3.0, -2, 5, PAD_Z + 3.7, c("forest", 0), True)  # hangar crown
+    m.b(-10, -6, PAD_Z + 3.0, 0, 5, PAD_Z + 5.0, c("forest", 0), True, shape="gabley")  # hangar roof
     m.door(-5, -6, 4.0, 2.4)
     for i in range(2 + s):  # armoured vehicle park
         m.b(1 + (i % 3) * 3.6, -6 + (i // 3) * 3.5, PAD_Z, 4 + (i % 3) * 3.6, -3.5 + (i // 3) * 3.5, PAD_Z + 1.4, c("forest", 2))
@@ -405,7 +405,7 @@ def defense(s):
         m.b(x + 0.8, y + 0.6, PAD_Z + 1.4, x + 2.2, y + 1.9, PAD_Z + 2.0, c("forest", 1))  # turret
     m.tank(-8, 8.5, 4.5, 2.0, c("rock", 3), c("rock", 1))  # radar dome base
     m.column(-2, 9, 2, 6, c("rock", 3), c("signal", 2))  # guard tower
-    m.b(-8.6, 7.9, PAD_Z + 2.4, -7.4, 9.1, PAD_Z + 3.4, c("snow", 3))  # radar dome
+    m.b(-9.6, 6.9, PAD_Z + 2.4, -6.4, 10.1, PAD_Z + 4.6, c("snow", 3), shape="dome")  # radar dome
     if s >= 2:
         m.shed(2, 6, 11, 11.5, 1.8, c("forest", 1), c("forest", 0))
     return m
@@ -417,9 +417,9 @@ def media(s):
     m.shed(-11, -10, 1, -1, 3.5, c("snow", 3), c("signal", 3), win=True, docks=1)
     m.shed(3, -10, 10, -4, 2.5, c("urban", 3), c("urban", 1), trim=False, vents=1)
     mast = 15 + 2 * s
-    m.b(-0.5, 2, PAD_Z, 1.5, 4, PAD_Z + mast, c("rock", 3))
+    m.b(-0.5, 2, PAD_Z, 1.5, 4, PAD_Z + mast, c("rock", 3), shape="taper")
     m.b(-1.5, 1.5, PAD_Z + mast, 2.5, 4.5, PAD_Z + mast + 0.8, c("signal", 2))
-    m.b(0.1, 2.6, PAD_Z + mast + 0.8, 0.9, 3.4, PAD_Z + mast + 2.8, c("signal", 2))
+    m.b(0.1, 2.6, PAD_Z + mast + 0.8, 0.9, 3.4, PAD_Z + mast + 3.6, c("signal", 2), shape="cone")
     m.dish(-8, 5, PAD_Z, 3.2)
     if s >= 1:
         m.dish(6, 4.2, PAD_Z, 3.2)
@@ -443,7 +443,7 @@ def healthcare(s):
     m.b(-5.8, 3.4, top, -4.2, 4.6, top + 0.3, c("signal", 2))
     m.shed(-10, -10, -2, -6, 2.0, c("cloud", 2), c("urban", 3), docks=2)
     m.b(4, -11, PAD_Z, 10, -6, PAD_Z + 0.35, c("urban", 2))  # helipad
-    m.b(5.8, -9.2, PAD_Z + 0.35, 8.2, -7.8, PAD_Z + 0.55, c("signal", 1))
+    m.b(5.2, -10.2, PAD_Z + 0.35, 8.8, -6.8, PAD_Z + 0.55, c("signal", 1), shape="cyl")
     for i in range(3):
         m.car(-1.4 + i * 1.5, -8.6, c("signal", 1) if i == 1 else c("cloud", 3))
     return m
@@ -456,8 +456,8 @@ def technology(s):
     m.tower(2, -9, 10, -1, 5 + s * 1.5, c("water", 3), c("cloud", 3))
     top = m.shed(-10, 2, 6, 10, 2.5, c("urban", 3), c("rock", 2), ribs=0, win=False, docks=1)
     for i in range(4):
-        m.b(-9 + i * 3.4, 3, top, -7.4 + i * 3.4, 5.6, top + 0.9, c("rock", 3))
-        m.b(-9 + i * 3.4, 6.6, top, -7.4 + i * 3.4, 9.2, top + 0.9, c("rock", 3))
+        m.b(-9 + i * 3.4, 3, top, -7.4 + i * 3.4, 5.6, top + 0.9, c("rock", 3), shape="cyl")
+        m.b(-9 + i * 3.4, 6.6, top, -7.4 + i * 3.4, 9.2, top + 0.9, c("rock", 3), shape="cyl")
     m.b(-10, -11, PAD_Z, -1, -10, PAD_Z + 1.0, c("water", 1))  # solar canopy row
     if s >= 2:
         m.tower(7, 3, 11, 10, 8, c("water", 3), c("cloud", 3))
@@ -470,7 +470,7 @@ def financial(s):
     hmain = 17 + 2 * s
     top = m.tower(-3, -3, 3.5, 3.5, 9, c("urban", 3), c("urban", 2), trim=False, kit=False)
     top2 = m.tower(-2, -2, 2.5, 2.5, hmain - 9, c("cloud", 2), c("cloud", 3), z0=top, kit=False)
-    m.b(0, 0, top2, 1, 1, top2 + 1.8, c("rock", 3))  # spire
+    m.b(-2, -2, top2, 2.5, 2.5, top2 + 2.4, c("rock", 3), True, shape="pyr")  # crown
     m.tower(-10, -9, -4.5, -4, 8 + s, c("urban", 3), c("urban", 2))
     m.tower(5, -9, 10.5, -3.5, 10 + s, c("water", 3), c("cloud", 3))
     if s >= 1:
@@ -490,7 +490,7 @@ def retail(s):
     for i, (bay, y, col) in enumerate([(0, -9.4, c("brick", 3)), (0, -5.0, c("cloud", 3)), (2, -8.0, c("water", 3)),
                                        (3, -6.2, c("signal", 1)), (5, -9.0, c("brick", 3)), (5, -4.2, c("cloud", 3))]):
         m.car(-9.4 + 2.4 * bay + 0.55, y, col, vert=True)
-    m.b(8, -10, PAD_Z, 8.8, -9.2, PAD_Z + 6, c("rock", 2))
+    m.b(8, -10, PAD_Z, 8.8, -9.2, PAD_Z + 6, c("rock", 2), shape="cyl")
     m.b(7.0, -10.4, PAD_Z + 6, 9.8, -8.8, PAD_Z + 7.4, c("signal", 2))
     if s >= 1:
         m.shed(6, 1, 11, 6, 2.2, CONCRETE, c("urban", 3), vents=1)
@@ -512,9 +512,9 @@ def real_estate(s):
     m.b(-11, -11, PAD_Z, 11, -6, PAD_Z + 0.2, c("forest", 3))
     for i in range(3):  # terrace row
         m.b(-9 + i * 7, 6.5, PAD_Z, -5 + i * 7, 10, PAD_Z + 2.0, c("soil", 3), win=True)
-        m.b(-9 + i * 7, 6.5, PAD_Z + 2.0, -5 + i * 7, 10, PAD_Z + 2.6, TILE, True)
+        m.b(-9.2 + i * 7, 6.3, PAD_Z + 2.0, -4.8 + i * 7, 10.2, PAD_Z + 3.6, TILE, True, shape="gablex")
     for x in (-9.0, -3.0, 4.0):
-        m.b(x, -9.5, PAD_Z + 0.2, x + 1.4, -8.1, PAD_Z + 1.4, c("forest", 1))  # trees
+        m.b(x, -9.5, PAD_Z + 0.2, x + 1.8, -7.7, PAD_Z + 2.6, c("forest", 1), shape="cone")  # trees
     return m
 
 
@@ -524,11 +524,11 @@ def telecommunications(s):
     z = PAD_Z + 0.8
     for i in range(3 + s):
         zb = PAD_Z + 6 + i * 5
-        m.b(-1, -1, z, 1, 1, zb, c("rock", 3))
-        m.b(-2.2, -0.8, zb, 2.2, 0.8, zb + 0.8, c("signal", 2))
+        m.b(-1, -1, z, 1, 1, zb, c("rock", 3), shape="cyl")
+        m.b(-2.2, -2.2, zb, 2.2, 2.2, zb + 0.8, c("signal", 2), shape="cyl")
         z = zb + 0.8
-    m.b(-1, -1, z, 1, 1, PAD_Z + 28, c("rock", 3))
-    m.b(-1.4, -1.4, PAD_Z + 28, 1.4, 1.4, PAD_Z + 29, c("signal", 2))
+    m.b(-1, -1, z, 1, 1, PAD_Z + 28, c("rock", 3), shape="taper")
+    m.b(-0.9, -0.9, PAD_Z + 28, 0.9, 0.9, PAD_Z + 29, c("signal", 2), shape="cone")
     m.b(-2.4, -2.4, PAD_Z, 2.4, 2.4, PAD_Z + 0.8, c("rock", 1))  # mast base
     m.shed(-10, -10, -2, -5, 2.0, CONCRETE, c("urban", 2), ac=1, docks=1)
     m.shed(3, -10, 10, -5, 2.0, CONCRETE, c("urban", 2), ac=2) if s >= 1 else None

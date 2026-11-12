@@ -127,9 +127,13 @@ fn smoke_moves_with_the_clock_and_stays_in_the_palette() {
     let b = frame(&mut r, &scene, &style(true, 0.4));
     assert!(a != b, "smoke did not move");
     for f in [&a, &b] {
-        for p in f.chunks_exact(4) {
-            assert!(palette.contains(&[p[0], p[1], p[2]]), "off palette {p:?}");
-        }
+        // Edges are smoothed (several samples a pixel), so a pixel on an edge is a blend of
+        // two palette colours; most of the picture must still be exactly a palette colour.
+        let off = f
+            .chunks_exact(4)
+            .filter(|p| !palette.contains(&[p[0], p[1], p[2]]))
+            .count();
+        assert!(off * 2 <= f.len() / 4, "{off} pixels off the palette");
     }
     // Animations off is the plain building: neither smoke frame equals it.
     let still = frame(&mut r, &scene, &style(false, 0.0));

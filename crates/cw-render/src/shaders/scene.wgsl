@@ -801,9 +801,11 @@ fn fs_road(in: ROut) -> RFOut {
     if (in.kind == 0u) {
         // Interstate: mid grey asphalt with a darker one pixel kerb. Up close a light edge line
         // inside each kerb and a gold dashed centre line.
-        if (w > 2.5 && d >= hw - 1.0) { c = pal(RAMP_ROCK, 1); }
-        else if (detail && w > 6.5 && d >= hw - 2.0) { c = pal(RAMP_CLOUD, 1); }
-        else if (detail && w > 4.5 && d < 0.75 && fract(in.along / 7.0) < 0.5) { c = pal(RAMP_GOLD, 3); }
+        // A light carriageway inside a dark casing, like a road atlas: it reads on fields and
+        // on city ground alike. The gold centre dashes show only once the road is wide.
+        c = pal(RAMP_ROCK, 3);
+        if (w > 4.0 && d >= hw - 1.0) { c = pal(RAMP_INK, 3); }
+        else if (detail && w > 6.5 && d < 0.75 && fract(in.along / 7.0) < 0.5) { c = pal(RAMP_GOLD, 3); }
     } else if (in.kind == 1u) {
         // Main road: one step lighter than the ground it crosses, so it reads as a faint line.
         // Up close it widens to a grey road with a darker kerb.
@@ -812,10 +814,8 @@ fn fs_road(in: ROut) -> RFOut {
         var base = 2;
         if (m.a > 1.5 && m.a < 2.5) { ramp = RAMP_GOLD; base = gold_base(cls); }
         c = pal(ramp, base + 1);
-        if (w > 2.5) {
-            c = pal(RAMP_ROCK, 3);
-            if (d >= hw - 1.0) { c = pal(RAMP_ROCK, 1); }
-        }
+        if (w > 1.6) { c = pal(RAMP_CLOUD, 2); }
+        if (w > 3.2 && d >= hw - 0.8) { c = pal(RAMP_ROCK, 1); }
     } else {
         // Railway: a thin light grey-brown line, with sleepers across it up close.
         c = pal(RAMP_SOIL, 3);
