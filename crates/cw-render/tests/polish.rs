@@ -339,9 +339,10 @@ fn plant_models_say_where_their_windows_go_and_downtowns_grow_with_the_city() {
     let mut tops = [0.0f64; 4];
     for (key, m) in models {
         for b in m["boxes"].as_array().unwrap() {
-            assert_eq!(
-                b.as_array().unwrap().len(),
-                9,
+            // Nine fields, or ten when the part names a shape (round, pitched and so on).
+            let fields = b.as_array().unwrap().len();
+            assert!(
+                fields == 9 || fields == 10,
                 "{key}: a box without a window flag"
             );
         }

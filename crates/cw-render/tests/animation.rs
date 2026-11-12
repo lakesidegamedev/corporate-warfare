@@ -27,6 +27,7 @@ fn scene_with(activity: Activity) -> Scene {
             colour: [0x7A, 0x7F, 0x86],
             trim: false,
             windows: None,
+            shape: cw_render::Shape::Box,
         },
         VoxelBox {
             min: [3.0, 3.0, 5.0],
@@ -34,6 +35,7 @@ fn scene_with(activity: Activity) -> Scene {
             colour: [0x56, 0x5B, 0x63],
             trim: false,
             windows: None,
+            shape: cw_render::Shape::Box,
         },
     ];
     let model = VoxelModel {

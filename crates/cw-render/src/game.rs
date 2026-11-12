@@ -62,7 +62,7 @@ pub fn firm_colour(firm: u64) -> [u8; 3] {
 /// At most this many buildings stand at one region's hub: the player's first, then the biggest.
 const PER_REGION: usize = 6;
 /// Distance of the ring the buildings stand on, in km, round the hub building.
-const RING_KM: f32 = 4.0;
+const RING_KM: f32 = 6.5;
 /// Clear ground kept round a building's footprint, and between neighbours, in km.
 const MARGIN_KM: f32 = 0.15;
 
@@ -195,6 +195,9 @@ pub fn layout_plants(scene: &Scene, sites: &[PlantSite]) -> Vec<Placement> {
                 model = format!("city/{size}");
             }
             let size_km = plant_size_km(&s.industry, s.plants, s.status == SiteStatus::Site);
+            // The ground a plant is given: its landmark size, so it is clear of its neighbours and
+            // of the water at every zoom.
+            let stand_km = size_km.max(crate::mesh::LANDMARK_KM);
             let angle = if i == 0 {
                 0.0
             } else {
@@ -210,7 +213,7 @@ pub fn layout_plants(scene: &Scene, sites: &[PlantSite]) -> Vec<Placement> {
             // Candidates in a fixed order: the ideal spot, round the ring and inward, outward
             // from the hub, then along the line to the region's land centre.
             let mut candidates = vec![spot(angle, ring)];
-            for r in [ring, ring * 0.6, ring * 0.3, ring * 1.6, ring * 2.4] {
+            for r in [ring, ring * 1.8, ring * 2.6, ring * 3.4, ring * 0.5] {
                 if r == 0.0 {
                     continue;
                 }
@@ -236,14 +239,14 @@ pub fn layout_plants(scene: &Scene, sites: &[PlantSite]) -> Vec<Placement> {
             }
             let pick = |inside: bool| {
                 candidates.iter().copied().find(|&(lon, lat)| {
-                    fits(scene, region_index, lon, lat, size_km, hub, &taken, inside)
+                    fits(scene, region_index, lon, lat, stand_km, hub, &taken, inside)
                 })
             };
             let (lon, lat) = pick(true)
                 .or_else(|| pick(false))
                 .or_else(|| centroids[region_index])
                 .unwrap_or(candidates[0]);
-            taken.push(((lon - hub.0) * kx, (lat - hub.1) * KM_PER_DEG_LAT, size_km));
+            taken.push(((lon - hub.0) * kx, (lat - hub.1) * KM_PER_DEG_LAT, stand_km));
             let scale = scene
                 .models
                 .get(&model)

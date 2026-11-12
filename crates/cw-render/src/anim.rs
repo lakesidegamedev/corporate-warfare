@@ -427,6 +427,16 @@ pub fn frame_mesh(scene: &Scene, plan: &Plan, v: &FrameView) -> Mesh {
             continue;
         };
         let vx = scene.voxel_km * p.scale;
+        m.anchor = if p.owner == crate::data::Owner::Scenery {
+            [0.0; 4]
+        } else {
+            [
+                cx,
+                cy,
+                z_top,
+                model.footprint[0].max(model.footprint[1]) * vx,
+            ]
+        };
         match p.activity.status {
             Some(SiteStatus::Site) => construction(&mut m, p, model, frame, vx, v, bi),
             _ => {
@@ -487,6 +497,7 @@ pub fn frame_mesh(scene: &Scene, plan: &Plan, v: &FrameView) -> Mesh {
             }
         }
     }
+    m.anchor = [0.0; 4];
     if v.width_km <= ANIM_MAX_KM {
         for h in &plan.fleet.harbours {
             if near(h.at[0], h.at[1]) {
@@ -876,6 +887,7 @@ mod tests {
                     colour: [1, 2, 3],
                     trim: false,
                     windows: None,
+                    shape: crate::data::Shape::Box,
                 },
                 crate::data::VoxelBox {
                     min: [3.0, 3.0, 5.0],
@@ -883,6 +895,7 @@ mod tests {
                     colour: [1, 2, 3],
                     trim: false,
                     windows: None,
+                    shape: crate::data::Shape::Box,
                 },
             ],
             footprint: [16.0, 16.0],
@@ -911,6 +924,7 @@ mod tests {
                 colour: [0x7A, 0x7F, 0x86],
                 trim: false,
                 windows: None,
+                shape: crate::data::Shape::Box,
             }],
             footprint: [16.0, 16.0],
         };

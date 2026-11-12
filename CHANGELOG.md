@@ -15,6 +15,10 @@ Corporate Warfare 2.0 is the biggest change since the first release. The company
 
 ### Added
 
+- The 3D map is now the map. It is on by default (Settings, Graphics, "3D map"; the classic flat map stays for computers with no usable graphics card). A plant keeps its true size up close and never shrinks below a readable size as you pull back, and plants stand far enough apart that they never overlap or stand in the water.
+- Plant models are built from proper solids instead of stacked boxes: round tanks and silos with domed lids, waisted cooling towers, round banded chimneys, sawtooth factory roofs and pitched barn roofs.
+- City streets lie on a fixed grid of the real world, with blocks about 150 metres across, so a city is the same city at every zoom. The small streets drop out as you pull back, then the avenues.
+- Coastlines and the edges between forest, fields and city are smooth rounded lines instead of staircases of squares.
 **Careers**
 
 - Careers have a start, a goal and an ending. When you start a new game you can take the helm of an established company instead of founding one: the game offers three companies from the middle of the league, in different industries where it can, with their value, sales, plants, workforce and the price of control. You buy a controlling block from the company's outside shareholders at the opening share price, so they are paid and nothing is made out of thin air. If your usual starting fortune cannot pay for control, it is raised to just cover the block and the game says so. The old chief executive steps down, the board stays, and from the first week the company is yours.

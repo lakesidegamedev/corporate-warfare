@@ -34,6 +34,10 @@ pub struct Vertex {
     pub local: [f32; 3],
     /// Position on the face, 0 to 1 each way (building outlines); unused for terrain.
     pub uv: [f32; 2],
+    /// The building this vertex belongs to: where it stands (km) and how wide it is (km). The
+    /// vertex shader keeps a building from shrinking below a readable size on screen by scaling
+    /// it about this point. A width of zero (terrain, roads, props) means never scaled.
+    pub anchor: [f32; 4],
 }
 
 const UV: [[f32; 2]; 4] = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
@@ -44,7 +48,23 @@ pub const VERTEX_BYTES: usize = std::mem::size_of::<Vertex>();
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
+    /// The anchor given to the vertices pushed from now on (see [`Vertex::anchor`]).
+    pub anchor: [f32; 4],
 }
+
+/// How much a building `size_km` wide is enlarged about its base so it stays `min_px` pixels
+/// wide when a pixel covers `km_px` kilometres: 1 up close (true size), growing smoothly as the
+/// camera pulls away, but never wider than `max_km`.
+pub fn grow_k(size_km: f32, km_px: f32, min_px: f32, max_km: f32) -> f32 {
+    if size_km <= 0.0 {
+        return 1.0;
+    }
+    (min_px * km_px / size_km).clamp(1.0, (max_km / size_km).max(1.0))
+}
+
+/// The widest a plant is ever drawn, in kilometres: its landmark size at the zooms the game is
+/// played at. Plants are stood this far apart, so they never overlap however far they grow.
+pub const LANDMARK_KM: f32 = 5.0;
 
 impl Mesh {
     fn quad(&mut self, p: [[f32; 3]; 4], normal: [f32; 3], colour: [u8; 4], local: [[f32; 3]; 4]) {
@@ -56,6 +76,7 @@ impl Mesh {
                 colour,
                 local: local[i],
                 uv: UV[i],
+                anchor: self.anchor,
             });
         }
         self.indices
@@ -473,6 +494,143 @@ pub fn terrain(scene: &Scene) -> Mesh {
     m
 }
 
+/// The faces of one model part: a box, or the solid its shape names, filling the same box.
+pub(crate) fn shape_faces(
+    m: &mut Mesh,
+    tf: &dyn Fn([f32; 3]) -> [f32; 3],
+    rot: &dyn Fn([f32; 3]) -> [f32; 3],
+    b: &crate::data::VoxelBox,
+    rgb: [u8; 3],
+    kind: u8,
+) {
+    use crate::data::Shape;
+    const SIDES: usize = 12;
+    let (a, z) = (b.min, b.max);
+    let mid = [
+        (a[0] + z[0]) / 2.0,
+        (a[1] + z[1]) / 2.0,
+        (a[2] + z[2]) / 2.0,
+    ];
+    let half = [
+        (z[0] - a[0]) / 2.0,
+        (z[1] - a[1]) / 2.0,
+        (z[2] - a[2]) / 2.0,
+    ];
+    let c = [rgb[0], rgb[1], rgb[2], KIND_PLAIN];
+    let mut face = |p: [[f32; 3]; 4]| {
+        // Flat normal from the first three corners (counter clockwise seen from outside).
+        let u = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
+        let w = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
+        let n = [
+            u[1] * w[2] - u[2] * w[1],
+            u[2] * w[0] - u[0] * w[2],
+            u[0] * w[1] - u[1] * w[0],
+        ];
+        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-6);
+        m.quad(
+            [tf(p[0]), tf(p[1]), tf(p[2]), tf(p[3])],
+            rot([n[0] / len, n[1] / len, n[2] / len]),
+            c,
+            p,
+        );
+    };
+    let ring = |k: usize| {
+        let t = (k % SIDES) as f32 / SIDES as f32 * std::f32::consts::TAU;
+        (t.cos(), t.sin())
+    };
+    match b.shape {
+        Shape::Box => box_faces(m, tf, rot, a, z, rgb, kind),
+        Shape::Round { bottom, top } => {
+            for k in 0..SIDES {
+                let ((c0, s0), (c1, s1)) = (ring(k), ring(k + 1));
+                let at = |cs: (f32, f32), r: f32, h: f32| {
+                    [mid[0] + cs.0 * half[0] * r, mid[1] + cs.1 * half[1] * r, h]
+                };
+                face([
+                    at((c0, s0), bottom, a[2]),
+                    at((c1, s1), bottom, a[2]),
+                    at((c1, s1), top, z[2]),
+                    at((c0, s0), top, z[2]),
+                ]);
+                if top > 0.0 {
+                    let centre = [mid[0], mid[1], z[2]];
+                    face([
+                        centre,
+                        at((c0, s0), top, z[2]),
+                        at((c1, s1), top, z[2]),
+                        centre,
+                    ]);
+                }
+            }
+        }
+        Shape::RoundX | Shape::RoundY => {
+            let along_x = b.shape == Shape::RoundX;
+            for k in 0..SIDES {
+                let ((c0, s0), (c1, s1)) = (ring(k), ring(k + 1));
+                // The circle stands across the long axis: one of its axes is up.
+                let at = |cs: (f32, f32), end: f32| {
+                    if along_x {
+                        [end, mid[1] + cs.0 * half[1], mid[2] + cs.1 * half[2]]
+                    } else {
+                        [mid[0] - cs.0 * half[0], end, mid[2] + cs.1 * half[2]]
+                    }
+                };
+                let (lo, hi) = if along_x { (a[0], z[0]) } else { (a[1], z[1]) };
+                face([
+                    at((c0, s0), lo),
+                    at((c0, s0), hi),
+                    at((c1, s1), hi),
+                    at((c1, s1), lo),
+                ]);
+                let cap = |end: f32| {
+                    if along_x {
+                        [end, mid[1], mid[2]]
+                    } else {
+                        [mid[0], end, mid[2]]
+                    }
+                };
+                face([cap(hi), at((c0, s0), hi), at((c1, s1), hi), cap(hi)]);
+                face([cap(lo), at((c1, s1), lo), at((c0, s0), lo), cap(lo)]);
+            }
+        }
+        Shape::GableX | Shape::GableY => {
+            // Eaves at the bottom of the box, the ridge along the middle at the top.
+            let (sw, se, ne, nw) = (
+                [a[0], a[1], a[2]],
+                [z[0], a[1], a[2]],
+                [z[0], z[1], a[2]],
+                [a[0], z[1], a[2]],
+            );
+            if b.shape == Shape::GableX {
+                let (rw, re) = ([a[0], mid[1], z[2]], [z[0], mid[1], z[2]]);
+                face([sw, se, re, rw]);
+                face([ne, nw, rw, re]);
+                face([se, ne, re, re]);
+                face([nw, sw, rw, rw]);
+            } else {
+                let (rs, rn) = ([mid[0], a[1], z[2]], [mid[0], z[1], z[2]]);
+                face([se, ne, rn, rs]);
+                face([nw, sw, rs, rn]);
+                face([sw, se, rs, rs]);
+                face([ne, nw, rn, rn]);
+            }
+        }
+        Shape::Pyramid => {
+            let top = [mid[0], mid[1], z[2]];
+            let (sw, se, ne, nw) = (
+                [a[0], a[1], a[2]],
+                [z[0], a[1], a[2]],
+                [z[0], z[1], a[2]],
+                [a[0], z[1], a[2]],
+            );
+            face([sw, se, top, top]);
+            face([se, ne, top, top]);
+            face([ne, nw, top, top]);
+            face([nw, sw, top, top]);
+        }
+    }
+}
+
 pub(crate) fn box_faces(
     m: &mut Mesh,
     tf: &dyn Fn([f32; 3]) -> [f32; 3],
@@ -578,6 +736,17 @@ pub fn buildings_where(scene: &Scene, keep: impl Fn(usize, &Placement) -> bool) 
         let (z_top, z_low) = (level_z_km(scene, hi), level_z_km(scene, lo));
         let (s, c) = p.yaw.to_radians().sin_cos();
         let v = scene.voxel_km * p.scale;
+        // Only companies' plants keep a minimum size on screen; the scenery stays true to scale.
+        m.anchor = if p.owner == Owner::Scenery {
+            [0.0; 4]
+        } else {
+            [
+                cx,
+                cy,
+                z_top,
+                model.footprint[0].max(model.footprint[1]) * v,
+            ]
+        };
         let rot = move |n: [f32; 3]| [n[0] * c - n[1] * s, n[0] * s + n[1] * c, n[2]];
         let tf = move |q: [f32; 3]| {
             [
@@ -621,12 +790,11 @@ pub fn buildings_where(scene: &Scene, keep: impl Fn(usize, &Placement) -> bool) 
             } else {
                 b.colour
             };
-            box_faces(
+            shape_faces(
                 &mut m,
                 &tf,
                 &rot,
-                b.min,
-                b.max,
+                b,
                 colour,
                 if tall { KIND_BUILDING } else { KIND_PLAIN },
             );
@@ -650,6 +818,7 @@ pub fn buildings_where(scene: &Scene, keep: impl Fn(usize, &Placement) -> bool) 
             }
         }
     }
+    m.anchor = [0.0; 4];
     m
 }
 
@@ -1265,6 +1434,7 @@ pub fn roads(scene: &Scene, band: usize) -> RoadMesh {
                     colour,
                     local: [side, end, along],
                     uv: [other_along, 0.0],
+                    anchor: [0.0; 4],
                 });
             }
             m.indices
@@ -1906,6 +2076,7 @@ mod tests {
             colour,
             trim,
             windows: Some(windows),
+            shape: crate::data::Shape::Box,
         };
         VoxelModel {
             footprint: [24.0, 24.0],

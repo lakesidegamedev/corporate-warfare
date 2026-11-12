@@ -40,6 +40,10 @@ pub struct Style {
     /// pulls back and is gone (flat class colour) once the step would pass the largest texel.
     pub texel_km: (f32, f32),
     pub texel_min_px: f32,
+    /// A company's plant never draws narrower than this many pixels: it is enlarged about its
+    /// base as the camera pulls away (0 switches the rule off), up to `building_max_km` wide.
+    pub building_min_px: f32,
+    pub building_max_km: f32,
     pub cloud_altitude_km: f32,
     /// Half width in screen pixels of the dithered band between two ground classes.
     pub dither: f32,
@@ -98,6 +102,8 @@ impl Default for Style {
             road_detail_km: 450.0,
             texel_km: (0.125, 4.0),
             texel_min_px: 2.0,
+            building_min_px: 38.0,
+            building_max_km: mesh::LANDMARK_KM,
             cloud_altitude_km: 18.0,
             dither: 2.5,
             cloud_clear_km: (600.0, 1800.0),
@@ -251,6 +257,7 @@ struct Globals {
     palette: [[f32; 4]; COLOURS],
     day: [[f32; 4]; COLOURS],
     anim: [f32; 4],
+    grow: [f32; 4],
 }
 
 struct GpuMesh {
@@ -571,7 +578,7 @@ impl Renderer {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
-        let attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x3, 4 => Float32x2];
+        let attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x3, 4 => Float32x2, 5 => Float32x4];
         let vbl = wgpu::VertexBufferLayout {
             array_stride: VERTEX_BYTES as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -1197,6 +1204,7 @@ impl Renderer {
             palette: palette.flat(),
             day: Palette::day().flat(),
             anim: [clock, cloud_drift[0], cloud_drift[1], 0.0],
+            grow: [px_km, style.building_min_px, style.building_max_km, 0.0],
         };
         self.queue
             .write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&globals));

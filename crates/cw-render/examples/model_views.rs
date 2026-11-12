@@ -60,7 +60,7 @@ struct View {
     grid: bool,
 }
 
-const VIEWS: [View; 8] = [
+const VIEWS: [View; 11] = [
     View {
         name: "columbus",
         scenario: "great-lakes-2000",
@@ -149,6 +149,39 @@ const VIEWS: [View; 8] = [
         set: 0,
         grid: false,
     },
+    View {
+        name: "cle120",
+        scenario: "great-lakes-2000",
+        lon: -81.69,
+        lat: 41.47,
+        width_km: 120.0,
+        tilt: 48.0,
+        heading: 0.0,
+        set: 0,
+        grid: true,
+    },
+    View {
+        name: "cle40",
+        scenario: "great-lakes-2000",
+        lon: -81.69,
+        lat: 41.47,
+        width_km: 40.0,
+        tilt: 50.0,
+        heading: 0.0,
+        set: 0,
+        grid: true,
+    },
+    View {
+        name: "cle12",
+        scenario: "great-lakes-2000",
+        lon: -81.69,
+        lat: 41.47,
+        width_km: 12.0,
+        tilt: 50.0,
+        heading: 0.0,
+        set: 0,
+        grid: true,
+    },
 ];
 
 fn main() {
@@ -194,7 +227,7 @@ fn main() {
             for row in 0..3 {
                 for col in 0..3 {
                     let (kind, size) = SETS[v.set][i];
-                    let (dx, dy) = ((col as f32 - 1.0) * 4.6, (row as f32 - 1.0) * 4.2);
+                    let (dx, dy) = ((col as f32 - 1.0) * 6.0, (row as f32 - 1.0) * 5.6 - 6.0);
                     let key = if kind == "site" {
                         format!("site/{size}")
                     } else {
@@ -225,15 +258,17 @@ fn main() {
             heading_deg: v.heading,
             fov_deg: 28.0,
         };
+        let clean = std::env::var("CW_CLEAN").is_ok();
         let style = Style {
-            pixel_scale: 2,
+            pixel_scale: if clean { 1 } else { 2 },
             ..if night {
                 Style::night()
             } else {
                 Style::default()
             }
         };
-        let f = renderer.render_to_rgba(scene, &cam, &style, 1200, 750);
+        let (rw, rh) = if clean { (2400, 1500) } else { (1200, 750) };
+        let f = renderer.render_to_rgba(scene, &cam, &style, rw, rh);
         let rgb: Vec<u8> = f
             .rgba
             .chunks_exact(4)

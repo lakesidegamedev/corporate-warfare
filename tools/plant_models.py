@@ -56,9 +56,15 @@ class M:
     def __init__(self):
         self.boxes = []
 
-    def b(self, x0, y0, z0, x1, y1, z1, col, trim=False, win=False):
+    def b(self, x0, y0, z0, x1, y1, z1, col, trim=False, win=False, shape=None):
+        """One part. `shape` fills the same box with a solid the renderer knows: cyl, cone,
+        taper, flare, dome (upright and round), cylx, cyly (lying), gablex, gabley (pitched roof,
+        ridge along x or y), pyr."""
         assert x1 > x0 and y1 > y0 and z1 > z0, (x0, y0, z0, x1, y1, z1)
-        self.boxes.append((x0, y0, z0, x1, y1, z1, col, trim, win))
+        if shape:
+            self.boxes.append((x0, y0, z0, x1, y1, z1, col, trim, win, shape))
+        else:
+            self.boxes.append((x0, y0, z0, x1, y1, z1, col, trim, win))
 
     def z(self, z):
         return PAD_Z + z
@@ -115,7 +121,7 @@ class M:
             step = (x1 - x0) / ribs
             for i in range(ribs):
                 a = x0 + step * i + step * 0.2
-                self.b(a, y0 + 0.5, top, a + step * 0.35, y1 - 0.5, top + 0.6, c("water", 3))
+                self.b(a, y0 + 0.3, top, a + step * 0.7, y1 - 0.3, top + 0.9, c("water", 3), shape="gabley")
         else:
             self.roof_kit(x0, y0, x1, y1, top, vents, ac, sky)
         if docks and y0 - 0.25 >= -F:
@@ -138,27 +144,24 @@ class M:
         """Octagonal tank: a centre column and two side strips, with a smaller lid."""
         z0 = PAD_Z if z0 is None else z0
         a = w / 2
-        self.b(cx - a + 1, cy - a, z0, cx + a - 1, cy + a, z0 + h, wall)
-        self.b(cx - a, cy - a + 1, z0, cx - a + 1, cy + a - 1, z0 + h, wall)
-        self.b(cx + a - 1, cy - a + 1, z0, cx + a, cy + a - 1, z0 + h, wall)
-        self.b(cx - a + 1.2, cy - a + 1.2, z0 + h, cx + a - 1.2, cy + a - 1.2, z0 + h + 0.4, lid)
+        self.b(cx - a, cy - a, z0, cx + a, cy + a, z0 + h, wall, shape="cyl")
+        self.b(cx - a, cy - a, z0 + h, cx + a, cy + a, z0 + h + 0.4, lid, shape="dome")
         return z0 + h + 0.4
 
     def octa(self, cx, cy, w, z0, h, col):
         """Plain octagonal drum, no lid (cooling tower sections, silos)."""
         a = w / 2
-        self.b(cx - a + 1, cy - a, z0, cx + a - 1, cy + a, z0 + h, col)
-        self.b(cx - a, cy - a + 1, z0, cx - a + 1, cy + a - 1, z0 + h, col)
-        self.b(cx + a - 1, cy - a + 1, z0, cx + a, cy + a - 1, z0 + h, col)
+        self.b(cx - a, cy - a, z0, cx + a, cy + a, z0 + h, col, shape="cyl")
         return z0 + h
 
     def cooling(self, cx, cy, w, h):
         """Hyperbolic cooling tower in three drums: wide base, narrow waist, flared rim."""
+        a = w / 2
         z = PAD_Z
-        z = self.octa(cx, cy, w, z, h * 0.38, c("cloud", 2))
-        z = self.octa(cx, cy, w - 1.6, z, h * 0.40, c("cloud", 3))
-        z = self.octa(cx, cy, w - 0.8, z, h * 0.22, c("cloud", 2))
-        return z
+        self.b(cx - a, cy - a, z, cx + a, cy + a, z + h * 0.62, c("cloud", 2), shape="taper")
+        b = a * 0.86
+        self.b(cx - b, cy - b, z + h * 0.62, cx + b, cy + b, z + h, c("cloud", 3), shape="flare")
+        return z + h
 
     def dike(self, x0, y0, x1, y1):
         """A low bund wall round a tank farm (four thin boxes on the pad)."""
@@ -175,15 +178,15 @@ class M:
         a = w / 2
         seg = h / 4.0
         for i in range(4):
-            self.b(cx - a, cy - a, z0 + seg * i, cx + a, cy + a, z0 + seg * (i + 1), cols[i % 2])
-        self.b(cx - a - 0.2, cy - a - 0.2, z0 + h, cx + a + 0.2, cy + a + 0.2, z0 + h + 0.6, c("rock", 0))
+            self.b(cx - a, cy - a, z0 + seg * i, cx + a, cy + a, z0 + seg * (i + 1), cols[i % 2], shape="cyl")
+        self.b(cx - a - 0.2, cy - a - 0.2, z0 + h, cx + a + 0.2, cy + a + 0.2, z0 + h + 0.6, c("rock", 0), shape="cyl")
         return z0 + h + 0.6
 
     def column(self, cx, cy, w, h, col, cap, z0=None):
         z0 = PAD_Z if z0 is None else z0
         a = w / 2
-        self.b(cx - a, cy - a, z0, cx + a, cy + a, z0 + h - 0.5, col)
-        self.b(cx - a, cy - a, z0 + h - 0.5, cx + a, cy + a, z0 + h, cap)
+        self.b(cx - a, cy - a, z0, cx + a, cy + a, z0 + h - 0.5, col, shape="cyl")
+        self.b(cx - a, cy - a, z0 + h - 0.5, cx + a, cy + a, z0 + h, cap, shape="dome")
 
     def rack(self, x0, x1, y, h=2.0, col=None):
         col = col or c("signal", 3)
@@ -198,7 +201,7 @@ class M:
     def dish(self, x, y, z0, w=2.0):
         """A satellite dish: a short post and a wide shallow bowl."""
         self.b(x + w / 2 - 0.3, y + w / 2 - 0.3, z0, x + w / 2 + 0.3, y + w / 2 + 0.3, z0 + 0.9, c("rock", 1))
-        self.b(x, y, z0 + 0.9, x + w, y + w, z0 + 1.3, c("snow", 3))
+        self.b(x, y, z0 + 0.9, x + w, y + w, z0 + 1.5, c("snow", 3), shape="flare")
 
     def crane(self, x, y, h, jib=9, col=None, rot=0):
         col = col or c("gold", 3)
@@ -319,8 +322,7 @@ def agriculture(s):
     m.b(-1.5, 1, PAD_Z, 5.5, 5.5, PAD_Z + 0.2, c("field", 1))
     # barn: low walls, a stepped gable roof
     m.b(-10, -10, PAD_Z, -2, -4, PAD_Z + 2.0, c("brick", 2))
-    m.b(-10, -9, PAD_Z + 2.0, -2, -5, PAD_Z + 3.0, c("brick", 1), True)
-    m.b(-8.5, -8, PAD_Z + 3.0, -3.5, -6, PAD_Z + 3.6, c("brick", 1), True)
+    m.b(-10.3, -10.3, PAD_Z + 2.0, -1.7, -3.7, PAD_Z + 4.4, c("brick", 1), True, shape="gablex")
     m.door(-6, -10, 2.2, 1.7, c("cloud", 3))
     n = 2 + s
     for i in range(n):  # silos with domed caps
@@ -331,7 +333,7 @@ def agriculture(s):
         m.b(6.5, 3.5, PAD_Z, 11, 10.5, PAD_Z + 2.0, c("soil", 3))
     # farmhouse and tractor
     m.b(6.0, -11, PAD_Z, 10.4, -8.8, PAD_Z + 1.6, c("cloud", 3), win=False)
-    m.b(5.8, -11, PAD_Z + 1.6, 10.6, -8.6, PAD_Z + 2.1, c("brick", 2), True)
+    m.b(5.8, -11.2, PAD_Z + 1.6, 10.6, -8.6, PAD_Z + 2.9, c("brick", 2), True, shape="gablex")
     m.b(-1.5, -11.2, PAD_Z, 0.1, -10.2, PAD_Z + 0.9, c("signal", 2))
     return m
 

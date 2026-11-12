@@ -187,7 +187,7 @@ class AppSettings(private val file: File) : ViewPrefs {
             props.setProperty("interstates", g.interstates.toString())
             props.setProperty("seasons", g.seasons.toString())
             props.setProperty("labels", g.labels.toString())
-            props.setProperty("newMap", g.newMap.toString())
+            props.setProperty("map3d", g.newMap.toString())
             g.directMap?.let { props.setProperty("directMap", it.toString()) }
         }
         setupFlag?.let { props.setProperty("setupDone", it) }
@@ -238,7 +238,8 @@ class AppSettings(private val file: File) : ViewPrefs {
             interstates = bool("interstates", base.interstates),
             seasons = bool("seasons", base.seasons),
             labels = int("labels", base.labels, 0..2),
-            newMap = bool("newMap", base.newMap),
+            // A new key from 2.0: the 3D map is on unless the player turns it off (the 1.x key defaulted to off).
+            newMap = bool("map3d", base.newMap),
             directMap = props.getProperty("directMap")?.toBooleanStrictOrNull() ?: base.directMap,
         )
     }

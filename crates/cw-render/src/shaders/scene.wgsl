@@ -21,6 +21,7 @@ struct Globals {
     palette: array<vec4<f32>, PALETTE_LEN>,
     day: array<vec4<f32>, PALETTE_LEN>,
     anim: vec4<f32>,       // animation clock in seconds (wrapped), cloud drift (image u, v), unused
+    grow: vec4<f32>,       // km a pixel covers at the target, a plant's minimum width in pixels, widest it may grow to in km
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
@@ -39,7 +40,17 @@ struct VIn {
     @location(2) colour: vec4<f32>,
     @location(3) local: vec3<f32>,
     @location(4) uv: vec2<f32>,
+    @location(5) anchor: vec4<f32>,
 };
+
+// A company's plant keeps a minimum width on screen: it is scaled about its base.
+fn grown(v: VIn) -> vec3<f32> {
+    if (v.anchor.w <= 0.0 || g.grow.y <= 0.0) {
+        return v.pos;
+    }
+    let k = clamp(g.grow.y * g.grow.x / v.anchor.w, 1.0, max(g.grow.z / v.anchor.w, 1.0));
+    return v.anchor.xyz + (v.pos - v.anchor.xyz) * k;
+}
 
 struct VOut {
     @builtin(position) clip: vec4<f32>,
@@ -54,8 +65,9 @@ struct VOut {
 @vertex
 fn vs_main(v: VIn) -> VOut {
     var o: VOut;
-    o.clip = g.view_proj * vec4<f32>(v.pos, 1.0);
-    o.world = v.pos;
+    let pos = grown(v);
+    o.clip = g.view_proj * vec4<f32>(pos, 1.0);
+    o.world = pos;
     o.normal = v.normal;
     o.colour = v.colour.rgb;
     o.kind = u32(round(v.colour.a * 255.0));
@@ -66,7 +78,7 @@ fn vs_main(v: VIn) -> VOut {
 
 @vertex
 fn vs_shadow(v: VIn) -> @builtin(position) vec4<f32> {
-    return g.light_vp * vec4<f32>(v.pos, 1.0);
+    return g.light_vp * vec4<f32>(grown(v), 1.0);
 }
 
 fn pal(ramp: u32, step: i32) -> vec3<f32> {
@@ -85,11 +97,36 @@ fn lonlat(xy: vec2<f32>) -> vec2<f32> {
     return vec2<f32>(g.proj.x + xy.x / g.proj.z, g.proj.y + xy.y / g.proj.w);
 }
 
+fn mask_texel(x: i32, y: i32) -> vec4<f32> {
+    let c = clamp(vec2<i32>(x, y), vec2<i32>(0, 0), vec2<i32>(i32(g.mask_dim.x) - 1, i32(g.mask_dim.y) - 1));
+    return textureLoad(mask_tex, c, 0) * 255.0;
+}
+
+fn water_kind(m: vec4<f32>) -> bool {
+    return m.b > 0.5 && m.b < 2.5;
+}
+
+// The mask at a point, with a smooth shoreline: the four texels round the point vote with eased
+// bilinear weights on water against land, and the heaviest texel of the winning side is returned.
+// So a coast is a clean rounded line at every zoom, never a staircase of mask cells, and the
+// answer is still one whole texel (region, kind) with nothing blended.
 fn mask_at(ll: vec2<f32>) -> vec4<f32> {
     let ppd = g.mask_dim.z;
-    let x = clamp(i32(floor((ll.x - g.mask_b.x) * ppd)), 0, i32(g.mask_dim.x) - 1);
-    let y = clamp(i32(floor((g.mask_b.w - ll.y) * ppd)), 0, i32(g.mask_dim.y) - 1);
-    return textureLoad(mask_tex, vec2<i32>(x, y), 0) * 255.0;
+    let p = vec2<f32>((ll.x - g.mask_b.x) * ppd, (g.mask_b.w - ll.y) * ppd) - vec2<f32>(0.5, 0.5);
+    let b = vec2<i32>(floor(p));
+    let f0 = p - floor(p);
+    let f = f0 * f0 * (3.0 - 2.0 * f0);
+    let t = array<vec4<f32>, 4>(mask_texel(b.x, b.y), mask_texel(b.x + 1, b.y), mask_texel(b.x, b.y + 1), mask_texel(b.x + 1, b.y + 1));
+    let w = array<f32, 4>((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    var wet = 0.0;
+    for (var i = 0; i < 4; i++) { if (water_kind(t[i])) { wet += w[i]; } }
+    let want = wet > 0.5;
+    var best = -1.0;
+    var out = t[0];
+    for (var i = 0; i < 4; i++) {
+        if (water_kind(t[i]) == want && w[i] > best) { best = w[i]; out = t[i]; }
+    }
+    return out;
 }
 
 fn is_water(m: vec4<f32>) -> bool {
@@ -138,24 +175,22 @@ fn class_at(tc: vec2<i32>) -> u32 {
 // to zero at the band edge (ordered dither), so a transition is a few pixels of stipple and
 // the middle of a patch is always one flat colour.
 fn ground_class(tcf: vec2<f32>, fw: vec2<f32>, frag: vec2<f32>, band: f32) -> u32 {
-    let tc = vec2<i32>(floor(tcf));
-    let f = tcf - floor(tcf);
-    let own = class_at(tc);
-    if (band <= 0.0) { return own; }
-    let rate = max(fw, vec2<f32>(1e-4, 1e-4));
-    var best_d = 1e9;
-    var other = own;
-    let dist = array<f32, 4>((1.0 - f.x) / rate.x, f.x / rate.x, (1.0 - f.y) / rate.y, f.y / rate.y);
-    let step = array<vec2<i32>, 4>(vec2<i32>(1, 0), vec2<i32>(-1, 0), vec2<i32>(0, 1), vec2<i32>(0, -1));
+    // The four texels round the point vote with eased bilinear weights and the heaviest class
+    // wins: a border between two kinds of ground is a clean rounded line, not a staircase.
+    let p = tcf - vec2<f32>(0.5, 0.5);
+    let b = vec2<i32>(floor(p));
+    let f0 = p - floor(p);
+    let f = f0 * f0 * (3.0 - 2.0 * f0);
+    let c = array<u32, 4>(class_at(b), class_at(b + vec2<i32>(1, 0)), class_at(b + vec2<i32>(0, 1)), class_at(b + vec2<i32>(1, 1)));
+    let w = array<f32, 4>((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    var best = -1.0;
+    var out = c[0];
     for (var i = 0; i < 4; i++) {
-        let n = class_at(tc + step[i]);
-        if (n != own && dist[i] < best_d) { best_d = dist[i]; other = n; }
+        var sum = 0.0;
+        for (var j = 0; j < 4; j++) { if (c[j] == c[i]) { sum += w[j]; } }
+        if (sum > best) { best = sum; out = c[i]; }
     }
-    if (best_d < band) {
-        let p = 0.5 * (1.0 - best_d / band);
-        if (bayer8(frag) < p) { return other; }
-    }
-    return own;
+    return out;
 }
 
 fn variant_at(tc: vec2<i32>) -> u32 {
@@ -290,7 +325,7 @@ fn axis_street(t: i32, band: i32, salt: i32, span: i32, lo: i32, rng: u32, width
 
 // Returns (tone, green): tone -2 avenue, -1 street, 0 block, 1 light block; green 0 none, 1 lawn,
 // 2 tree, 3 dark lawn of a park.
-fn city_texel(cls: u32, zone: u32, tx: i32, ty: i32) -> vec2<i32> {
+fn city_texel(cls: u32, zone: u32, tx: i32, ty: i32, aw: i32, streets: bool) -> vec2<i32> {
     var span = 8;
     var lo = 2;
     var rng = 4u;
@@ -301,7 +336,8 @@ fn city_texel(cls: u32, zone: u32, tx: i32, ty: i32) -> vec2<i32> {
     // Avenues: two texels wide, continuous over the whole map.
     let avx = imod(tx - i32(ihash(tx >> 6, 91) % 5u), av);
     let avy = imod(ty - i32(ihash(ty >> 6, 92) % 5u), av);
-    if (avx < 2 || avy < 2) { return vec2<i32>(select(-2, -1, cls == 5u && zone != 1u), 0); }
+    if (avx < aw || avy < aw) { return vec2<i32>(select(-2, -1, cls == 5u && zone != 1u), 0); }
+    if (!streets) { return vec2<i32>(0, 0); }
     let sx = axis_street(tx, ty >> 6, 11, span, lo, rng, 1);
     let sy = axis_street(ty, tx >> 6, 23, span, lo, rng, 1);
     if (sx.x == 1 || sy.x == 1) { return vec2<i32>(-1, 0); }
@@ -561,7 +597,20 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
             let ty = i32(floor(in.world.y / g.tex.x));
             var tv = 0;
             if (cls >= 5u) {
-                let ct = city_texel(cls, variant_at(tc) & 3u, tx, ty);
+                // Streets are laid out on a fixed lattice of the world (a cell is about 31 m, a
+                // block four to twenty cells), so a city block is the same piece of ground at
+                // every zoom. Streets show while a cell is at least a pixel wide; further out
+                // only the avenues, at one pixel; further still the city is its flat colour.
+                let ckm = 0.03125;
+                let cpx = ckm / max(length(dpx.xy), 1e-6);
+                var ct = vec2<i32>(0, 0);
+                let cx = i32(floor(in.world.x / ckm));
+                let cy = i32(floor(in.world.y / ckm));
+                if (cpx >= 1.0) {
+                    ct = city_texel(cls, variant_at(tc) & 3u, cx, cy, 2, true);
+                } else if (cpx >= 0.16) {
+                    ct = city_texel(cls, variant_at(tc) & 3u, cx, cy, i32(ceil(1.2 / cpx)), false);
+                }
                 tv = clamp(ct.x, -2, 1);
                 if (night && ct.y == 0 && ct.x >= 0) {
                     let lamp = city_light(cls, variant_at(tc) & 3u, tx, ty, 1u);

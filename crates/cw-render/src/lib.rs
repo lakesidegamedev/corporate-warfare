@@ -24,8 +24,8 @@ pub use data::{
     Activity, AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, KM_PER_DEG_LAT,
     LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, LINE_RIVER, Lane, Line, Look, Mask, Owner, PLANT_MODELS,
     PLAYER_REGIONS, Placement, Projection, RegionInfo, SCENARIOS, ScenarioSpec, Scene,
-    SceneOptions, TINT_HEAT, TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel, WATER_LAKE, WATER_OCEAN,
-    downtown_tier,
+    SceneOptions, Shape, TINT_HEAT, TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel, WATER_LAKE,
+    WATER_OCEAN, downtown_tier,
 };
 pub use game::{
     PlantSite, SiteStatus, firm_colour, layout_plants, plant_size_km, ramp_by_name, region_tints,
@@ -43,9 +43,9 @@ pub use anim::{
 pub use freight::{harbour_sites, summary as fleet_summary, vehicles_at};
 pub use ground::{G_CORE, G_URBAN, snow_cover};
 pub use mesh::{
-    BuildingBox, ROAD_BANDS, RoadPoint, apron_extent_km, apron_land_boxes, apron_seam_steps,
-    bridge_sites, building_boxes, ground_z, river_chains, road_band, road_chains,
-    road_chains_for_band,
+    BuildingBox, LANDMARK_KM, ROAD_BANDS, RoadPoint, apron_extent_km, apron_land_boxes,
+    apron_seam_steps, bridge_sites, building_boxes, ground_z, grow_k, river_chains, road_band,
+    road_chains, road_chains_for_band,
 };
 pub use props::{
     CHUNK_MAX_PROPS, ChunkKey, MAX_WIDTH_KM as PROPS_MAX_KM, Placed, PropIndex, PropKind,
