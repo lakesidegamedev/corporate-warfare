@@ -281,6 +281,11 @@ pub struct RecipeTables {
     /// and the product index of its primary output.
     inputs: Vec<Vec<(u16, i64)>>,
     output_product: Vec<Option<u16>>,
+    /// The position of the recipe's industry in `INDUSTRIES`, None for an unknown name.
+    industry: Vec<Option<u8>>,
+    /// By `industry * products + product`: whether a recipe of the industry makes the product.
+    industry_makes: Vec<bool>,
+    products: usize,
     /// Whether any recipe names the product among its inputs, by product.
     any_use: Vec<bool>,
 }
@@ -296,9 +301,18 @@ impl RecipeTables {
             primary: vec![false; products.len() * n],
             inputs: Vec::with_capacity(n),
             output_product: Vec::with_capacity(n),
+            industry: Vec::with_capacity(n),
+            industry_makes: vec![false; INDUSTRIES.len() * products.len()],
+            products: products.len(),
             any_use: vec![false; products.len()],
         };
         for recipe in recipes {
+            tables.industry.push(
+                INDUSTRIES
+                    .iter()
+                    .position(|name| *name == recipe.industry)
+                    .map(|at| at as u8),
+            );
             tables.inputs.push(
                 recipe
                     .weekly_inputs_lots
@@ -325,6 +339,11 @@ impl RecipeTables {
                     tables.any_use[p] = true;
                 }
                 tables.makes[at] = recipe.makes(&product.id);
+                if tables.makes[at]
+                    && let Some(industry) = tables.industry[r]
+                {
+                    tables.industry_makes[industry as usize * products.len() + p] = true;
+                }
                 tables.primary[at] = recipe.output == product.id;
             }
         }
@@ -340,6 +359,19 @@ impl RecipeTables {
     /// The recipe's inputs that are products with their weekly lots per block, in id order.
     pub fn inputs(&self, recipe: u16) -> &[(u16, i64)] {
         &self.inputs[recipe as usize]
+    }
+
+    /// Whether any recipe of the industry makes the product.
+    pub fn industry_makes(&self, industry: u8, product: u16) -> bool {
+        self.industry_makes
+            .get(industry as usize * self.products + product as usize)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// The recipe's industry as its position in `INDUSTRIES`.
+    pub fn industry(&self, recipe: u16) -> Option<u8> {
+        self.industry[recipe as usize]
     }
 
     /// The product index of the recipe's primary output.

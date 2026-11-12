@@ -13,7 +13,6 @@ use cw_core::ids::Handle;
 use cw_core::ledger::{Account, Txn};
 use cw_data::Dataset;
 
-use crate::economy::operations::industry_index;
 use crate::state::{FacilityStatus, RaidCampaign, RaidRecord, World};
 
 /// The most blocks one build order may add. Past `FAST_BLOCKS` in flight, cost and lead time rise.
@@ -40,7 +39,7 @@ pub const AWAY_OUT_OF_STATE_BPS: i32 = 10_500;
 
 /// The engine index of a strategy's sector type.
 pub fn recipe_industry(dataset: &Dataset, recipe: u16) -> u8 {
-    industry_index(&dataset.recipes[recipe as usize].industry).unwrap_or(0)
+    dataset.recipe_tables.industry(recipe).unwrap_or(0)
 }
 
 /// A firm's plants in one region and sector type, in handle order.
@@ -171,20 +170,15 @@ pub fn cell(
             capacity_value(dataset, plant.recipe, plant.blocks);
     }
     // Headroom: imports of the sector's goods into the region that no local plant is meeting.
-    let outputs: Vec<u16> = dataset
-        .recipes
-        .iter()
-        .filter(|recipe| industry_index(&recipe.industry) == Some(industry))
-        .flat_map(|recipe| {
-            recipe
-                .outputs()
-                .filter_map(|(id, _)| dataset.product_index.get(id).copied())
-        })
-        .collect();
     let headroom = world
         .gateways
         .iter()
-        .filter(|gateway| gateway.region == region && outputs.contains(&gateway.product))
+        .filter(|gateway| gateway.region == region)
+        .filter(|gateway| {
+            dataset
+                .recipe_tables
+                .industry_makes(industry, gateway.product)
+        })
         .map(|gateway| gateway.smoothed_import_lots * dataset.reference_price(gateway.product))
         .sum();
     (by_firm.into_iter().collect(), headroom)
