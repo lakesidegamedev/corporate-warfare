@@ -73,7 +73,6 @@ fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f, calm: B
             val sun = Sun.side(p)
             if (cinematic) drawGlare(p, sun)
             val globeGraphics = graphics.copy(detail = MapDetail.Low, extrude = false, buildings = 0, traffic = 0)
-            val offset = Offset(size.width * offsetX, size.height * 0.08f)
             // One offset for every layer: paintGlobe and paintSky draw in this scope's translated space, where the
             // outlines and labels are drawn too. A baked layer holds the same picture, so it is drawn clear of the offset.
             val paintGlobe: DrawScope.(MapGeometryCache) -> Unit = { geo ->

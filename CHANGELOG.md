@@ -11,6 +11,10 @@ heading.
 
 ## [Unreleased]
 
+### Fixed
+- The main menu's scenario outlines and labels were drawn off the globe, out in space to its left. The globe and every layer on it now share one position at every window size, and the globe turns to face the scenario of your latest save, so that scenario's outline is always on the visible side.
+- New career, at the helm: the sales column is left out when no company has sales yet instead of showing dashes, and the chosen company now has a full description beside the list: sector, region, plants, workers, price of control and what the board will expect of you, read from the engine.
+
 Corporate Warfare 2.0 is the biggest change since the first release. The company you run now has a goal and an ending, the rivals build and fail and raid on the same rules you do, prices move for reasons you can read, and the desktop game has a new layout built around tables you can shape. Saves from every earlier version still open and play on as before: a game started without a career stays a sandbox.
 
 ### Added

@@ -2538,6 +2538,28 @@ pub fn career_lengths() -> career::CareerLengthsDto {
     }
 }
 
+/// What the board of the company you run expects, from the engine's career table (2.0 menus).
+#[derive(uniffi::Record)]
+pub struct BoardExpectationDto {
+    /// Weeks from the start before the board judges the results.
+    pub grace_weeks: u32,
+    /// Four-week periods of losses in a row that draw its warning.
+    pub loss_periods: u32,
+    /// Weeks the warning runs before removal; a profitable four-week period lifts it.
+    pub warning_weeks: u32,
+}
+
+/// The board's rule for a career, for the new-career screen.
+#[uniffi::export]
+pub fn board_expectation() -> BoardExpectationDto {
+    let b = &cw_data::careers::career_table().board;
+    BoardExpectationDto {
+        grace_weeks: b.grace_weeks,
+        loss_periods: b.loss_periods,
+        warning_weeks: b.warning_weeks,
+    }
+}
+
 /// One difficulty and the starting capital it gives, for the new-career screen (2.0 menus).
 #[derive(uniffi::Record)]
 pub struct DifficultyDto {

@@ -68,7 +68,10 @@ internal fun HelmOfferGrid(offers: List<HelmOfferDto>?, error: String?, pick: UL
     if (offers.isEmpty()) { Text("This scenario has no company to take the helm of. Found your own instead.", color = Palette.secondary, fontSize = 13.sp); return }
     val chosen = offers.firstOrNull { it.firm == pick }
     if (wide) {
+        // A column with nothing in it at week 0 is left out rather than shown as dashes.
+        val hasSales = offers.any { it.revenueYearCents > 0 }
         val cols = listOf("Rank" to 56.dp, "Company" to 220.dp, "Sector" to 120.dp, "Value" to 84.dp, "A year's sales" to 130.dp, "Plants" to 70.dp, "Workers" to 84.dp, "Price of control" to 140.dp, "Your fortune" to 120.dp)
+            .filter { hasSales || it.first != "A year's sales" }
         Column(Modifier.clip(Pixel.shape).border(1.dp, Palette.stroke, Pixel.shape)) {
             Row(Modifier.fillMaxWidth().background(Palette.panelRaised).padding(horizontal = 10.dp, vertical = 6.dp)) {
                 cols.forEach { (name, w) -> Text(name, color = Palette.secondary, fontSize = 11.sp, fontFamily = Pixel.font, modifier = Modifier.width(w)) }
@@ -78,8 +81,8 @@ internal fun HelmOfferGrid(offers: List<HelmOfferDto>?, error: String?, pick: UL
                 Row(
                     Modifier.fillMaxWidth().background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.panel).clickable { onPick(o.firm) }.padding(horizontal = 10.dp, vertical = 8.dp),
                 ) {
-                    val cells = listOf(
-                        "#${o.rank}", o.name, Sectors.name(o.industry), Format.compact(o.valueCents), if (o.revenueYearCents > 0) Format.compact(o.revenueYearCents) else DASH,
+                    val cells = listOfNotNull(
+                        "#${o.rank}", o.name, Sectors.name(o.industry), Format.compact(o.valueCents), if (hasSales) Format.compact(o.revenueYearCents) else null,
                         "${o.plants}", Format.count(o.workers), Format.compact(o.priceCents), Format.compact(o.fortuneCents),
                     )
                     cells.forEachIndexed { i, text ->
@@ -98,7 +101,7 @@ internal fun HelmOfferGrid(offers: List<HelmOfferDto>?, error: String?, pick: UL
                     Text("#${o.rank}  ${o.name}", color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text("${Sectors.name(o.industry)} in ${o.region}", color = Palette.secondary, fontSize = 12.sp)
                     Text(
-                        "Value ${Format.compact(o.valueCents)}, sales ${if (o.revenueYearCents > 0) Format.compact(o.revenueYearCents) + " a year" else "none yet"}, ${o.plants} plants, ${Format.count(o.workers)} workers",
+                        "Value ${Format.compact(o.valueCents)}${if (o.revenueYearCents > 0) ", sales " + Format.compact(o.revenueYearCents) + " a year" else ""}, ${o.plants} plants, ${Format.count(o.workers)} workers",
                         color = Palette.primaryText, fontSize = 12.sp,
                     )
                     Text("Price of control ${Format.compact(o.priceCents)}. Your fortune ${Format.compact(o.fortuneCents)}.", color = Palette.gold, fontSize = 12.sp)
@@ -107,12 +110,28 @@ internal fun HelmOfferGrid(offers: List<HelmOfferDto>?, error: String?, pick: UL
         }
     }
     if (chosen != null) {
-        Text(
-            "${chosen.name} is in ${chosen.region}. Taking the helm buys control from its outside shareholders at today's price: " +
-                "${Format.compact(chosen.priceCents)} for ${Format.count(chosen.sharesNeeded)} shares. The sitting chief executive leaves.",
-            color = Palette.primaryText, fontSize = 12.sp,
-        )
-        Text(fortuneNote(chosen), color = if (chosen.fortuneCents != chosen.standardFortuneCents) Palette.warning else Palette.secondary, fontSize = 12.sp)
+        val board = remember { uniffi.cw_ffi.boardExpectation() }
+        Column(
+            Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panel).border(1.dp, Palette.stroke, Pixel.shape).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(chosen.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+            Text(
+                "#${chosen.rank} by value. A ${Sectors.name(chosen.industry).lowercase()} company in ${chosen.region} with ${chosen.plants} plants and ${Format.count(chosen.workers)} workers, worth ${Format.compact(chosen.valueCents)}.",
+                color = Palette.primaryText, fontSize = 13.sp,
+            )
+            Text(
+                "Taking the helm buys control from its outside shareholders at today's price: " +
+                    "${Format.compact(chosen.priceCents)} for ${Format.count(chosen.sharesNeeded)} shares. The sitting chief executive leaves; the board stays.",
+                color = Palette.primaryText, fontSize = 13.sp,
+            )
+            Text(fortuneNote(chosen), color = if (chosen.fortuneCents != chosen.standardFortuneCents) Palette.warning else Palette.secondary, fontSize = 13.sp)
+            Text(
+                "What the board expects: after ${board.graceWeeks} weeks it reads the results every four weeks. ${board.lossPeriods} periods of losses in a row draw its warning, " +
+                    "and if no four-week period turns a profit within ${board.warningWeeks} weeks it removes you (unless you hold the majority of the votes).",
+                color = Palette.gold, fontSize = 13.sp,
+            )
+        }
     }
 }
 
