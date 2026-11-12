@@ -156,7 +156,7 @@ fun TycoonShell(store: GameStore, onSettings: () -> Unit, onMenu: () -> Unit = {
                     e.isCtrlPressed && e.key == Key.K -> { if (palette) closePalette() else openPalette(); true }
                     e.isCtrlPressed && e.key == Key.M -> { docked = !docked; true }
                     e.key == Key.Escape && palette -> { closePalette(); true }
-                    else -> Place.entries.firstOrNull { it.key.isNotEmpty() && keyName(e.key) == it.key }?.let { open(it); true } ?: false
+                    else -> placeForKey(e.key)?.let { open(it); true } ?: false
                 }
             },
     ) {
@@ -218,9 +218,10 @@ internal fun tutorialPage(p: Place): String = when (p) {
     else -> p.name.lowercase()
 }
 
-private fun keyName(k: Key): String = when (k) {
-    Key.F1 -> "F1"; Key.F2 -> "F2"; Key.F3 -> "F3"; Key.F4 -> "F4"; Key.F5 -> "F5"
-    Key.F6 -> "F6"; Key.F7 -> "F7"; Key.F8 -> "F8"; Key.F9 -> "F9"; else -> ""
+/** The place a bound key opens, or null when the key is not bound to a place. */
+private fun placeForKey(k: Key): Place? {
+    val action = KeyBindings.nameOf(k)?.let(KeyBindings::actionFor) ?: return null
+    return Place.entries.firstOrNull { "place.${it.name}" == action }
 }
 
 @Composable
@@ -350,7 +351,7 @@ private fun PlaceNav(place: Place, inbox: Int, onOpen: (Place) -> Unit, onSettin
                     group = p.group
                     Text(group.uppercase(), color = Palette.gold, fontFamily = Pixel.font, fontSize = 10.sp, modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 2.dp))
                 }
-                NavItem(p.title, p.key, p == place, if (p == Place.Inbox) inbox else 0) { onOpen(p) }
+                NavItem(p.title, KeyBindings.placeKey(p), p == place, if (p == Place.Inbox) inbox else 0) { onOpen(p) }
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))

@@ -12,6 +12,7 @@ heading.
 ## [Unreleased]
 
 ### Fixed
+- On a phone, the save browser's rows and the scenario cards no longer clip: long save and scenario names end in an ellipsis, the two lines of detail may wrap, and the New career here and Customize buttons drop to a second line when they do not both fit.
 - The main menu's scenario outlines and labels were drawn off the globe, out in space to its left. The globe and every layer on it now share one position at every window size, and the globe turns to face the scenario of your latest save, so that scenario's outline is always on the visible side.
 - New career, at the helm: the sales column is left out when no company has sales yet instead of showing dashes, and the chosen company now has a full description beside the list: sector, region, plants, workers, price of control and what the board will expect of you, read from the engine.
 
@@ -19,6 +20,9 @@ Corporate Warfare 2.0 is the biggest change since the first release. The company
 
 ### Added
 
+- What's new after an update: the first time you open the main menu after the game updates, a small panel lists the top five changes of the new version, with Close and Full changelog (the whole changelog in a scrolling view). It shows once for each version and never on a first install.
+- Settings, Controls and keys: the clock keys (Space, N, 1, 2, 3) and the page keys (F1 to F9) can be changed. Click a key, press the new one, and a key that is already in use is refused with a message that says what it is used for. Reset section puts the original keys back. Esc, Ctrl K and Ctrl M stay fixed, and the version 1 page layout keeps its own F keys.
+- New career, founding your own company: the last step now has a company name field, filled with a suggestion you can change. The game checks it in plain words (not empty, no line breaks, at most 40 characters) and Start career waits until it is acceptable. The founding form on the first turn opens with that name. There is no company colour to pick yet, because the game has none.
 - The game now works with the Lakeside launcher on Windows and Linux. When the launcher starts the game, it keeps the game up to date, so the game's own update checks, channel choice and version list switch off and Settings, Updates says so in plain words. If you are signed in to the launcher, the main menu and Settings show "Signed in as your name". Nothing else changes: you never need an account, the game never checks that you own it, and it plays fully offline. Anonymous statistics are untouched and are never linked to your account. See docs/rules/LAUNCHER.md.
 - The game's own updater now checks the SHA-256 checksum of a download against the one GitHub publishes, and throws away and refuses a file that does not match. Older releases that publish no checksum still install after the size check, and the update panel says so.
 - A release that has no installer attached now tells you that version is delivered through the Lakeside launcher or your store, instead of showing an error.
