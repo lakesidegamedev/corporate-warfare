@@ -23,14 +23,8 @@ enum class PlainShortcut { PlayPause, AdvanceWeek, Speed1, Speed2, Speed3 }
 fun plainShortcutFor(event: KeyEvent): PlainShortcut? {
     if (event.type != KeyEventType.KeyDown) return null
     if (event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) return null
-    return when (event.key) {
-        Key.Spacebar -> PlainShortcut.PlayPause
-        Key.N -> PlainShortcut.AdvanceWeek
-        Key.One -> PlainShortcut.Speed1
-        Key.Two -> PlainShortcut.Speed2
-        Key.Three -> PlainShortcut.Speed3
-        else -> null
-    }
+    val action = KeyBindings.nameOf(event.key)?.let(KeyBindings::actionFor) ?: return null
+    return PlainShortcut.entries.firstOrNull { it.name == action }
 }
 
 /**
