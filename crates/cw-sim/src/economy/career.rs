@@ -170,12 +170,18 @@ pub struct Rules {
 }
 
 impl Rules {
+    #[cfg(test)]
     fn from_table(t: &CareerTable, start: Start, years: u32) -> Rules {
+        Rules::from_table_in(t, start, years, "")
+    }
+
+    /// The rules for a career in `scenario` (its own Richest multiples where content sets them).
+    fn from_table_in(t: &CareerTable, start: Start, years: u32, scenario: &str) -> Rules {
         let places = match start {
             Start::Founder => &t.biggest.founder,
             Start::Helm => &t.biggest.helm,
         };
-        let multiples = t.richest.for_years(years);
+        let multiples = t.richest.for_scenario_years(scenario, years);
         Rules {
             rank_bronze_top_bps: places.bronze_top_bps,
             rank_bronze: places.bronze,
@@ -539,7 +545,7 @@ pub fn begin(world: &mut World, ds: &Dataset, setup: &CareerSetup) -> Result<(),
         years,
         start_week,
         end_week: start_week + years * YEAR_WEEKS,
-        rules: Rules::from_table(table, setup.start, years),
+        rules: Rules::from_table_in(table, setup.start, years, &ds.scenario_id),
         start_worth_cents: crate::economy::score::personal_net_worth(world),
         helm: None,
         years_log: Vec::new(),
