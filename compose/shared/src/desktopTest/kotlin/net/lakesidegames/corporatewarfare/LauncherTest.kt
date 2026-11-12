@@ -32,7 +32,6 @@ class LauncherTest {
         s.createContext("/redeem") { ex ->
             hits.incrementAndGet()
             synchronized(bodies) { bodies += ex.requestBody.readBytes().decodeToString() }
-            ex.requestHeaders.add("X-Seen-Method", ex.requestMethod)
             if (delayMs > 0) Thread.sleep(delayMs)
             if (redirectTo != null) {
                 ex.responseHeaders.add("Location", redirectTo)
@@ -56,7 +55,7 @@ class LauncherTest {
     fun redeemSendsTheCodeAndClientIdAndReadsTheAccount() {
         val f = fake(reply = good)
         val account = LauncherHandoff.redeem("code-abc", f.url)
-        assertEquals(LakesideAccount("acc-123", "Ada"), account)
+        assertEquals(LakesideAccount("acc-123", "Ada"), account, "failure: ${LauncherHandoff.lastFailure}")
         val sent = Json.parseToJsonElement(f.bodies.single()).jsonObject
         assertEquals("code-abc", sent["code"]!!.jsonPrimitive.content)
         assertEquals("corporate-warfare-desktop", sent["clientId"]!!.jsonPrimitive.content)
@@ -162,7 +161,7 @@ class LauncherTest {
         assertEquals("acc-123", account.accountId)
         assertEquals(1, f.hits.get())
         // The account type has no other field, so nothing else (entitlements, the code) is kept.
-        assertEquals(setOf("accountId", "displayName"), LakesideAccount::class.java.declaredFields.map { it.name }.toSet())
+        assertEquals(setOf("accountId", "displayName"), LakesideAccount::class.java.declaredFields.map { it.name }.filter { !it.startsWith("\$") }.toSet())
     }
 
     @Test

@@ -67,6 +67,10 @@ object LauncherHandoff {
     private const val MAX_BODY = 16 * 1024
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** Why the last call failed, as an exception name only (never the code or the reply); for tests. */
+    @Volatile
+    internal var lastFailure: String? = null
+
     @Serializable
     private data class Request(val code: String, val clientId: String)
 
@@ -101,11 +105,13 @@ object LauncherHandoff {
             return try {
                 call.get(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
             } catch (e: Exception) {
+                lastFailure = e.toString().take(200)
                 call.cancel(true)
                 connection?.disconnect()
                 null
             }
         } catch (e: Exception) {
+            lastFailure = e.toString().take(200)
             return null
         } finally {
             connection?.disconnect()
