@@ -44,21 +44,35 @@ class MenusRenderTest {
         both("main-first", settings) { StartScreen(fresh, updater, onSettings = {}, onQuit = {}) }
         both("main", settings) { StartScreen(career, updater, onSettings = {}, onQuit = {}) }
         both("load", settings) { LoadGameScreen(career) {} }
-        both("new-scenario", settings) { NewGameScreen(fresh, startStep = 0, onBack = {}) }
-        both("new-setup", settings, settleMs = 2500) { NewGameScreen(fresh, startStep = 1, onBack = {}) }
-        both("settings-menu", settings) { SettingsScreen(fresh, settings, desktop = true, updater = updater, onSetupAgain = {}) {} }
-        both("settings-career", settings) { SettingsScreen(career, settings, desktop = true, updater = updater, onSetupAgain = {}) {} }
+        both("scenarios", settings) { ScenariosScreen(fresh, {}, {}, {}, { _, _ -> }) }
+        both("new-1-scenario", settings) { NewGameScreen(fresh, startStep = 0, onBack = {}) }
+        both("new-2-start", settings, settleMs = 2500) { NewGameScreen(fresh, startStep = 1, startHelm = true, onBack = {}) }
+        both("new-3-ambition", settings) { NewGameScreen(fresh, startStep = 2, startAmbition = "richest", onBack = {}) }
+        both("new-4-world", settings) { NewGameScreen(fresh, startStep = 3, onBack = {}) }
+        both("new-5-chief", settings) { NewGameScreen(fresh, startStep = 4, onBack = {}) }
+        for (section in listOf(SettingsSection.Game, SettingsSection.Graphics, SettingsSection.Keys, SettingsSection.Data, SettingsSection.Updates)) {
+            both("settings-${section.name.lowercase()}", settings) { SettingsScreen(career, settings, desktop = true, updater = updater, onSetupAgain = {}, startSection = section) {} }
+        }
+        both("settings-search", settings) { SettingsScreen(career, settings, desktop = true, updater = updater, onSetupAgain = {}, startQuery = "map") {} }
         for (step in 0 until SetupStep.entries.size) {
             val s = AppSettings(File(dir, "setup-$step.properties"))
             both("setup-${SetupStep.entries[step].name.lowercase()}", settings, settleMs = 1500) {
                 SetupWizard(s, updater, "/home/player/.local/share/corporate-warfare", firstRun = true, onDone = {}, startStep = step)
             }
         }
+        career.saveAs("Lakeside run, gold attempt")
+        Thread.sleep(1500)
         both("game-menu", settings) {
             Box(Modifier.fillMaxSize()) {
                 TycoonShell(career, onSettings = {}, onMenu = {})
-                GameMenuDialog(onResume = {}, onSave = {}, onSettings = {}, onMainMenu = {}, onQuit = {})
+                GameMenuDialog(career, onResume = {}, onLoad = {}, onSettings = {}, onMainMenu = {}, onQuit = {})
             }
         }
+        // The save browser after Save as, Rename and Duplicate.
+        career.saveSlots().firstOrNull { !it.info.autosave }?.let { Saves.duplicate(it) }
+        both("load-after-save-as", settings) { LoadGameScreen(career) {} }
+        // The richer save description reads back, and an old one without the 2.0 fields still loads.
+        val slot = career.saveSlots().first { it.info.name == "Lakeside run, gold attempt" }
+        kotlin.test.assertTrue(slot.info.detailed && slot.info.netWorthCents != 0L && slot.info.scenario.isNotEmpty(), "the save carries its figures")
     }
 }

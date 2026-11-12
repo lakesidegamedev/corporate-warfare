@@ -2538,6 +2538,47 @@ pub fn career_lengths() -> career::CareerLengthsDto {
     }
 }
 
+/// One difficulty and the starting capital it gives, for the new-career screen (2.0 menus).
+#[derive(uniffi::Record)]
+pub struct DifficultyDto {
+    /// "easy", "standard" or "hard".
+    pub key: String,
+    pub starting_capital_cents: i64,
+}
+
+/// The difficulties in order, each with its starting capital from the engine's rule set.
+#[uniffi::export]
+pub fn difficulties() -> Vec<DifficultyDto> {
+    [
+        cw_data::Difficulty::Easy,
+        cw_data::Difficulty::Standard,
+        cw_data::Difficulty::Hard,
+    ]
+    .into_iter()
+    .map(|d| DifficultyDto {
+        key: d.key().to_string(),
+        starting_capital_cents: d.starting_capital_cents(),
+    })
+    .collect()
+}
+
+#[cfg(test)]
+mod difficulty_tests {
+    #[test]
+    fn the_difficulties_carry_the_engine_capital() {
+        let list = super::difficulties();
+        let keys: Vec<_> = list.iter().map(|d| d.key.as_str()).collect();
+        assert_eq!(keys, ["easy", "standard", "hard"]);
+        for d in &list {
+            assert_eq!(
+                d.starting_capital_cents,
+                cw_data::Difficulty::from_key(&d.key).starting_capital_cents()
+            );
+        }
+        assert!(list[0].starting_capital_cents > list[2].starting_capital_cents);
+    }
+}
+
 /// Everything the new-game screen chooses.
 #[derive(uniffi::Record)]
 pub struct NewGameDto {

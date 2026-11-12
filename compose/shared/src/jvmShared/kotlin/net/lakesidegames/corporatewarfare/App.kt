@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,6 +93,8 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
     var rerunSetup by remember { mutableStateOf(false) }
     // The desktop game menu (Escape): pauses time while open and resumes it at the same speed after.
     var gameMenu by remember { mutableStateOf(false) }
+    // Load from the game menu: the save browser over the career.
+    var loadInGame by remember { mutableStateOf(false) }
     var resumeSpeed by remember { mutableStateOf(0) }
     val rootFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     fun openGameMenu() {
@@ -142,6 +145,7 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                         when {
                             gameMenu -> { closeGameMenu(resume = true); true }
                             showSettings -> { showSettings = false; true }
+                            loadInGame -> { loadInGame = false; true }
                             Back.press() -> true
                             store.ready -> { openGameMenu(); true }
                             else -> false
@@ -150,15 +154,14 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
             ) {
                 when {
                     rerunSetup || settings.setupState == SetupState.Fresh ->
-                        SetupWizard(settings, updater, saveFolder, firstRun = settings.setupState == SetupState.Fresh && !rerunSetup, onDone = { rerunSetup = false })
+                        SetupWizard(settings, updater, saveFolder, firstRun = settings.setupState == SetupState.Fresh && !rerunSetup, onDone = { rerunSetup = false }, onNewCareer = { if (!store.ready) store.openNewGame = true })
                     settings.setupState == SetupState.Upgrade ->
                         WhatsNewScreen(onRunSetup = { rerunSetup = true }, onContinue = { settings.finishSetup() })
-                    showSettings -> Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing), contentAlignment = Alignment.TopCenter) {
+                    showSettings -> Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                         BackAction { showSettings = false }
-                        Box(Modifier.widthIn(max = 820.dp)) {
-                            SettingsScreen(store, settings, desktop = onQuit != null, updater = updater, onSetupAgain = { showSettings = false; rerunSetup = true }) { showSettings = false }
-                        }
+                        SettingsScreen(store, settings, desktop = onQuit != null, updater = updater, onSetupAgain = { showSettings = false; rerunSetup = true }) { showSettings = false }
                     }
+                    loadInGame && store.ready -> LoadGameScreen(store) { loadInGame = false }
                     store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         if (maxWidth >= DesktopBreakpoint) {
                             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -176,8 +179,9 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                     else -> StartScreen(store, updater, onSettings = { showSettings = true }, onQuit = onQuit)
                 }
             if (gameMenu && store.ready) GameMenuDialog(
+                store,
                 onResume = { closeGameMenu(resume = true) },
-                onSave = { store.saveNow() },
+                onLoad = { closeGameMenu(resume = false); loadInGame = true },
                 onSettings = { closeGameMenu(resume = false); showSettings = true },
                 onMainMenu = { closeGameMenu(resume = false); store.exitToMenu() },
                 onQuit = onQuit?.let { quit -> { closeGameMenu(resume = false); store.saveAndThen(quit) } },
@@ -869,24 +873,66 @@ private fun NavLabel(text: String) {
 }
 
 
-/** The desktop game menu Escape opens: time is paused while it shows. */
+/**
+ * The game menu Escape opens (2.0): time is paused while it shows. The career's save name, game date and when it
+ * was last saved head it; then Resume, Save, Save as, Load, Settings, Main menu and Quit, one under the other.
+ */
 @Composable
-internal fun GameMenuDialog(onResume: () -> Unit, onSave: () -> Unit, onSettings: () -> Unit, onMainMenu: () -> Unit, onQuit: (() -> Unit)?) {
-    var saved by remember { mutableStateOf(false) }
-    AlertDialog(
-        onDismissRequest = onResume,
-        containerColor = Palette.panel,
-        title = { Text("Paused") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.widthIn(min = 280.dp).dialogScroll()) {
-                GoldButton("Resume", modifier = Modifier.fillMaxWidth()) { onResume() }
-                OutlinedButton(onClick = { onSave(); saved = true }, modifier = Modifier.fillMaxWidth()) { Text(if (saved) "Saved" else "Save", color = Palette.primaryText) }
-                OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("Settings", color = Palette.primaryText) }
-                OutlinedButton(onClick = onMainMenu, modifier = Modifier.fillMaxWidth()) { Text("Save and return to main menu", color = Palette.primaryText) }
-                if (onQuit != null) OutlinedButton(onClick = onQuit, modifier = Modifier.fillMaxWidth()) { Text("Save and quit to desktop", color = Palette.primaryText) }
-                Text("Esc resumes.", color = Palette.secondary, fontSize = 11.sp)
+internal fun GameMenuDialog(
+    store: GameStore? = null,
+    onResume: () -> Unit,
+    onLoad: () -> Unit = {},
+    onSettings: () -> Unit,
+    onMainMenu: () -> Unit,
+    onQuit: (() -> Unit)?,
+    onSave: () -> Unit = { store?.saveNow() },
+) {
+    var naming by remember { mutableStateOf<String?>(null) }
+    var savedNow by remember { mutableStateOf(false) }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onResume) {
+        Column(
+            Modifier.widthIn(min = 320.dp, max = 420.dp).padding(end = 6.dp, bottom = 6.dp).pixelFrame(Palette.panel, Palette.gold, shadow = 6.dp)
+                .padding(20.dp).dialogScroll(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("PAUSED", color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
+            val o = store?.overview
+            if (store != null && o != null) {
+                Text(store.saveName.ifEmpty { o.primaryName }, color = Palette.gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                val ago = store.lastSavedAt.takeIf { it > 0 }?.let { savedAgo(System.currentTimeMillis() - it) } ?: "not saved yet this session"
+                Text("${o.weekLabel}  |  saved $ago  |  ${Saves.playTime(store.playSeconds)} played", color = Palette.secondary, fontSize = 12.sp)
             }
-        },
-        confirmButton = {},
-    )
+            Spacer(Modifier.height(4.dp))
+            GameMenuButton("Resume", primary = true, detail = "Esc", onClick = onResume)
+            GameMenuButton("Save", detail = if (savedNow) "Saved" else null) { onSave(); savedNow = true }
+            if (naming == null) GameMenuButton("Save as") { naming = store?.saveName?.ifEmpty { store.overview?.primaryName.orEmpty() }.orEmpty() }
+            else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.OutlinedTextField(naming.orEmpty(), { naming = it.take(60) }, singleLine = true, label = { Text("Save name") }, modifier = Modifier.weight(1f).textEntry())
+                GoldButton("Save") { store?.saveAs(naming.orEmpty()); naming = null; savedNow = true }
+            }
+            GameMenuButton("Load", onClick = onLoad)
+            GameMenuButton("Settings", onClick = onSettings)
+            GameMenuButton("Main menu", detail = "saves first", onClick = onMainMenu)
+            if (onQuit != null) GameMenuButton("Quit to desktop", detail = "saves first", onClick = onQuit)
+        }
+    }
+}
+
+internal fun savedAgo(ms: Long): String = when {
+    ms < 60_000 -> "just now"
+    ms < 3_600_000 -> "${ms / 60_000} min ago"
+    else -> "${ms / 3_600_000} h ago"
+}
+
+@Composable
+private fun GameMenuButton(title: String, primary: Boolean = false, detail: String? = null, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(end = 3.dp, bottom = 3.dp)
+            .pixelFrame(if (primary) Palette.gold else Palette.panelRaised, if (primary) Color(0xFF8A6420) else Palette.stroke)
+            .clip(Pixel.shape).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title.uppercase(), color = if (primary) Palette.ink else Palette.primaryText, fontSize = 14.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        if (detail != null) Text(detail, color = if (primary) Palette.ink else Palette.secondary, fontSize = 12.sp)
+    }
 }
