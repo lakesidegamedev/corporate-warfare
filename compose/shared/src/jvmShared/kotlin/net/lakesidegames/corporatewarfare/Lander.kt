@@ -48,10 +48,12 @@ private val LanderStars = StarField(300, 7)
  * scenario glows and is named as it turns to face the viewer.
  */
 @Composable
-fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
+fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f, calm: Boolean = false) {
     val map = WorldMap.shared ?: return
     val measurer = rememberTextMeasurer(cacheSize = 32)
-    val graphics = LocalAppSettings.current?.graphics ?: GraphicsConfig.Default
+    // Calm: the menu's globe without glare, halo, clouds or city lights, so nothing soft sits behind the menu.
+    val chosen = LocalAppSettings.current?.graphics ?: GraphicsConfig.Default
+    val graphics = if (calm) chosen.copy(lighting = 0, clouds = 0, cityLights = false) else chosen
     // The globe turns two degrees a second, smooth at 30 frames; only Unlimited asks for more.
     val clock = rememberFrameSeconds(graphics.animations, if (graphics.frameRate == 0) 0 else minOf(graphics.frameRate, 30))
     val world = remember { WorldCities() }

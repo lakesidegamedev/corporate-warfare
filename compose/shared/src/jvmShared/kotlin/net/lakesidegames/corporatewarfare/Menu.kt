@@ -120,10 +120,10 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
     var updates by remember { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
-        if (wide) GlobeBackdrop(Modifier.fillMaxSize(), offsetX = 0.22f)
+        if (wide) GlobeBackdrop(Modifier.fillMaxSize(), offsetX = 0.22f, calm = true)
         Column(
-            Modifier.fillMaxHeight().width(if (wide) 520.dp else maxWidth)
-                .then(if (wide) Modifier.padding(start = 40.dp, top = 32.dp, bottom = 32.dp).pixelFrame(Palette.ink, Palette.stroke, shadow = 6.dp) else Modifier)
+            Modifier.then(if (wide) Modifier.align(Alignment.CenterStart) else Modifier.fillMaxHeight()).width(if (wide) 520.dp else maxWidth)
+                .then(if (wide) Modifier.padding(start = 56.dp, top = 32.dp, bottom = 32.dp).pixelFrame(Palette.ink, Palette.stroke, shadow = 6.dp) else Modifier)
                 .windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
                 .padding(horizontal = if (wide) 32.dp else 18.dp, vertical = if (wide) 28.dp else 20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -135,7 +135,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             }
             Spacer(Modifier.height(6.dp))
             if (last != null) ContinueCard(last.info, enabled = !store.busy) { store.continueCareer() }
-            MenuButton("New career", primary = last == null, detail = if (last == null) "Quick start on the first step" else null) { page = MenuPage.NewCareer }
+            MenuButton("New career", primary = last == null, detail = if (last == null && wide) "Quick start on the first step" else null) { page = MenuPage.NewCareer }
             if (slots.isNotEmpty()) MenuButton("Load", detail = "${slots.size} save${if (slots.size == 1) "" else "s"}") { page = MenuPage.Load }
             MenuButton("Scenarios", detail = "${uniffi.cw_ffi.scenarios().count { it.available }} to play, and your own") { page = MenuPage.Scenarios }
             if (settings?.careers?.isNotEmpty() == true) MenuButton("Hall of Careers", detail = "${settings.careers.size} careers") { page = MenuPage.Hall }
@@ -148,7 +148,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             AccountEntry()
             if (onQuit != null) MenuButton("Quit", onClick = onQuit)
             Spacer(Modifier.height(4.dp))
-            Text(
+            if (updater == null) Text(
                 "Version ${BuildInfo.VERSION}" + if (BuildInfo.CHANNEL == "preview") ", tester preview" else "",
                 color = Palette.secondary, fontSize = 11.sp,
             )
@@ -262,7 +262,13 @@ private fun FlyingBadges(spread: Float, count: Int = 8) {
 }
 
 /** The first sentence of a piece of content, for a two-line description. */
-internal fun firstSentence(text: String): String = text.indexOf(". ").let { if (it < 0) text else text.substring(0, it + 1) }
+internal fun firstSentence(text: String): String {
+    val first = text.indexOf(". ").let { if (it < 0) text else text.substring(0, it + 1) }
+    if (first.length >= 60 || first.length == text.length) return first
+    // A short first sentence takes the next one too, so every scenario gets two lines.
+    val second = text.indexOf(". ", first.length + 1).let { if (it < 0) text else text.substring(0, it + 1) }
+    return second
+}
 
 /**
  * Scenarios: the four scenarios with their start year, region, currency and size, what makes each different

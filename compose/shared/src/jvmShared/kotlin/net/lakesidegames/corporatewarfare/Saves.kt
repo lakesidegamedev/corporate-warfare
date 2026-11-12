@@ -280,8 +280,8 @@ fun LoadGameScreen(store: GameStore, onBack: () -> Unit) {
                         Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
                     }
                 } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Sort", color = Palette.secondary, fontSize = 12.sp)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("SORT BY", color = Palette.secondary, fontSize = 11.sp, fontFamily = Pixel.font)
                         Choices(listOf(SaveColumn.Saved, SaveColumn.Name, SaveColumn.NetWorth, SaveColumn.Played), sort, { it.title }) {
                             if (it == sort) descending = !descending else { sort = it; descending = it.numeric }
                         }

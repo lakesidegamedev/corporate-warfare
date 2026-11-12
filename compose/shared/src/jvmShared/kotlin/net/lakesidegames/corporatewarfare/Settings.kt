@@ -304,7 +304,7 @@ internal fun SettingRow.matches(query: String): Boolean {
 /** What this machine can do with the 3D map, in one plain sentence, and whether that is a problem. */
 internal fun mapSupport(): Pair<String, Boolean> = when {
     GpuMapHost.opener == null ->
-        "This version draws the flat map. The 3D map needs the desktop app and a graphics card with Vulkan, Direct3D 12 or Metal." to false
+        "The 3D map is not available here, so the flat map is used. It needs the desktop app on a graphics card with Vulkan, Direct3D 12 or Metal." to false
     GpuMapHost.failure != null ->
         "This machine cannot run the 3D map (${GpuMapHost.failure}). The flat map is used instead; the options marked 3D have no effect." to true
     RenderInfo.software ->
@@ -450,7 +450,13 @@ private fun SettingLine(row: SettingRow, wide: Boolean) {
 
 @Composable
 private fun OnOff(checked: Boolean, onChange: (Boolean) -> Unit) {
-    Switch(checked = checked, onCheckedChange = onChange, colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold))
+    Switch(
+        checked = checked, onCheckedChange = onChange,
+        colors = SwitchDefaults.colors(
+            checkedTrackColor = Palette.gold, checkedThumbColor = Palette.ink,
+            uncheckedTrackColor = Palette.panelRaised, uncheckedThumbColor = Palette.secondary, uncheckedBorderColor = Palette.secondary,
+        ),
+    )
 }
 
 /** Every setting the game has, in section order. Rows that do not apply here (no career, no updater, a phone) are left out. */

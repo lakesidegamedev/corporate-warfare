@@ -62,10 +62,16 @@ class MenusRenderTest {
         }
         career.saveAs("Lakeside run, gold attempt")
         Thread.sleep(1500)
-        both("game-menu", settings) {
+        ProposalCareer.shoot("menus-$tag-game-menu-desktop", 1920, 1080, settings) {
             Box(Modifier.fillMaxSize()) {
                 TycoonShell(career, onSettings = {}, onMenu = {})
                 GameMenuDialog(career, onResume = {}, onLoad = {}, onSettings = {}, onMainMenu = {}, onQuit = {})
+            }
+        }
+        ProposalCareer.shoot("menus-$tag-game-menu-phone", 390, 844, settings, density = 2f) {
+            Box(Modifier.fillMaxSize()) {
+                PhoneShell(career, PhoneNav(), onSettings = {}, onMenu = {})
+                GameMenuDialog(career, onResume = {}, onLoad = {}, onSettings = {}, onMainMenu = {}, onQuit = null)
             }
         }
         // The save browser after Save as, Rename and Duplicate.
