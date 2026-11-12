@@ -689,7 +689,14 @@ fn a_hand_set_rate_caps_service_plants_that_still_follow_sales_unless_locked() {
     world.firms.get_mut(firm).unwrap().facilities.push(service);
     let product = dataset.product_index
         [&dataset.recipes[world.facilities.get(service).unwrap().recipe as usize].output];
-    // Nothing sold: the plan wants the ten percent floor, fifteen points a week from full.
+    // It ran last week (a plant that made nothing holds its plan) but nothing sold: the plan
+    // wants the ten percent floor, fifteen points a week from full.
+    let full = world
+        .facilities
+        .get(service)
+        .unwrap()
+        .full_weekly_output(&dataset);
+    world.facilities.get_mut(service).unwrap().last_output = full;
     world.firms.get_mut(firm).unwrap().sales_history =
         vec![[((0u8, product), 0)].into_iter().collect(); 13];
     for (lock, expected) in [(false, 8_500), (true, 10_000)] {

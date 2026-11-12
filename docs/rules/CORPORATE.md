@@ -672,13 +672,13 @@ outside float of every company are not a contest.
 
 | ambition | judged | bronze | silver | gold |
 |---|---|---|---|---|
-| Richest (10 years) | at the end, net worth over the starting fortune | 10 times | 20 times | 35 times |
+| Richest (10 years) | at the end, net worth over the starting fortune | 17 times (Texas 11, Silicon Valley 4.5, Ruhr 8.3) | 25 times (16, 8, 15) | 40 times (25, 15, 25) |
 | Biggest, founder | at the end, company league place | top half | top 10 | top 3 |
 | Biggest, helm | at the end, company league place | top 10 | top 3 | 1st |
 | Dominant | at any time | 20 percent | 30 percent | 40 percent |
 | Survivor | at the end | controls a solvent company | in the top half | in the top quarter |
 
-Richest is the growth of the player's own fortune: personal net worth (cash plus shares at the
+Richest's multiples are set per scenario from how fast a careful founder grows there (`careers.json` richest.scenarios; any scenario not listed uses the shared row, which is Great Lakes). The new-game guide still shows the shared row. Richest is the growth of the player's own fortune: personal net worth (cash plus shares at the
 fair price, less personal loans) at the end over the net worth when the career started. For a
 helm start the starting fortune is the net worth just after buying control, so the fortune the
 start scaled up is not counted as a gain. The multiples are per career length in

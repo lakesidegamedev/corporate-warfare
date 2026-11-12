@@ -876,8 +876,20 @@ fn construction_is_paid_in_stages_and_waits_for_the_equipment_payment() {
     tick::advance(&mut world, &dataset);
     // The builder's own plants may sell, and the builder may borrow, in the delivery week; that
     // cash coming in is not the payment going out.
-    let revenue =
-        (world.firm(builder).unwrap().book.balance(Account::Revenue) - revenue_before).abs();
+    // Read the week's revenue from the closed week too: a period close in the delivery week
+    // moves the income accounts into retained earnings, so the balance alone can read zero.
+    let closed_revenue = world
+        .firm(builder)
+        .unwrap()
+        .book
+        .recent_weeks()
+        .last()
+        .map(|week| week.revenue)
+        .unwrap_or(0)
+        .max(0);
+    let revenue = (world.firm(builder).unwrap().book.balance(Account::Revenue) - revenue_before)
+        .abs()
+        .max(closed_revenue);
     let borrowed =
         (world.firm(builder).unwrap().book.balance(Account::Loans) - loans_before).max(0);
     let facility = world.facilities.get(project).expect("completed project");
@@ -890,7 +902,12 @@ fn construction_is_paid_in_stages_and_waits_for_the_equipment_payment() {
     assert!(
         world.firm(builder).unwrap().book.cash()
             <= cash_before_delivery - equipment + revenue + borrowed,
-        "the equipment payment left cash"
+        "the equipment payment left cash: cash {} before {} equipment {} revenue {} borrowed {}",
+        world.firm(builder).unwrap().book.cash(),
+        cash_before_delivery,
+        equipment,
+        revenue,
+        borrowed
     );
     assert_eq!(
         world

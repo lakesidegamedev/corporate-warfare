@@ -268,6 +268,11 @@ pub struct CapacityStats {
     /// Per year: share of household demand for services and retail goods (no gateway) that found
     /// no seller, in percent, averaged over the year's weeks.
     pub unmet_local_pct_by_year: Vec<f64>,
+    /// Per year: share of what plants that buy inputs set out to make (their plan, within their
+    /// staff) that they made, in percent, summed over the year's weeks. What falls short is held
+    /// back by inputs (goods, power or a bought service), an outage or the grid.
+    #[serde(default)]
+    pub business_inputs_fill_pct_by_year: Vec<f64>,
     /// Plants in the world (operating, building or mothballed, every owner) at week 0 and at
     /// the end of each year.
     #[serde(default)]
@@ -610,6 +615,12 @@ pub struct Aggregate {
     pub unmet_local_last_year_pct_median: Option<f64>,
     #[serde(default)]
     pub unmet_local_fall_pct_median: Option<f64>,
+    /// Business inputs filled, percent: per year the median over careers, and the median over
+    /// careers of each career's worst year from year 3 on.
+    #[serde(default)]
+    pub business_inputs_fill_pct_by_year_median: Vec<f64>,
+    #[serde(default)]
+    pub business_inputs_fill_worst_from_year3_pct_median: Option<f64>,
     /// Plants in the world at week 0 and at the end of the career, median over careers.
     #[serde(default)]
     pub world_plants_start_median: Option<f64>,
@@ -779,6 +790,8 @@ struct Observer {
     top_ten_start: Vec<(u64, i64)>,
     /// (unmet, wanted) lots summed over the weeks of each year.
     unmet_year: BTreeMap<u32, (i64, i64)>,
+    /// By year: (lots made, lots planned) by plants that buy inputs.
+    input_year: BTreeMap<u32, (i64, i64)>,
 }
 
 impl Observer {
@@ -829,6 +842,7 @@ impl Observer {
             last_dividend: BTreeMap::new(),
             top_ten_start: Vec::new(),
             unmet_year: BTreeMap::new(),
+            input_year: BTreeMap::new(),
         }
     }
 
@@ -1104,6 +1118,31 @@ impl Observer {
             let slot = self.unmet_year.entry(year_index).or_default();
             slot.0 += unmet;
             slot.1 += wanted;
+            // Business inputs: what plants that buy inputs made against their plan within
+            // their staff.
+            let (mut made, mut planned) = (0i64, 0i64);
+            for (_, plant) in world.facilities.iter() {
+                if plant.status != cw_sim::state::FacilityStatus::Operating {
+                    continue;
+                }
+                let recipe = &dataset.recipes[plant.recipe as usize];
+                if recipe.weekly_inputs_lots.is_empty() || recipe.storage_class.is_some() {
+                    continue;
+                }
+                if !world.firms.get(plant.firm).is_some_and(|f| f.operative()) {
+                    continue;
+                }
+                let run = plant.target_bps.min(plant.last_staff_ratio_bps).max(0) as i64;
+                let plan = plant.full_weekly_output(dataset).0 * run / 10_000;
+                if plan <= 0 {
+                    continue;
+                }
+                planned += plan;
+                made += plant.last_output.0.min(plan);
+            }
+            let slot = self.input_year.entry(year_index).or_default();
+            slot.0 += made;
+            slot.1 += planned;
         }
 
         if !after_week {
@@ -1713,6 +1752,17 @@ fn finish_career(
                         .is_some_and(|f| f.status.operative())
                 })
                 .map(|(id, start)| firm_blocks(world, Handle(*id)) - start)
+                .collect();
+            stats.business_inputs_fill_pct_by_year = observer
+                .input_year
+                .values()
+                .map(|(made, planned)| {
+                    if *planned > 0 {
+                        *made as f64 * 100.0 / *planned as f64
+                    } else {
+                        100.0
+                    }
+                })
                 .collect();
             stats.unmet_local_pct_by_year = observer
                 .unmet_year
@@ -2376,6 +2426,34 @@ pub fn aggregate(careers: &[Career]) -> Aggregate {
                 Some(years.first()? - years.last()?)
             })
             .collect()),
+        business_inputs_fill_pct_by_year_median: (0..careers
+            .iter()
+            .map(|c| c.capacity.business_inputs_fill_pct_by_year.len())
+            .max()
+            .unwrap_or(0))
+            .filter_map(|year| {
+                med(careers
+                    .iter()
+                    .filter_map(|c| {
+                        c.capacity
+                            .business_inputs_fill_pct_by_year
+                            .get(year)
+                            .copied()
+                    })
+                    .collect())
+            })
+            .collect(),
+        business_inputs_fill_worst_from_year3_pct_median: med(careers
+            .iter()
+            .filter_map(|c| {
+                c.capacity
+                    .business_inputs_fill_pct_by_year
+                    .iter()
+                    .skip(2)
+                    .copied()
+                    .reduce(f64::min)
+            })
+            .collect()),
         world_plants_start_median: med(careers
             .iter()
             .filter_map(|c| c.capacity.world_plants_by_year.first().map(|v| *v as f64))
@@ -2552,6 +2630,9 @@ fn metric_value(aggregate: &Aggregate, metric: &str) -> Option<f64> {
         "rival_plants_built_per_decade_median" => aggregate.rival_plants_built_per_decade_median,
         "top_ten_block_change_median" => aggregate.top_ten_block_change_median,
         "unmet_local_fall_pct_median" => aggregate.unmet_local_fall_pct_median,
+        "business_inputs_fill_worst_from_year3_pct_median" => {
+            aggregate.business_inputs_fill_worst_from_year3_pct_median
+        }
         "raid_warning_weeks_median" => aggregate.raid_warning_weeks_median,
         "careers_with_merger_share" => aggregate.careers_with_merger_share,
         "plants_changing_hands_per_decade_per_ten_firms_median" => {
@@ -2953,6 +3034,18 @@ pub fn run(arguments: &[String]) {
     }
 
     let aggregate = aggregate(&careers);
+    println!(
+        "business inputs filled by year (percent of plan, median): {} | worst from year 3: {}",
+        aggregate
+            .business_inputs_fill_pct_by_year_median
+            .iter()
+            .map(|v| format!("{v:.1}"))
+            .collect::<Vec<_>>()
+            .join(" "),
+        aggregate
+            .business_inputs_fill_worst_from_year3_pct_median
+            .map_or("-".to_owned(), |v| format!("{v:.1}"))
+    );
     let gates = evaluate_gates_for(&gates_json, policy.key(), start_key, &aggregate)
         .unwrap_or_else(|e| {
             eprintln!("{e}");
