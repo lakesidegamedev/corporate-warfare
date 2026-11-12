@@ -1153,6 +1153,9 @@ fn statewide(dataset: &Dataset, product: u16) -> bool {
 
 /// Regions whose stock can be offered in `region`'s market, the market's own region first.
 pub(crate) fn supply_regions(dataset: &Dataset, region: u8, product: u16) -> Vec<u8> {
+    if dataset.products[product as usize].id == "electricity" {
+        return grid_regions(dataset, region);
+    }
     if !statewide(dataset, product) {
         return vec![region];
     }
@@ -1163,6 +1166,21 @@ pub(crate) fn supply_regions(dataset: &Dataset, region: u8, product: u16) -> Vec
             .regions_in_state(state)
             .into_iter()
             .filter(|other| *other != region),
+    );
+    regions
+}
+
+/// The regions on one power grid with `region`, its own first: every region that keeps its books
+/// in the same money. A grid is wired across state lines, so a plant draws on the generators of
+/// the whole currency area, not only the ones in its own county; a plant in a region with no
+/// generator used to get no power at all while generators elsewhere left theirs unsold.
+pub(crate) fn grid_regions(dataset: &Dataset, region: u8) -> Vec<u8> {
+    let currency = crate::economy::fx::region_currency(dataset, region);
+    let mut regions = vec![region];
+    regions.extend(
+        (0..dataset.regions.len() as u8)
+            .filter(|other| *other != region)
+            .filter(|other| crate::economy::fx::region_currency(dataset, *other) == currency),
     );
     regions
 }

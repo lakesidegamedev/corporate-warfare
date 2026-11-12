@@ -34,6 +34,14 @@ const MARKETING_PERCENT: i64 = 4;
 const MAX_LEVERAGE_PCT: i64 = 40;
 /// Weeks a new plant trades before it is judged.
 const PROVING_WEEKS: u32 = 13;
+
+/// Weeks a new plant ramps up (hiring, filling its input cover, stepping its plan up) before the
+/// script judges it: the engine's own grace before a rival may close a plant for losses
+/// (`capacity.close_after_loss_weeks`), and never under a quarter. Judging a plant in its first
+/// quarter mothballed plants that were still ramping up.
+fn ramp_weeks(dataset: &cw_data::Dataset) -> u32 {
+    PROVING_WEEKS.max(dataset.capacity.close_after_loss_weeks)
+}
 /// Weeks of mandatory outflow kept in cash after any build.
 const RESERVE_WEEKS: i64 = 26;
 /// A plant must repay its quote within this many weeks of its (trust-discounted) profit.
@@ -84,6 +92,9 @@ pub(super) struct SkilledState {
     /// Plants bid for whose lot has not been seen closing yet: one won while mothballed is
     /// reopened.
     bid_plants: Vec<u64>,
+    /// No plant is reopened before this week (one reopening a quarter at most).
+    reopen_after: u32,
+    pub reopened: u32,
 }
 
 impl Default for SkilledState {
@@ -103,6 +114,8 @@ impl Default for SkilledState {
             cuts: 0,
             bids: 0,
             bid_plants: Vec::new(),
+            reopen_after: 0,
+            reopened: 0,
         }
     }
 }
@@ -146,6 +159,7 @@ impl PolicyRunner {
             self.skilled_defend(session, primary.0);
             self.skilled_judge(session, primary.0);
             self.skilled_cut(session, primary.0);
+            self.skilled_reopen(session, primary.0);
             self.skilled_grow(session, primary.0);
         }
         if self.policy == ReferencePolicy::Skilled && self.skilled.passed >= 2 {
@@ -346,7 +360,7 @@ impl PolicyRunner {
             return;
         };
         if plant.status == cw_sim::state::FacilityStatus::Building
-            || now < plant.completes.0 + PROVING_WEEKS
+            || now < plant.completes.0 + ramp_weeks(&session.dataset)
         {
             return;
         }
@@ -421,17 +435,16 @@ impl PolicyRunner {
         let mut victim: Option<(i64, Handle)> = None;
         for division in sectors::divisions_of(&session.world, &session.dataset, Handle(firm)) {
             let key = (division.region, division.industry);
-            let operating: Vec<Handle> =
-                division
-                    .plants
-                    .iter()
-                    .copied()
-                    .filter(|h| {
-                        session.world.facilities.get(*h).is_some_and(|p| {
-                            p.is_operating() && now >= p.completes.0 + PROVING_WEEKS
-                        })
+            let operating: Vec<Handle> = division
+                .plants
+                .iter()
+                .copied()
+                .filter(|h| {
+                    session.world.facilities.get(*h).is_some_and(|p| {
+                        p.is_operating() && now >= p.completes.0 + ramp_weeks(&session.dataset)
                     })
-                    .collect();
+                })
+                .collect();
             // Judge only a division whose every plant has traded a quarter.
             if operating.len() != division.plants.len() || operating.is_empty() {
                 continue;
@@ -470,6 +483,57 @@ impl PolicyRunner {
         {
             self.skilled.cuts += 1;
             self.skilled.pause_until = self.skilled.pause_until.max(now + 26);
+        }
+    }
+
+    /// Reopen a mothballed plant once its opening pays again: a block of it would earn more than
+    /// its staff, upkeep and land at this week's prices, with the inputs and room the corridor
+    /// has (the Openings board's own figures). Only a plant idle for a quarter, one a quarter.
+    fn skilled_reopen(&mut self, session: &mut Session, firm: u64) {
+        use cw_sim::economy::capacity;
+        let now = session.world.tick.0;
+        if now < self.skilled.reopen_after {
+            return;
+        }
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let Some(entity) = world.firm(Handle(firm)) else {
+            return;
+        };
+        let rooms = capacity::input_rooms(world, dataset);
+        let best = entity
+            .facilities
+            .iter()
+            .filter_map(|h| world.facilities.get(*h).map(|p| (*h, p)))
+            .filter(|(_, p)| {
+                p.status == cw_sim::state::FacilityStatus::Mothballed
+                    && p.mothballed_since
+                        .is_some_and(|t| t.0 + PROVING_WEEKS <= now)
+            })
+            .filter_map(|(h, p)| {
+                let fill = capacity::sell_bps(world, dataset, &rooms, p.recipe, p.region);
+                let weekly = capacity::new_block_contribution(
+                    world,
+                    dataset,
+                    entity.region,
+                    p.recipe,
+                    p.region,
+                    fill,
+                );
+                (weekly > 0).then_some((weekly, h))
+            })
+            .max();
+        if let Some((weekly, plant)) = best
+            && self.submit(session, CommandIntent::ReopenFacility { facility: plant })
+        {
+            if self.verbose_skilled {
+                println!(
+                    "w{now} REOPEN plant {} opening pays {weekly} a block",
+                    plant.0
+                );
+            }
+            self.skilled.reopened += 1;
+            self.skilled.reopen_after = now + PROVING_WEEKS;
         }
     }
 

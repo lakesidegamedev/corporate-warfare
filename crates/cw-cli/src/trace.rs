@@ -95,6 +95,8 @@ fn rows(session: &cw_session::Session, out: &mut String) {
         }
         let (short, need) = pricing::buyer_shortfall(world, dataset, code);
         let (unmet, hh) = pricing::household_unmet(world, code);
+        let all: Vec<u8> = (0..world.regions.len() as u8).collect();
+        let (biz_unmet, biz_need) = pricing::business_unmet_in(world, dataset, code, &all);
         let wanted = if wanted_n > 0 {
             wanted_sum / wanted_n
         } else {
@@ -102,7 +104,7 @@ fn rows(session: &cw_session::Session, out: &mut String) {
         };
         let _ = writeln!(
             out,
-            "{week},{},{:?},{reference},{price},{import},{export},{makers},{capacity},{made},{sold},{stock},{short},{need},{unmet},{hh},{imported},{exported},{import_room},{wanted},\"{}\"",
+            "{week},{},{:?},{reference},{price},{import},{export},{makers},{capacity},{made},{sold},{stock},{short},{need},{unmet},{hh},{imported},{exported},{import_room},{wanted},{biz_unmet},{biz_need},\"{}\"",
             product.id,
             product.kind,
             pricing::price_reason(world, dataset, code)
@@ -134,7 +136,7 @@ pub fn run(arguments: &[String]) {
         std::process::exit(2);
     }
     let mut out = String::from(
-        "week,good,kind,ref,price,import,export,makers,capacity,made,sold,stock,short,need,hh_unmet,hh_wanted,imported,exported,gateway_room,wanted_bps,reason\n",
+        "week,good,kind,ref,price,import,export,makers,capacity,made,sold,stock,short,need,hh_unmet,hh_wanted,imported,exported,gateway_room,wanted_bps,biz_unmet,biz_need,reason\n",
     );
     let mut runner = PolicyRunner::new(policy, false);
     crate::drive_with(&mut session, weeks, &mut runner, &mut |s, after| {
