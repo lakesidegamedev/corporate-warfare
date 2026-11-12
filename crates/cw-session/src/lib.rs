@@ -2630,7 +2630,10 @@ mod tests {
         // when the texture and street rules joined the dataset hash (world prices stray from their
         // paths by a seeded texture, seller markets open near balance, shops and services price on
         // their street), and again in 2.0 when plant auctions joined the dataset hash (four weeks
-        // for a break-up or a listing). The Swift
+        // for a break-up or a listing), and again in 2.0 (from 54409d0c...) when electricity
+        // began to be dispatched over a grid (a currency area) at its generators' asking prices
+        // with imports at the import price, its generators began to be paid for every lot they
+        // deliver, and services began pricing on their business buyers' shortfall. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2656,7 +2659,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "54409d0cc118f568c53c823f37ac78311aaf921efac40135bf66f6cc551c6786"
+            "b960155fb27aa5d6608621c3672140233d323c5a008dbc118a0cc2cc5c3d55f3"
         );
     }
 

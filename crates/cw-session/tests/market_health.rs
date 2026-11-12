@@ -34,7 +34,9 @@ fn check(scenario: &str) {
     let mut swinging = Vec::new();
     for (id, good) in &rows {
         // A listed good is made, sold to buyers, and trades in most weeks it is listed.
-        if good.made == 0 || good.sold == 0 {
+        // A good no plant at home makes, bought wholly through a gateway (coal for a coal-fired
+        // plant built in a valley with no mine), is a market working through its imports.
+        if (good.made == 0 || good.sold == 0) && good.imported == 0 {
             dead.push(format!(
                 "{id} (made {}, sold {}, imported {}, exported {})",
                 good.made, good.sold, good.imported, good.exported

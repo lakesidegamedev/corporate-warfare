@@ -169,18 +169,21 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
         cw_data::Dataset::for_hash(before_demand).unwrap().hash,
         data.hash
     );
+    // The world pins moved in 2.0 when electricity began to be dispatched over a grid at its
+    // generators' asking prices, generators began to be paid for every lot they deliver and
+    // services began pricing on their business buyers' shortfall (the dataset hash is unchanged).
     let pins = [
         (
             1u64,
-            "c9fa16da40f26bfc876fcb0f0abe35451221d5430cb529b6222d77223eb95909",
+            "71be4e21f01ed53f8696cd069f539846ec15d8c2751e9b14a9aecc53c4182b56",
         ),
         (
             2,
-            "45636e573c20eae777c32ab5da8a777777a3ce5df16cddf7ff460187e6aeef6a",
+            "ecfcb8db7d6746356bb0585b26efcff52c0667105fa4107b6343bc6da52cb10a",
         ),
         (
             3,
-            "3488440724ab809c9d242996106c85f40c2cb610244713bb5494d2fdee0659eb",
+            "6dbb205d252789b5ed897ac7755e92cee2271708303bc39fc1710020d827e468",
         ),
     ];
     for (seed, hash) in pins {
@@ -192,12 +195,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "2c19da89e46194c8d011ca79be3a9872e15de4a790f28e6f74a2b61be66c822a"
+        "4d2a142631ba3a051ffa93b618d9c7d5125a3eeebedd7f7fa5341c38ff8263a5"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "f40ef74a3f0baf38fd6a0527aea3c3e4e953bbcb9ba16c9b6c7a89a860c0c12d"
+        "cfdebc30d34df5f07bcfd754eb63ed62181aa9bff1422d442cebcd2757a956be"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();

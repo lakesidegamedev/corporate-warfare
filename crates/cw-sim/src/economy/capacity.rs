@@ -120,7 +120,40 @@ pub fn room_lots(world: &World, dataset: &Dataset, product: u16, region: u8) -> 
     } else {
         coming_lots(world, dataset, product, Some(&regions))
     };
-    (imports + unmet + business - coming).max(0)
+    // Capacity the sellers already there left idle answers the same buyers first: households
+    // that went without beside idle sellers went without for their budget, not for want of a
+    // plant, and are no room for a new one.
+    let spare = if unmet + business > 0 {
+        let area: Vec<u8> = if business > 0 { supplied } else { regions };
+        idle_lots(world, dataset, product, &area)
+    } else {
+        0
+    };
+    (imports + unmet + business - coming - spare).max(0)
+}
+
+/// Lots a week of a local product the operating plants in `regions` could make at full run but
+/// did not sell last week: their capacity less what households and plants there bought of it.
+pub fn idle_lots(world: &World, dataset: &Dataset, product: u16, regions: &[u8]) -> i64 {
+    let id = &dataset.products[product as usize].id;
+    let capacity: i64 = world
+        .facilities
+        .iter()
+        .map(|(_, plant)| plant)
+        .filter(|plant| {
+            plant.status == FacilityStatus::Operating && regions.contains(&plant.region)
+        })
+        .filter(|plant| world.firms.get(plant.firm).is_some_and(|f| f.operative()))
+        .map(|plant| dataset.recipes[plant.recipe as usize].lots_of(id) * plant.blocks as i64)
+        .sum();
+    if capacity <= 0 {
+        return 0;
+    }
+    let (unmet, wanted) = unmet_in(world, product, regions);
+    let (business_unmet, business) =
+        crate::economy::pricing::business_unmet_in(world, dataset, product, regions);
+    let bought = (wanted - unmet).max(0) + (business - business_unmet).max(0);
+    (capacity - bought).max(0)
 }
 
 /// Lots a week of each corridor good a new plant could still buy, read once per pass

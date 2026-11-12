@@ -2206,31 +2206,31 @@ mod tests {
         );
         crate::economy::production::produce(&mut world, &dataset);
         let electricity = dataset.product_index["electricity"];
+        // A short grid buys every lot its generators make, so the surplus a gateway takes is
+        // set up here: power left in a generator's yard after the grid has drawn.
         let generator = world
             .firms
             .iter()
-            .find(|(_, firm)| firm.industry == 2 && firm.stock(electricity, firm.region).0 > 0)
-            .map(|(handle, _)| handle)
-            .unwrap_or_else(|| {
-                let rows: Vec<String> = world
-                    .firms
-                    .iter()
-                    .map(|(_, firm)| {
-                        format!(
-                            "{} ind={} stock={} out={:?}",
-                            firm.name,
-                            firm.industry,
-                            firm.stock(electricity, firm.region).lots(),
-                            firm.facilities
-                                .iter()
-                                .filter_map(|h| world.facilities.get(*h))
-                                .map(|f| f.last_output.lots())
-                                .collect::<Vec<_>>()
-                        )
+            .find(|(_, firm)| {
+                firm.facilities.iter().any(|h| {
+                    world.facilities.get(*h).is_some_and(|f| {
+                        f.is_operating()
+                            && dataset.recipes[f.recipe as usize].output == "electricity"
                     })
-                    .collect();
-                panic!("a generator with output: {}", rows.join(" | "));
-            });
+                })
+            })
+            .map(|(handle, _)| handle)
+            .expect("a generator");
+        {
+            let region = world.firm(generator).unwrap().region;
+            let cost = dataset.reference_price(electricity) * 10;
+            world
+                .firms
+                .get_mut(generator)
+                .unwrap()
+                .stock_lot_mut(electricity, region)
+                .receive(MilliLots::from_lots(10), Cents(cost));
+        }
         let region = world.firm(generator).unwrap().region;
         let before = world.firm(generator).unwrap().stock(electricity, region);
         let revenue_before = -world
