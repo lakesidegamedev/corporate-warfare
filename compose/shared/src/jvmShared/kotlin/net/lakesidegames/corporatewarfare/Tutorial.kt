@@ -103,6 +103,22 @@ object Tutorial {
         private set
     var hidden by mutableStateOf(false)
     var requestedPage by mutableStateOf<String?>(null)
+
+    /** True while the 2.0 desktop layout is on screen: the steps then name its places, not the 1.x pages. */
+    var newLayout by mutableStateOf(false)
+
+    private val newLayoutWhat = mapOf(
+        "office" to "Open Overview.",
+        "price" to "Under Product lines on Overview, open a product and slide its price against the market.",
+        "actions" to "Press Ctrl K and search for something, like IPO or loan.",
+        "research" to "On the Research screen, set a modest weekly research budget.",
+        "economy" to "Open Economy and look at the phase and the central bank rate.",
+        "build" to "Open Regions, pick a region with room to build and press Build here.",
+        "stats" to "Open Finance to see revenue, profit and the balance sheet over time.",
+    )
+
+    /** What the step asks the player to do, in the words of the layout on screen. */
+    fun what(step: TutorialStep): String = if (newLayout) newLayoutWhat[step.id] ?: step.what else step.what
     private var startTick: UInt? = null
 
     fun load(settings: AppSettings) {
@@ -182,7 +198,7 @@ fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier, researchHint:
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(step.title, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
-                Text(step.what, color = Palette.secondary, fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(Tutorial.what(step), color = Palette.secondary, fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             Text(
                 "Show me", color = Palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp,
@@ -207,7 +223,7 @@ fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier, researchHint:
             Text(step.title, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
             Text("$number of ${Tutorial.steps.size}", color = Palette.secondary, fontSize = 11.sp)
         }
-        Text(step.what, color = Palette.primaryText, fontSize = 13.sp)
+        Text(Tutorial.what(step), color = Palette.primaryText, fontSize = 13.sp)
         Text(step.why, color = Palette.secondary, fontSize = 12.sp)
         if (step.id == "research" && researchHint != null) Text(researchHint, color = Palette.gold, fontSize = 12.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {

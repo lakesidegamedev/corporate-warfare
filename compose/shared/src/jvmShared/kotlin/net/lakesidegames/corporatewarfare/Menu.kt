@@ -78,7 +78,8 @@ object Images {
 /** The main menu: a turning globe, the company's way in, and the new-game flow. */
 @Composable
 internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> Unit, onQuit: (() -> Unit)?) {
-    var setup by remember { mutableStateOf(false) }
+    var setup by remember { mutableStateOf(store.openNewGame) }
+    LaunchedEffect(Unit) { store.openNewGame = false }
     var loading by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var careers by remember { mutableStateOf(false) }
@@ -250,6 +251,7 @@ private enum class Mode(val title: String, val note: String, val guided: Boolean
     Guided("Take over a company", "Start running 60 percent of an established company, with the walkthrough.", true, false),
     Founder("Found your own", "Start with cash and no company. Pick a region and a strategy and build from nothing.", false, false),
     Scored("Five-year score", "Take over a company and be scored at the end of year five. You can play on after.", true, true),
+    Helm("At the helm", "Buy control of one of three established companies and run it from the first day. You choose which below.", false, false),
 }
 
 private enum class Level(val key: String, val title: String, val note: String) {
@@ -279,7 +281,7 @@ private fun capitalOf(level: Level) = when (level) {
 
 /** Scenario, then the career's terms, then start. */
 @Composable
-internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> Unit) {
+internal fun NewGameScreen(store: GameStore, startStep: Int = 0, startHelm: Boolean = false, startAmbition: String = "", onBack: () -> Unit) {
     val catalogue = remember { scenarios() }
     var chosen by remember { mutableStateOf(catalogue.firstOrNull { it.available }) }
     var customs by remember { mutableStateOf(uniffi.cw_ffi.customScenarioList(store.customDir)) }
@@ -294,7 +296,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
     }
     var step by remember { mutableStateOf(startStep) }
     BackAction { if (step == 0) onBack() else step = 0 }
-    var mode by remember { mutableStateOf(Mode.Guided) }
+    var mode by remember { mutableStateOf(if (startHelm) Mode.Helm else Mode.Guided) }
     var level by remember { mutableStateOf(Level.Standard) }
     var economy by remember { mutableStateOf(Economy.Historic) }
     // Null means the scenario's own default.
@@ -304,6 +306,37 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
     val chiefs = remember { chiefChoices() }
     var chiefPick by remember { mutableStateOf(0) }
     var chiefName by remember { mutableStateOf("") }
+    // One seed for the whole visit, so the companies offered at the helm are the ones the career starts with.
+    val seed = remember { (System.nanoTime() % 9_999_999).toULong() }
+    val career = remember { CareerChoice().also { it.ambition = startAmbition } }
+    fun gameOptions(pick: ScenarioDto) = NewGameDto(
+        seed = seed,
+        scenarioId = pick.id,
+        guided = mode.guided,
+        fiveYear = mode.fiveYear,
+        difficulty = level.key,
+        economy = economy.key,
+        startingCapitalCents = (capital * 100).toLong(),
+        pricePath = pricePathPick?.key ?: "",
+        timeline = history.key,
+        chiefName = chiefName.trim(),
+        chiefPortrait = chiefs.getOrNull(chiefPick)?.id ?: "",
+        chiefTemperament = chiefs.getOrNull(chiefPick)?.temperament ?: "",
+    )
+    val helmScenario = if (step == 1 && chosenCustom == null && mode == Mode.Helm) chosen else null
+    // The offers are worked out off the main thread, a moment after the last change, and again when a choice that changes them changes.
+    val loaded by androidx.compose.runtime.produceState<Result<List<uniffi.cw_ffi.HelmOfferDto>>?>(null, helmScenario?.id, level, economy, capital, pricePathPick, history) {
+        value = null
+        val pick = helmScenario ?: return@produceState
+        kotlinx.coroutines.delay(250)
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { runCatching { uniffi.cw_ffi.helmOffers(gameOptions(pick)) } }
+    }
+    val offers = loaded?.getOrNull()
+    val offersError = if (loaded?.isFailure == true) "The companies on offer could not be worked out here. Found your own instead." else null
+    LaunchedEffect(offers) {
+        val list = offers ?: return@LaunchedEffect
+        if (career.helmFirm == null || list.none { it.firm == career.helmFirm }) career.helmFirm = list.firstOrNull()?.firm
+    }
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -394,6 +427,10 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                         Section("How you start") {
                             Options(Mode.entries, mode, { it.title }, { it.note }, wide) { mode = it }
                         }
+                        if (mode == Mode.Helm) Section("The company you take over") {
+                            HelmOfferGrid(offers, offersError, career.helmFirm, wide) { career.helmFirm = it }
+                        }
+                        Section("Your ambition") { AmbitionPicker(mode == Mode.Helm, career, wide) }
                         Section("Difficulty") {
                             Options(Level.entries, level, { it.title }, { it.note }, wide) {
                                 level = it
@@ -437,7 +474,8 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                 Text(
                     if (step == 0) chosenCustom?.let { "${it.name}: your scenario" } ?: scenario?.let { "${it.name}: ${it.tagline}" } ?: "Pick a scenario"
                     else if (chosenCustom != null) "${mode.title} · ${chosenCustom!!.name}"
-                    else "${mode.title} · ${level.title} · ${economy.title} economy · ${Format.compact((capital * 100).toLong())}",
+                    else "${mode.title} · ${level.title} · ${economy.title} economy · ${Format.compact((capital * 100).toLong())}" +
+                        (career.ambition.takeIf { it.isNotEmpty() }?.let { " · ${it.replaceFirstChar { c -> c.uppercase() }}" } ?: ""),
                     color = Palette.secondary,
                     fontSize = 13.sp,
                     modifier = Modifier.weight(1f),
@@ -446,25 +484,11 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
                 if (step == 0) {
                     GoldButton("Next: setup", enabled = scenario != null || chosenCustom != null) { step = 1 }
                 } else {
-                    GoldButton("Start career", enabled = (scenario != null || chosenCustom != null) && !store.busy) {
+                    GoldButton("Start career", enabled = (scenario != null || chosenCustom != null) && !store.busy && (chosenCustom != null || mode != Mode.Helm || career.helmFirm != null)) {
                         chosenCustom?.let { store.startCustom(it, mode.guided, mode.fiveYear); return@GoldButton }
                         val pick = scenario ?: return@GoldButton
-                        store.startCareer(
-                            NewGameDto(
-                                seed = (System.nanoTime() % 9_999_999).toULong(),
-                                scenarioId = pick.id,
-                                guided = mode.guided,
-                                fiveYear = mode.fiveYear,
-                                difficulty = level.key,
-                                economy = economy.key,
-                                startingCapitalCents = (capital * 100).toLong(),
-                                pricePath = pricePathPick?.key ?: "",
-                                timeline = history.key,
-                                chiefName = chiefName.trim(),
-                                chiefPortrait = chiefs.getOrNull(chiefPick)?.id ?: "",
-                                chiefTemperament = chiefs.getOrNull(chiefPick)?.temperament ?: "",
-                            ),
-                        )
+                        if (career.isDefault(mode == Mode.Helm)) store.startCareer(gameOptions(pick))
+                        else store.startCareerWith(gameOptions(pick), career.options(mode == Mode.Helm))
                     }
                 }
             }
