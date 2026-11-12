@@ -39,8 +39,8 @@ data class GraphicsConfig(
     val seasons: Boolean = true,
     /** Names on the map: 0 none, 1 cities, 2 cities and regions. */
     val labels: Int = 2,
-    /** The new GPU map (desktop preview): stylized terrain, roads and buildings drawn on the graphics card. Off by default. */
-    val newMap: Boolean = false,
+    /** The 3D map drawn on the graphics card: terrain, roads and buildings as models. On by default; a machine with no usable graphics card keeps the classic map. */
+    val newMap: Boolean = true,
     /** How the new map reaches the screen: true straight into a native window, false as copied frames, null the machine's default. */
     val directMap: Boolean? = null,
 ) {
@@ -113,8 +113,8 @@ internal val graphicsOptions = listOf(
     GraphicsOption("Frame rate", { "Lower saves battery." }, listOf("30", "60", "Unlimited"), { when (it.frameRate) { 30 -> 0; 60 -> 1; else -> 2 } }, { c, v -> c.copy(frameRate = listOf(30, 60, 0)[v]) }),
     GraphicsOption("Animations", { "Camera flights, the menu and moving effects. On the new map: smoke, cranes, blinking lights and vehicles." }, listOf("Off", "On"), { it.animations.int() }, { c, v -> c.copy(animations = v == 1) }),
     GraphicsOption(
-        "New map (preview)",
-        { "A new look for the map, drawn on your graphics card: terrain, roads, rails and buildings. A preview for testers; the frame rate counter shows what it costs. If your computer has no usable graphics card the game keeps the current map." },
+        "3D map",
+        { "The map drawn on your graphics card, with terrain, roads and buildings as models. Off draws the classic flat map, which every computer can show." },
         listOf("Off", "On"), { it.newMap.int() }, { c, v -> c.copy(newMap = v == 1) }, gpuOnly = true,
     ),
     GraphicsOption(
