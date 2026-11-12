@@ -1004,7 +1004,8 @@ pub fn household_lots(world: &World, dataset: &Dataset, product: u16, full: &[i6
     let market: Vec<usize> = (0..regions)
         .map(|r| {
             crate::economy::markets::supply_regions(dataset, r as u8, product)
-                .into_iter()
+                .iter()
+                .copied()
                 .min()
                 .unwrap_or(r as u8) as usize
         })

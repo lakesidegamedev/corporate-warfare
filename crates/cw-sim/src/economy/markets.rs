@@ -265,7 +265,8 @@ fn clear_public_works(world: &mut World, dataset: &Dataset) {
                 .max(1_000);
         // Contractors anywhere in the state can take the region's public works.
         let sellers: Vec<(Handle, u8)> = supply_regions(dataset, region as u8, service)
-            .into_iter()
+            .iter()
+            .copied()
             .flat_map(|from| {
                 world
                     .firms
@@ -347,12 +348,11 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
         if !firm.operative() {
             continue;
         }
-        let recipe = &dataset.recipes[facility.recipe as usize];
-        for (product_id, weekly) in &recipe.weekly_inputs_lots {
-            if product_id == "electricity" {
+        for (code, weekly) in dataset.recipe_tables.inputs(facility.recipe) {
+            let (code, weekly) = (*code, weekly);
+            if dataset.products[code as usize].id == "electricity" {
                 continue;
             }
-            let code = dataset.product_index[product_id];
             let cover =
                 crate::economy::storage::plant_cover_weeks(world, dataset, firm, facility, code);
             let demand = world.demand_ratio_bps(facility.region, Some(code));
@@ -463,7 +463,7 @@ fn clear_intermediate(world: &mut World, dataset: &Dataset) {
 
         let mut offers: Vec<Offer> = Vec::new();
         let mut seller_handles: Vec<OfferSource> = Vec::new();
-        for from in supply_regions(dataset, region, product) {
+        for from in supply_regions(dataset, region, product).iter().copied() {
             for (handle, firm) in world.firms.iter() {
                 if !firm.operative() {
                     continue;
@@ -578,21 +578,29 @@ fn clear_goods_exchange(
     let mut reserve_left: BTreeMap<u8, i64> =
         reserve_offers.iter().map(|(r, (_, q))| (*r, *q)).collect();
     let class = dataset.products[product as usize].storage_class;
-    let mut freight_table: BTreeMap<(u8, u8), i64> = BTreeMap::new();
-    for (_, to) in demand.keys() {
-        let froms: Vec<u8> = supply
-            .keys()
-            .map(|(_, from)| *from)
-            .chain(reserve_offers.keys().copied())
-            .collect();
-        for from in froms {
-            freight_table.entry((from, *to)).or_insert_with(|| {
-                crate::economy::logistics::estimate_cents_per_lot(world, dataset, from, *to, class)
-            });
+    let region_count = dataset.regions.len().max(world.regions.len());
+    let mut freight_table: Vec<i64> = vec![0; region_count * region_count];
+    let mut froms: Vec<u8> = supply
+        .keys()
+        .map(|(_, from)| *from)
+        .chain(reserve_offers.keys().copied())
+        .collect();
+    froms.sort_unstable();
+    froms.dedup();
+    let mut tos: Vec<u8> = demand.keys().map(|(_, to)| *to).collect();
+    tos.sort_unstable();
+    tos.dedup();
+    for to in &tos {
+        for from in &froms {
+            freight_table[*from as usize * region_count + *to as usize] =
+                crate::economy::logistics::estimate_cents_per_lot(
+                    world, dataset, *from, *to, class,
+                );
         }
     }
-    let freight_per_lot = |from: u8, to: u8| freight_table.get(&(from, to)).copied().unwrap_or(0);
-    // The seller's asking price, in the money of the buyer who reads it.
+    let freight_per_lot =
+        |from: u8, to: u8| freight_table[from as usize * region_count + to as usize];
+    // The seller's asking price, in the money of the buyer who reads it (used when settling).
     let asking = |world: &World, firm: Handle, buyer: Handle| {
         let price = world
             .firms
@@ -607,6 +615,26 @@ fn clear_goods_exchange(
         let to = crate::economy::fx::handle_currency(world, dataset, buyer);
         world.fx.convert(price, from, to).max(1)
     };
+    // Each seller's asking price and money, read once instead of once per pairing; the price is
+    // read in the money of the buyer who reads it.
+    let fx_active = world.fx.active;
+    let sellers: Vec<(Handle, u8, i64, u8)> = supply
+        .keys()
+        .map(|(seller, from)| {
+            let price = world
+                .firms
+                .get(*seller)
+                .and_then(|f| f.policies.prices.get(&product).copied())
+                .unwrap_or_else(|| dataset.reference_price(product))
+                .max(1);
+            let currency = if fx_active {
+                crate::economy::fx::handle_currency(world, dataset, *seller)
+            } else {
+                0
+            };
+            (*seller, *from, price, currency)
+        })
+        .collect();
     // Every pairing with its delivered price per lot. A seller never buys from itself.
     #[derive(Clone, Copy)]
     enum Source {
@@ -621,16 +649,22 @@ fn clear_goods_exchange(
     }
     // (delivered price, seller key, buyer key, buyer, source)
     type Pairing = (i64, u64, u64, (Handle, u8), Source);
-    let mut pairs: Vec<Pairing> = Vec::new();
+    let mut pairs: Vec<Pairing> = Vec::with_capacity(demand.len() * (sellers.len() + 1));
     for (buyer_key, _) in demand.iter() {
         let (buyer, to) = *buyer_key;
+        let cap = caps.get(buyer_key).copied();
+        let buyer_currency = if fx_active {
+            crate::economy::fx::handle_currency(world, dataset, buyer)
+        } else {
+            0
+        };
         for (from, (ask, _)) in &reserve_offers {
             // The reserve prices in the numeraire; the buyer reads it in its own money.
             let ask = world
                 .fx
                 .convert(*ask, 0, crate::economy::fx::currency_of(world, buyer));
             let delivered = ask + freight_per_lot(*from, to);
-            if caps.get(buyer_key).is_none_or(|cap| delivered <= *cap) {
+            if cap.is_none_or(|cap| delivered <= cap) {
                 pairs.push((
                     delivered,
                     u64::MAX / 2 - *from as u64,
@@ -640,8 +674,7 @@ fn clear_goods_exchange(
                 ));
             }
         }
-        for (seller_key, _) in supply.iter() {
-            let (seller, from) = *seller_key;
+        for (seller, from, price, from_currency) in sellers.iter().copied() {
             if seller == buyer {
                 // A firm's stock beyond its input cover in one state feeds its own plants in
                 // another before anything is bought or imported: a steelworks takes its own
@@ -658,8 +691,16 @@ fn clear_goods_exchange(
                 }
                 continue;
             }
-            let delivered = asking(world, seller, buyer) + freight_per_lot(from, to);
-            if caps.get(buyer_key).is_some_and(|cap| delivered > *cap) {
+            let asked = if fx_active {
+                world
+                    .fx
+                    .convert(price, from_currency, buyer_currency)
+                    .max(1)
+            } else {
+                price
+            };
+            let delivered = asked + freight_per_lot(from, to);
+            if cap.is_some_and(|cap| delivered > cap) {
                 continue;
             }
             pairs.push((
@@ -682,7 +723,7 @@ fn clear_goods_exchange(
                     gateway.sell_price_cents,
                     step,
                 );
-                if caps.get(buyer_key).is_some_and(|cap| price > *cap) {
+                if cap.is_some_and(|cap| price > cap) {
                     break;
                 }
                 pairs.push((
@@ -698,14 +739,23 @@ fn clear_goods_exchange(
     }
     // The reserve's release is an emergency sale that takes orders first, then the cheapest
     // delivered price as usual.
-    pairs.sort_by_key(|(price, seller, buyer, _, source)| {
-        (
-            !matches!(source, Source::Reserve(_)),
-            *price,
-            *seller,
-            *buyer,
-        )
-    });
+    // Sorted by key with the original position last, which is the same order as a stable sort on
+    // the key, on small keys instead of whole pairings.
+    let mut order: Vec<(bool, i64, u64, u64, u32)> = pairs
+        .iter()
+        .enumerate()
+        .map(|(at, (price, seller, buyer, _, source))| {
+            (
+                !matches!(source, Source::Reserve(_)),
+                *price,
+                *seller,
+                *buyer,
+                at as u32,
+            )
+        })
+        .collect();
+    order.sort_unstable();
+    let pairs: Vec<Pairing> = order.iter().map(|key| pairs[key.4 as usize]).collect();
     let mut import_left: BTreeMap<(usize, i64), i64> = BTreeMap::new();
     // Work through the pairings one price tier and source at a time. Buyers tied on the same
     // source at the same delivered price share it in proportion to what each still wants and
@@ -1152,28 +1202,21 @@ fn statewide(dataset: &Dataset, product: u16) -> bool {
 }
 
 /// Regions whose stock can be offered in `region`'s market, the market's own region first.
-pub(crate) fn supply_regions(dataset: &Dataset, region: u8, product: u16) -> Vec<u8> {
+pub(crate) fn supply_regions(dataset: &Dataset, region: u8, product: u16) -> &[u8] {
     if dataset.products[product as usize].id == "electricity" {
-        return grid_regions(dataset, region);
+        return dataset.recipe_tables.supply_grid(region);
     }
     if !statewide(dataset, product) {
-        return vec![region];
+        return dataset.recipe_tables.supply_own(region);
     }
-    let state = dataset.regions[region as usize].state();
-    let mut regions = vec![region];
-    regions.extend(
-        dataset
-            .regions_in_state(state)
-            .into_iter()
-            .filter(|other| *other != region),
-    );
-    regions
+    dataset.recipe_tables.supply_state(region)
 }
 
 /// The regions on one power grid with `region`, its own first: every region that keeps its books
 /// in the same money. A grid is wired across state lines, so a plant draws on the generators of
 /// the whole currency area, not only the ones in its own county; a plant in a region with no
 /// generator used to get no power at all while generators elsewhere left theirs unsold.
+#[cfg(test)]
 pub(crate) fn grid_regions(dataset: &Dataset, region: u8) -> Vec<u8> {
     let currency = crate::economy::fx::region_currency(dataset, region);
     let mut regions = vec![region];
@@ -1266,7 +1309,10 @@ fn clear_households(world: &mut World, dataset: &Dataset) {
             }
             let mut offers: Vec<Offer> = Vec::new();
             let mut sources: Vec<OfferSource> = Vec::new();
-            for from in supply_regions(dataset, region_index as u8, product) {
+            for from in supply_regions(dataset, region_index as u8, product)
+                .iter()
+                .copied()
+            {
                 for (handle, firm) in world.firms.iter() {
                     if !firm.operative() {
                         continue;
@@ -1475,7 +1521,10 @@ fn clear_government(world: &mut World, dataset: &Dataset) {
             }
             let mut offers = Vec::new();
             let mut sources = Vec::new();
-            for from in supply_regions(dataset, region as u8, product) {
+            for from in supply_regions(dataset, region as u8, product)
+                .iter()
+                .copied()
+            {
                 for (handle, firm) in world.firms.iter() {
                     if !firm.operative() {
                         continue;
@@ -2561,5 +2610,35 @@ mod tests {
             brand_sensitive: true,
         }];
         assert!(allocate(10_000, &offers, &requests).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod supply_table_tests {
+    use super::*;
+
+    /// The tables built at load give the same markets the plain rules do, for every bundled
+    /// scenario, region and kind of product.
+    #[test]
+    fn supply_tables_match_the_plain_rules() {
+        for scenario in cw_data::scenarios() {
+            let dataset = Dataset::load_scenario(&scenario.id).unwrap();
+            for region in 0..dataset.regions.len() as u8 {
+                assert_eq!(
+                    dataset.recipe_tables.supply_grid(region),
+                    grid_regions(&dataset, region).as_slice()
+                );
+                let state = dataset.regions[region as usize].state();
+                let mut plain = vec![region];
+                plain.extend(
+                    dataset
+                        .regions_in_state(state)
+                        .into_iter()
+                        .filter(|other| *other != region),
+                );
+                assert_eq!(dataset.recipe_tables.supply_state(region), plain.as_slice());
+                assert_eq!(dataset.recipe_tables.supply_own(region), &[region]);
+            }
+        }
     }
 }

@@ -214,10 +214,8 @@ fn build(
     // Inputs.
     let mut inputs = Vec::new();
     let mut materials = 0i64;
-    for (id, weekly) in &recipe.weekly_inputs_lots {
-        let Some(&code) = dataset.product_index.get(id) else {
-            continue;
-        };
+    for (code, weekly) in dataset.recipe_tables.inputs(first.recipe) {
+        let (code, weekly) = (*code, weekly);
         let service = dataset.products[code as usize].kind.is_service();
         let mut need_milli = 0i64;
         for handle in &plant_handles {
@@ -244,13 +242,16 @@ fn build(
             .iter()
             .find(|((buyer, _, product), _)| *buyer == firm && *product == code)
             .map(|((_, seller, _), _)| *seller);
-        let own_plants = entity.facilities.iter().any(|h| {
-            world.facilities.get(*h).is_some_and(|p| {
-                p.region == region
-                    && p.is_operating()
-                    && dataset.recipes[p.recipe as usize].makes(id)
+        // Only the full report names the source, so the answer is read when it is wanted.
+        let own_plants = || {
+            entity.facilities.iter().any(|h| {
+                world.facilities.get(*h).is_some_and(|p| {
+                    p.region == region
+                        && p.is_operating()
+                        && dataset.recipe_tables.makes(code, p.recipe)
+                })
             })
-        });
+        };
         let (source, price) = if let Some(seller) = group_seller {
             let s_industry = world
                 .firms
@@ -278,7 +279,7 @@ fn build(
             (String::new(), corridor)
         } else if service {
             ("Local service market".to_owned(), corridor)
-        } else if own_plants {
+        } else if own_plants() {
             ("Own plants".to_owned(), corridor)
         } else {
             ("Open market".to_owned(), corridor)

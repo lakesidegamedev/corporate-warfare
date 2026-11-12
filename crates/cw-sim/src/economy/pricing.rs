@@ -41,6 +41,31 @@ pub fn outputs(world: &World, dataset: &Dataset, firm: Handle) -> BTreeSet<u16> 
 /// weeks on the books averages over the weeks it has, so a young firm's sales are not read as a
 /// fraction of what they are.
 pub fn weekly_sold(world: &World, firm: Handle, product: u16) -> i64 {
+    // Within the weekly pricing pass no sale is booked, so the answer holds for the pass.
+    let cached = SOLD_PASS.with(|pass| {
+        pass.borrow()
+            .as_ref()
+            .and_then(|map| map.get(&(firm.0, product)).copied())
+    });
+    if let Some(sold) = cached {
+        return sold;
+    }
+    let sold = weekly_sold_scan(world, firm, product);
+    SOLD_PASS.with(|pass| {
+        if let Some(map) = pass.borrow_mut().as_mut() {
+            map.insert((firm.0, product), sold);
+        }
+    });
+    sold
+}
+
+thread_local! {
+    /// `weekly_sold` answers for the weekly pricing pass in progress on this thread, if any.
+    static SOLD_PASS: std::cell::RefCell<Option<std::collections::HashMap<(u64, u16), i64>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn weekly_sold_scan(world: &World, firm: Handle, product: u16) -> i64 {
     world
         .firms
         .get(firm)
@@ -70,7 +95,6 @@ pub fn free_stock(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         .filter(|((p, _), _)| *p == product)
         .map(|(_, lot)| lot.qty.lots())
         .sum();
-    let id = &dataset.products[product as usize].id;
     // Lots the firm's own plants keep as input cover, each at its own stock target.
     let cover: i64 = entity
         .facilities
@@ -78,10 +102,9 @@ pub fn free_stock(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         .filter_map(|handle| world.facilities.get(*handle))
         .filter(|plant| plant.status == crate::state::FacilityStatus::Operating)
         .map(|plant| {
-            dataset.recipes[plant.recipe as usize]
-                .weekly_inputs_lots
-                .get(id)
-                .copied()
+            dataset
+                .recipe_tables
+                .input_lots(product, plant.recipe)
                 .unwrap_or(0)
                 * plant.blocks as i64
                 * crate::economy::storage::plant_cover_weeks(world, dataset, entity, plant, product)
@@ -399,6 +422,9 @@ pub fn business_unmet_in(
     if !dataset.products[product as usize].kind.is_service() {
         return (0, 0);
     }
+    if !dataset.recipe_tables.any_use(product) {
+        return (0, 0);
+    }
     let id = &dataset.products[product as usize].id;
     let (mut need, mut made) = (0i64, 0i64);
     for (_, plant) in world.facilities.iter() {
@@ -407,9 +433,11 @@ pub fn business_unmet_in(
         {
             continue;
         }
-        let recipe = &dataset.recipes[plant.recipe as usize];
-        made = made.saturating_add(plant.last_made(dataset, id).0);
-        let Some(weekly) = recipe.weekly_inputs_lots.get(id).copied() else {
+        let tables = &dataset.recipe_tables;
+        if tables.makes(product, plant.recipe) {
+            made = made.saturating_add(plant.last_made(dataset, id).0);
+        }
+        let Some(weekly) = tables.input_lots(product, plant.recipe) else {
             continue;
         };
         if !world.firms.get(plant.firm).is_some_and(|f| f.operative()) {
@@ -434,6 +462,79 @@ pub fn business_unmet_in(
         .sum();
     let supply = made.saturating_add(imports.saturating_mul(1_000));
     ((need - supply).max(0) / 1_000, need / 1_000)
+}
+
+/// What `business_unmet_in` reads, summed per region once for a service so a caller asking for
+/// many region sets scans the plants once instead of once per set.
+pub struct ServiceTotals {
+    need: Vec<i64>,
+    made: Vec<i64>,
+    imports: Vec<i64>,
+}
+
+impl ServiceTotals {
+    /// None for a good (a good's buyers read their stock instead).
+    pub fn build(world: &World, dataset: &Dataset, product: u16) -> Option<ServiceTotals> {
+        if !dataset.products[product as usize].kind.is_service() {
+            return None;
+        }
+        let id = &dataset.products[product as usize].id;
+        let regions = dataset.regions.len().max(world.regions.len());
+        let mut totals = ServiceTotals {
+            need: vec![0; regions],
+            made: vec![0; regions],
+            imports: vec![0; regions],
+        };
+        let tables = &dataset.recipe_tables;
+        for (_, plant) in world.facilities.iter() {
+            if plant.status != crate::state::FacilityStatus::Operating {
+                continue;
+            }
+            let at = plant.region as usize;
+            if tables.makes(product, plant.recipe) {
+                totals.made[at] = totals.made[at].saturating_add(plant.last_made(dataset, id).0);
+            }
+            let Some(weekly) = tables.input_lots(product, plant.recipe) else {
+                continue;
+            };
+            if !world.firms.get(plant.firm).is_some_and(|f| f.operative()) {
+                continue;
+            }
+            totals.need[at] = totals.need[at].saturating_add(
+                weekly
+                    .saturating_mul(plant.blocks as i64)
+                    .saturating_mul(1_000)
+                    .saturating_mul(plant.target_bps.max(0) as i64)
+                    / 10_000,
+            );
+        }
+        for g in world.gateways.iter().filter(|g| g.product == product) {
+            if let Some(slot) = totals.imports.get_mut(g.region as usize) {
+                *slot += g.capacity_lots.max(0);
+            }
+        }
+        Some(totals)
+    }
+
+    /// The same answer as `business_unmet_in` for these regions.
+    pub fn unmet_in(&self, regions: &[u8]) -> (i64, i64) {
+        let (mut need, mut made, mut imports) = (0i64, 0i64, 0i64);
+        let mut seen = [false; 256];
+        for region in regions {
+            if std::mem::replace(&mut seen[*region as usize], true) {
+                continue;
+            }
+            let at = *region as usize;
+            need = need.saturating_add(self.need.get(at).copied().unwrap_or(0));
+            made = made.saturating_add(self.made.get(at).copied().unwrap_or(0));
+            imports += self.imports.get(at).copied().unwrap_or(0);
+        }
+        if need <= 0 {
+            return (0, 0);
+        }
+        let supply = made.saturating_add(imports.saturating_mul(1_000));
+        ((need - supply).max(0) / 1_000, need / 1_000)
+    }
 }
 
 /// The same for the regions one seller's operating plants serve (see `seller_household_unmet`).
@@ -527,18 +628,13 @@ pub fn service_wanted_bps_with(rules: &cw_data::MarketRules, used_bps: i64) -> i
 /// plants in one state share their stock, so each firm and state is counted once against the
 /// sum of its plants' targets. Speculative held stock is not cover.
 pub fn buyer_shortfall(world: &World, dataset: &Dataset, product: u16) -> (i64, i64) {
-    let id = &dataset.products[product as usize].id;
     let mut targets: std::collections::BTreeMap<(Handle, u8), i64> = Default::default();
     let mut need = 0i64;
     for (_, plant) in world.facilities.iter() {
         if plant.status != crate::state::FacilityStatus::Operating {
             continue;
         }
-        let Some(weekly) = dataset.recipes[plant.recipe as usize]
-            .weekly_inputs_lots
-            .get(id)
-            .copied()
-        else {
+        let Some(weekly) = dataset.recipe_tables.input_lots(product, plant.recipe) else {
             continue;
         };
         let Some(entity) = world.firms.get(plant.firm).filter(|f| f.operative()) else {
@@ -588,6 +684,7 @@ pub fn import_dependence_bps(world: &World, dataset: &Dataset, product: u16) -> 
     let made: i64 = world
         .facilities
         .iter()
+        .filter(|(_, plant)| dataset.recipe_tables.makes(product, plant.recipe))
         .map(|(_, plant)| plant.last_made(dataset, id).lots())
         .sum();
     Some(dependence_bps(imported, made))
@@ -976,6 +1073,18 @@ pub fn posture_price(world: &World, dataset: &Dataset, firm: Handle, product: u1
 /// The player's automatic pricing: every good a player company makes, unless the player set
 /// its price by hand, follows the sell-through rule each week.
 pub fn weekly(world: &mut World, dataset: &Dataset) {
+    struct PassGuard;
+    impl Drop for PassGuard {
+        fn drop(&mut self) {
+            SOLD_PASS.with(|pass| *pass.borrow_mut() = None);
+        }
+    }
+    SOLD_PASS.with(|pass| *pass.borrow_mut() = Some(Default::default()));
+    let _guard = PassGuard;
+    weekly_pass(world, dataset);
+}
+
+fn weekly_pass(world: &mut World, dataset: &Dataset) {
     // Rivals always plan production this way; the player's companies do unless set by hand.
     let rivals: Vec<Handle> = world
         .firms
