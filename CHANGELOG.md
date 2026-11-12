@@ -70,6 +70,8 @@ heading.
 - Roads and bridges: close up, interstates and main roads are wider with a darker kerb and a light edge line, and any road or railway that crosses a narrow strait is drawn as a bridge deck.
 - The ground texture step while zooming now has hysteresis, so it no longer flips back and forth when the camera hovers at a boundary. A new zoom test checks that no frame jumps in average colour.
 
+- Developer tool: the careful founder script in `cw-cli arc` now builds up to three new plants at a time from its own cash, each of a different kind and place and each judged on its own, instead of one plant a year. It still borrows only after a quarter at a profit, and stops building on cash after a plant fails its judgement. Building one at a time left a five million founder with four million idle for its first two years outside Great Lakes while the board listed power stations that paid.
+
 ### Fixed
 
 - A new power station, phone exchange or other service business now runs at what its buyers want. A new service plant used to cut its own output in its first weeks, while it was still waiting for fuel and had sold nothing, and then could never climb back: it aimed at what it had sold plus a tenth, and with sales counted in whole lots a small plant lost exactly that tenth to rounding. A new gas power station sat at half its output for good and earned a third of what the sector board promised. Now a service plant that made nothing waits, and one whose buyers took everything it made runs up. A new gas station now sells all ten lots a week and earns what the board said.
