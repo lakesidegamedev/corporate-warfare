@@ -208,6 +208,12 @@ struct GoodDepthView: View {
             Panel(padding: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Eyebrow(text: "Why the price is moving")
+                    if !d.priceReason.isEmpty {
+                        Text(d.priceReason)
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(Theme.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     ForEach(Array(d.drivers.enumerated()), id: \.offset) { _, driver in
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             switch driver.push {

@@ -36,13 +36,14 @@ private protocol WizardOption: Identifiable, Hashable {
 }
 
 private enum StartMode: String, CaseIterable, WizardOption {
-    case guided, founder, scored
+    case guided, founder, scored, helm
     var id: String { rawValue }
     var title: String {
         switch self {
         case .guided: return "Take over a company"
         case .founder: return "Found your own"
         case .scored: return "Five-year score"
+        case .helm: return "At the helm"
         }
     }
     var note: String {
@@ -50,9 +51,10 @@ private enum StartMode: String, CaseIterable, WizardOption {
         case .guided: return "Start running 60 percent of an established company, with the tutorial."
         case .founder: return "Start with cash and no company. Pick a region and a strategy and build from nothing."
         case .scored: return "Take over a company and be scored at the end of year five. You can play on after."
+        case .helm: return "Buy control of one of three established companies and run it from the first day. You choose which below."
         }
     }
-    var guided: Bool { self != .founder }
+    var guided: Bool { self == .guided || self == .scored }
     var fiveYear: Bool { self == .scored }
 }
 
@@ -159,10 +161,20 @@ struct NewGameView: View {
     @State private var chiefs: [PersonDto] = chiefChoices()
     @State private var chiefPick = 0
     @State private var chiefName = ""
+    /// One seed for the whole visit, so the companies offered at the helm are the ones the career starts with.
+    @State private var seed = UInt64.random(in: 1...9_999_999)
+    @State private var career = CareerChoice()
+    @State private var offers: [HelmOfferDto]?
+    @State private var offersError: String?
 
     private var chosen: ScenarioDto? {
         if let chosenID, let hit = catalogue.first(where: { $0.id == chosenID }) { return hit }
         return catalogue.first { $0.available }
+    }
+
+    /// The ways to start. A scenario of your own has no company to take the helm of.
+    private var modes: [StartMode] {
+        chosenCustom == nil ? StartMode.allCases : StartMode.allCases.filter { $0 != .helm }
     }
 
     private var pricePath: StartPricePath {
@@ -184,6 +196,7 @@ struct NewGameView: View {
         }
         .background(Theme.ink)
         .onAppear { customs = customScenarioList(dir: ScenarioEditorView.directory) }
+        .task(id: offersKey) { await loadOffers() }
         .sheet(
             isPresented: Binding(
                 get: { customizing != nil || editingCustom != nil },
@@ -324,7 +337,7 @@ struct NewGameView: View {
                     .foregroundStyle(Theme.secondary)
             }
             section("How you start") {
-                OptionGrid(items: StartMode.allCases, selected: mode) { mode = $0 }
+                OptionGrid(items: modes, selected: mode) { mode = $0 }
             }
         } else if let scenario = chosen {
             HStack(spacing: 14) {
@@ -340,9 +353,17 @@ struct NewGameView: View {
             }
         }
         section("How you start") {
-            OptionGrid(items: StartMode.allCases, selected: mode) { mode = $0 }
+            OptionGrid(items: modes, selected: mode) { mode = $0 }
         }
         if chosenCustom == nil {
+        if mode == .helm {
+            section("The company you take over") {
+                HelmOfferCards(offers: offers, error: offersError, pick: career.helmFirm) { career.helmFirm = $0 }
+            }
+        }
+        section("Your ambition") {
+            AmbitionPicker(helm: mode == .helm, choice: $career)
+        }
         section("Difficulty") {
             OptionGrid(items: StartLevel.allCases, selected: level) {
                 level = $0
@@ -426,7 +447,7 @@ struct NewGameView: View {
                     .disabled(chosen == nil && chosenCustom == nil)
             } else {
                 primaryButton("Start career") { start() }
-                    .disabled((chosen == nil && chosenCustom == nil) || store.isBusy)
+                    .disabled((chosen == nil && chosenCustom == nil) || store.isBusy || (mode == .helm && chosenCustom == nil && career.helmFirm == nil))
             }
         }
         .padding(.horizontal, 16)
@@ -442,7 +463,8 @@ struct NewGameView: View {
             if let scenario = chosen { return "\(scenario.name): \(scenario.tagline)" }
             return "Pick a scenario"
         }
-        return "\(mode.title) · \(level.title) · \(economy.title) economy · \(Format.moneyCompact(Int64(capital * 100)))"
+        let goal = career.ambition.isEmpty ? "" : " · \(CareerText.ambition(career.ambition))"
+        return "\(mode.title) · \(level.title) · \(economy.title) economy · \(Format.moneyCompact(Int64(capital * 100)))\(goal)"
     }
 
     private func primaryButton(_ title: String, action: @escaping () -> Void) -> some View {
@@ -455,15 +477,15 @@ struct NewGameView: View {
         .controlSize(.large)
     }
 
-    private func start() {
-        if let custom = chosenCustom {
-            let seed = UInt64.random(in: 1...9_999_999)
-            Task { await store.startCustom(custom, guided: mode.guided, seed: seed, fiveYear: mode.fiveYear) }
-            return
-        }
-        guard let scenario = chosen else { return }
-        let options = NewGameDto(
-            seed: UInt64.random(in: 1...9_999_999),
+    /// Changes the offered companies: anything the engine reads to make them.
+    private var offersKey: String {
+        guard step == 1, mode == .helm, chosenCustom == nil, let scenario = chosen else { return "none" }
+        return "\(scenario.id)-\(level.rawValue)-\(economy.rawValue)-\(Int(capital))-\(pricePath.rawValue)-\(history.rawValue)"
+    }
+
+    private func gameOptions(_ scenario: ScenarioDto) -> NewGameDto {
+        NewGameDto(
+            seed: seed,
             scenarioId: scenario.id,
             guided: mode.guided,
             fiveYear: mode.fiveYear,
@@ -476,7 +498,47 @@ struct NewGameView: View {
             chiefPortrait: chiefs.indices.contains(chiefPick) ? chiefs[chiefPick].id : "",
             chiefTemperament: chiefs.indices.contains(chiefPick) ? chiefs[chiefPick].temperament : ""
         )
-        Task { await store.startCareer(options) }
+    }
+
+    /// The offers are worked out off the main thread, a moment after the last change.
+    private func loadOffers() async {
+        guard step == 1, mode == .helm, chosenCustom == nil, let scenario = chosen else { return }
+        offers = nil
+        offersError = nil
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        if Task.isCancelled { return }
+        let options = gameOptions(scenario)
+        let result = await Task.detached(priority: .userInitiated) { () -> Result<[HelmOfferDto], Error> in
+            Result { try helmOffers(options: options) }
+        }.value
+        if Task.isCancelled { return }
+        switch result {
+        case .success(let list):
+            offers = list
+            if career.helmFirm == nil || !list.contains(where: { $0.firm == career.helmFirm }) {
+                career.helmFirm = list.first?.firm
+            }
+        case .failure(let error):
+            offersError = error.localizedDescription
+        }
+    }
+
+    private func start() {
+        if let custom = chosenCustom {
+            // A scenario of your own has no company to take the helm of: it starts like the guided start.
+            let startMode = mode == .helm ? StartMode.guided : mode
+            Task { await store.startCustom(custom, guided: startMode.guided, seed: seed, fiveYear: startMode.fiveYear) }
+            return
+        }
+        guard let scenario = chosen else { return }
+        let options = gameOptions(scenario)
+        career.helm = mode == .helm
+        if career.isDefault {
+            Task { await store.startCareer(options) }
+        } else {
+            let choice = career
+            Task { await store.startCareerWith(options, choice.options()) }
+        }
     }
 }
 
