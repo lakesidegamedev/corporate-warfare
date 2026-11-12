@@ -256,6 +256,9 @@ pub struct Dataset {
     pub region_currency: Vec<u8>,
     /// The inflation and interest rates the scenario opens with.
     pub opening_macro: OpeningMacro,
+    /// Rivals open at this share of their authored size, basis points (10000 is as authored).
+    /// A scenario whose roster crowds the shared corridor workforce sets it (2.0 balance pass).
+    pub rival_blocks_bps: i64,
     pub hash: String,
 }
 
@@ -278,6 +281,15 @@ impl Dataset {
 }
 
 impl Dataset {
+    /// The blocks an authored opening plant starts with: the authored count scaled by the
+    /// scenario's `rival_blocks_bps`, rounded half up, never below one.
+    pub fn opening_blocks(&self, authored: u8) -> u8 {
+        if self.rival_blocks_bps == 10_000 {
+            return authored;
+        }
+        ((authored as i64 * self.rival_blocks_bps + 5_000) / 10_000).clamp(1, 255) as u8
+    }
+
     /// Load the default scenario's pinned in-repo dataset and validate it.
     pub fn load() -> Result<Dataset, Vec<String>> {
         Self::load_scenario(DEFAULT_SCENARIO)
@@ -298,6 +310,7 @@ impl Dataset {
                     || dataset.pre_demand_hash() == hash
                     || dataset.pre_prices_hash() == hash
                     || dataset.pre_auction_hash() == hash
+                    || dataset.pre_balance_hash() == hash
             })
     }
 
@@ -306,7 +319,7 @@ impl Dataset {
     /// never change, so a save written before the growth names this hash and still loads (the
     /// people are content, not part of a save).
     pub fn legacy_hash(&self) -> String {
-        self.hash_with_cast(CAST_BEFORE_1_9)
+        self.before_balance().hash_with_cast(CAST_BEFORE_1_9)
     }
 
     /// Load one scenario's pinned in-repo dataset and validate it. A scenario with no content
@@ -442,6 +455,7 @@ impl Dataset {
             currencies,
             region_currency,
             opening_macro,
+            rival_blocks_bps: balance.rival_blocks_bps,
             hash: String::new(),
         };
         let errors = dataset.validate();
@@ -947,9 +961,10 @@ impl Dataset {
     /// it. It loads against the current dataset and plays on under the current rules, as a save
     /// does after any rules change; its stored hash is kept as written.
     pub fn pre_markets_hashes(&self) -> [String; 2] {
+        let plain = self.before_balance();
         [
-            self.hash_with(self.cast.len(), false),
-            self.hash_with(CAST_BEFORE_1_9, false),
+            plain.hash_with(self.cast.len(), false),
+            plain.hash_with(CAST_BEFORE_1_9, false),
         ]
     }
 
@@ -988,9 +1003,22 @@ impl Dataset {
         self.before_prices().hash_with(self.cast.len(), true)
     }
 
+    /// The hash this dataset had before the 2.0 balance pass (rivals at their authored size):
+    /// a save written then names it and loads against the current dataset. Equal to the current
+    /// hash for a scenario the pass did not resize.
+    pub fn pre_balance_hash(&self) -> String {
+        self.before_balance().hash_with(self.cast.len(), true)
+    }
+
+    fn before_balance(&self) -> Dataset {
+        let mut plain = self.clone();
+        plain.rival_blocks_bps = 10_000;
+        plain
+    }
+
     fn before_prices(&self) -> Dataset {
         const PRE_PRICES_HOUSEHOLD_COVER_BPS: i64 = 8_500;
-        let mut plain = self.clone();
+        let mut plain = self.before_balance();
         plain.texture = balance::TextureRules::default();
         plain.demand.retail_reads_street = false;
         plain.demand.street_short_bps = 0;
@@ -1142,6 +1170,11 @@ impl Dataset {
                     hasher.string(code);
                 }
             }
+        }
+        // The 2.0 balance pass's opening size of rivals joins the hash only where a scenario sets
+        // it, so every dataset at full size keeps the hash it had.
+        if self.rival_blocks_bps != 10_000 {
+            hasher.string("rival-blocks").i64(self.rival_blocks_bps);
         }
         for person in self.cast.iter().take(cast_people) {
             hasher

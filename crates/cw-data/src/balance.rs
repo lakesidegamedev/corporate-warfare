@@ -276,6 +276,14 @@ pub struct Balance {
     /// older content files, which then get the defaults (smooth paths, the rule before it).
     #[serde(default)]
     pub texture: TextureRules,
+    /// Rivals open at this share of their authored size (blocks, basis points; 10000 is as
+    /// authored). Absent in older content files, which then get 10000 (2.0 balance pass).
+    #[serde(default = "full_size_bps")]
+    pub rival_blocks_bps: i64,
+}
+
+fn full_size_bps() -> i64 {
+    10_000
 }
 
 /// How the outside world's prices stray from their authored paths week to week in a game that
@@ -557,6 +565,9 @@ pub struct BalanceOverlay {
     /// Product id to opening reference price in cents. Unknown ids are an error.
     #[serde(default)]
     pub reference_price_cents: BTreeMap<String, i64>,
+    /// Rivals open at this share of their authored size, basis points (see `Balance`).
+    #[serde(default)]
+    pub rival_blocks_bps: Option<i64>,
 }
 
 impl BalanceOverlay {
@@ -570,6 +581,14 @@ impl BalanceOverlay {
         }
         if let Some(bps) = self.maintenance_annual_bps {
             balance.maintenance_annual_bps = bps;
+        }
+        if let Some(bps) = self.rival_blocks_bps {
+            if !(1_000..=10_000).contains(&bps) {
+                return Err(format!(
+                    "scenario balance rival_blocks_bps {bps} is out of range"
+                ));
+            }
+            balance.rival_blocks_bps = bps;
         }
         for (id, price) in &self.reference_price_cents {
             let product = balance

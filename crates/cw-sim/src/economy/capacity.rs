@@ -106,7 +106,54 @@ pub fn room_lots(world: &World, dataset: &Dataset, product: u16, region: u8) -> 
     } else {
         0
     };
-    (imports + unmet - coming_lots(world, dataset, product, Some(&regions))).max(0)
+    // Plants that buy the service and went without are room too, over the area a plant here
+    // would supply (a power plant feeds its whole grid).
+    let supplied = crate::economy::markets::supply_regions(dataset, region, product);
+    let business = crate::economy::pricing::business_unmet_in(world, dataset, product, &supplied).0;
+    let coming = if business > 0 {
+        coming_lots(world, dataset, product, Some(&supplied)).max(coming_lots(
+            world,
+            dataset,
+            product,
+            Some(&regions),
+        ))
+    } else {
+        coming_lots(world, dataset, product, Some(&regions))
+    };
+    // Capacity the sellers already there left idle answers the same buyers first: households
+    // that went without beside idle sellers went without for their budget, not for want of a
+    // plant, and are no room for a new one.
+    let spare = if unmet + business > 0 {
+        let area: Vec<u8> = if business > 0 { supplied } else { regions };
+        idle_lots(world, dataset, product, &area)
+    } else {
+        0
+    };
+    (imports + unmet + business - coming - spare).max(0)
+}
+
+/// Lots a week of a local product the operating plants in `regions` could make at full run but
+/// did not sell last week: their capacity less what households and plants there bought of it.
+pub fn idle_lots(world: &World, dataset: &Dataset, product: u16, regions: &[u8]) -> i64 {
+    let id = &dataset.products[product as usize].id;
+    let capacity: i64 = world
+        .facilities
+        .iter()
+        .map(|(_, plant)| plant)
+        .filter(|plant| {
+            plant.status == FacilityStatus::Operating && regions.contains(&plant.region)
+        })
+        .filter(|plant| world.firms.get(plant.firm).is_some_and(|f| f.operative()))
+        .map(|plant| dataset.recipes[plant.recipe as usize].lots_of(id) * plant.blocks as i64)
+        .sum();
+    if capacity <= 0 {
+        return 0;
+    }
+    let (unmet, wanted) = unmet_in(world, product, regions);
+    let (business_unmet, business) =
+        crate::economy::pricing::business_unmet_in(world, dataset, product, regions);
+    let bought = (wanted - unmet).max(0) + (business - business_unmet).max(0);
+    (capacity - bought).max(0)
 }
 
 /// Lots a week of each corridor good a new plant could still buy, read once per pass
@@ -127,9 +174,22 @@ pub struct InputRooms {
     /// work each week), less the jobs plants already running or being built there still want
     /// filled.
     workers: Vec<[i64; 3]>,
+    /// By region, then product: the share of what plants planned to draw of a service they got
+    /// last week, in basis points (10,000 when nothing went short). A short service is shared
+    /// pro rata to need, so a new plant gets the same share as the plants already there.
+    service_fill: Vec<Vec<i64>>,
 }
 
 impl InputRooms {
+    /// Share of its planned use of a service a new plant in `region` would get, basis points.
+    pub fn service_fill_bps(&self, product: u16, region: u8) -> i64 {
+        self.service_fill
+            .get(region as usize)
+            .and_then(|list| list.get(product as usize))
+            .copied()
+            .unwrap_or(10_000)
+    }
+
     /// Lots a week of `product` a new plant in `region` could still buy.
     pub fn lots(&self, product: u16, region: u8) -> i64 {
         let corridor = self.corridor.get(product as usize).copied().unwrap_or(0);
@@ -242,10 +302,32 @@ pub fn input_rooms(world: &World, dataset: &Dataset) -> InputRooms {
             *slot -= (want - plant.workers[tier]).max(0);
         }
     }
+    let mut service_fill = vec![vec![10_000i64; products]; world.regions.len()];
+    let bought_services: Vec<u16> = (0..products as u16)
+        .filter(|p| dataset.products[*p as usize].kind.is_service())
+        .filter(|p| {
+            let id = &dataset.products[*p as usize].id;
+            dataset
+                .recipes
+                .iter()
+                .any(|recipe| recipe.weekly_inputs_lots.get(id).is_some_and(|l| *l > 0))
+        })
+        .collect();
+    for (region, row) in service_fill.iter_mut().enumerate() {
+        for product in &bought_services {
+            let supplied = crate::economy::markets::supply_regions(dataset, region as u8, *product);
+            let (unmet, need) =
+                crate::economy::pricing::business_unmet_in(world, dataset, *product, &supplied);
+            if need > 0 && unmet > 0 {
+                row[*product as usize] = ((need - unmet).max(0) * 10_000 / need).clamp(0, 10_000);
+            }
+        }
+    }
     InputRooms {
         corridor,
         imports,
         workers,
+        service_fill,
     }
 }
 
@@ -265,6 +347,19 @@ pub fn input_fill_bps(dataset: &Dataset, rooms: &InputRooms, recipe: u16, region
 /// `i64::MAX` when it buys no corridor good.
 pub fn input_cap_lots(dataset: &Dataset, rooms: &InputRooms, recipe: u16, region: u8) -> i64 {
     let template = &dataset.recipes[recipe as usize];
+    // A service its buyers there went short of fills a new block's need in the same share.
+    let service_cap = template
+        .weekly_inputs_lots
+        .iter()
+        .filter(|(_, lots)| **lots > 0)
+        .filter_map(|(id, _)| {
+            let product = *dataset.product_index.get(id)?;
+            let fill = rooms.service_fill_bps(product, region);
+            (fill < 10_000)
+                .then(|| template.weekly_output_lots.max(1).saturating_mul(fill) / 10_000)
+        })
+        .min()
+        .unwrap_or(i64::MAX);
     template
         .weekly_inputs_lots
         .iter()
@@ -276,6 +371,7 @@ pub fn input_cap_lots(dataset: &Dataset, rooms: &InputRooms, recipe: u16, region
         })
         .min()
         .unwrap_or(i64::MAX)
+        .min(service_cap)
 }
 
 /// Lots a week a new plant of `recipe` in `region` could sell: the room for its output, no more

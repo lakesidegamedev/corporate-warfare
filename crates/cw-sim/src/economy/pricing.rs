@@ -263,15 +263,25 @@ pub fn street_wanted_bps(
 ) -> i64 {
     let rules = &dataset.markets;
     let used = (sold.saturating_mul(10_000) / capacity.max(1)).clamp(0, 10_000);
-    let (unmet, wanted) = seller_household_unmet(world, dataset, firm, product);
+    let (unmet, households) = seller_household_unmet(world, dataset, firm, product);
+    // Plants that buy the service and went without count the same as households that did: a
+    // power plant whose grid is short reads short however few households buy power.
+    let (business_unmet, business) = seller_business_unmet(world, dataset, firm, product);
+    let wanted = households.saturating_add(business);
     let short = if wanted > 0 {
-        (unmet.saturating_mul(10_000) / wanted).clamp(0, 10_000)
+        (unmet.saturating_add(business_unmet).saturating_mul(10_000) / wanted).clamp(0, 10_000)
     } else {
         0
     };
-    // The opening state, a seller selling all it makes with the opening share going without,
-    // reads zero: reference.
-    let reading = used + short - 10_000 - dataset.demand.street_short_bps;
+    // The opening state, a seller selling all it makes with the opening share of households
+    // going without, reads zero: reference. The street offset is the households' share only;
+    // plants are not expected to go without.
+    let offset = if wanted > 0 {
+        dataset.demand.street_short_bps.saturating_mul(households) / wanted
+    } else {
+        dataset.demand.street_short_bps
+    };
+    let reading = used + short - 10_000 - offset;
     let reading = if reading < 0 && !rival_has_spare(world, dataset, firm, product) {
         0
     } else {
@@ -373,6 +383,88 @@ pub fn seller_household_unmet(
         wanted = wanted.saturating_add(households.wanted_milli.get(&product).copied().unwrap_or(0));
     }
     (unmet / 1_000, wanted / 1_000)
+}
+
+/// Lots of a service the operating plants in `regions` went without last week, and the lots they
+/// planned to use, read from saved state: what the plants there plan to draw (their recipe's
+/// weekly use at their run target) against what the plants there made of it and the gateways
+/// there can bring in. Zero and zero for a good (a good's buyers read their stock instead, see
+/// `buyer_shortfall`) and where no plant buys it.
+pub fn business_unmet_in(
+    world: &World,
+    dataset: &Dataset,
+    product: u16,
+    regions: &[u8],
+) -> (i64, i64) {
+    if !dataset.products[product as usize].kind.is_service() {
+        return (0, 0);
+    }
+    let id = &dataset.products[product as usize].id;
+    let (mut need, mut made) = (0i64, 0i64);
+    for (_, plant) in world.facilities.iter() {
+        if plant.status != crate::state::FacilityStatus::Operating
+            || !regions.contains(&plant.region)
+        {
+            continue;
+        }
+        let recipe = &dataset.recipes[plant.recipe as usize];
+        made = made.saturating_add(plant.last_made(dataset, id).0);
+        let Some(weekly) = recipe.weekly_inputs_lots.get(id).copied() else {
+            continue;
+        };
+        if !world.firms.get(plant.firm).is_some_and(|f| f.operative()) {
+            continue;
+        }
+        need = need.saturating_add(
+            weekly
+                .saturating_mul(plant.blocks as i64)
+                .saturating_mul(1_000)
+                .saturating_mul(plant.target_bps.max(0) as i64)
+                / 10_000,
+        );
+    }
+    if need <= 0 {
+        return (0, 0);
+    }
+    let imports: i64 = world
+        .gateways
+        .iter()
+        .filter(|g| g.product == product && regions.contains(&g.region))
+        .map(|g| g.capacity_lots.max(0))
+        .sum();
+    let supply = made.saturating_add(imports.saturating_mul(1_000));
+    ((need - supply).max(0) / 1_000, need / 1_000)
+}
+
+/// The same for the regions one seller's operating plants serve (see `seller_household_unmet`).
+pub fn seller_business_unmet(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    product: u16,
+) -> (i64, i64) {
+    let Some(entity) = world.firms.get(firm) else {
+        return (0, 0);
+    };
+    if !dataset.products[product as usize].kind.is_service() {
+        return (0, 0);
+    }
+    let id = &dataset.products[product as usize].id;
+    let mut regions: std::collections::BTreeSet<u8> = Default::default();
+    for plant in entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|plant| plant.is_operating() && dataset.recipes[plant.recipe as usize].makes(id))
+    {
+        regions.extend(crate::economy::markets::supply_regions(
+            dataset,
+            plant.region,
+            product,
+        ));
+    }
+    let regions: Vec<u8> = regions.into_iter().collect();
+    business_unmet_in(world, dataset, product, &regions)
 }
 
 /// Whether any of the good left the corridor through a gateway last week.

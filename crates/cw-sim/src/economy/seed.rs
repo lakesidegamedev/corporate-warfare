@@ -415,7 +415,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
             let mut plants: Vec<(u8, u16, u8)> = vec![(
                 region,
                 dataset.recipe_index[&seed_firm.recipe],
-                seed_firm.blocks,
+                dataset.opening_blocks(seed_firm.blocks),
             )];
             // The lanes a carrier plant is pinned to, by plant order; empty is automatic.
             let mut pins: Vec<&[String]> = vec![&seed_firm.serves];
@@ -425,7 +425,7 @@ fn seed_named_firms(world: &mut World, dataset: &Dataset) {
                         .region_index(&extra.region)
                         .expect("validated extra plant region"),
                     dataset.recipe_index[&extra.recipe],
-                    extra.blocks,
+                    dataset.opening_blocks(extra.blocks),
                 ));
                 pins.push(&extra.serves);
             }
