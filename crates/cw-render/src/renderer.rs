@@ -13,6 +13,11 @@ use crate::palette::{COLOURS, Palette, STEPS, ramp};
 use crate::props;
 
 const SHADER: &str = include_str!("shaders/scene.wgsl");
+/// Samples per pixel in the main pass. Every colour is still a flat palette colour; the samples
+/// only decide how much of a pixel an edge covers, so lines and building edges are clean instead
+/// of stepped and do not crawl when the map moves.
+const SAMPLES: u32 = 4;
+
 /// The offscreen target's format. A window surface uses its own (see `SurfaceState`).
 const COLOUR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -321,6 +326,7 @@ pub struct Renderer {
     shadow_pipeline: wgpu::RenderPipeline,
     main_pipeline: wgpu::RenderPipeline,
     road_pipeline: wgpu::RenderPipeline,
+    colour_format: wgpu::TextureFormat,
     dummy_shadow: wgpu::TextureView,
     uniforms: wgpu::Buffer,
     cache: Option<GpuScene>,
@@ -377,6 +383,8 @@ struct Targets {
     height: u32,
     shadow_size: u32,
     depth_view: wgpu::TextureView,
+    /// The multisampled colour the main pass draws into; it is resolved into the real target.
+    msaa_view: wgpu::TextureView,
     shadow_view: wgpu::TextureView,
     /// The offscreen colour target and its readback buffer; absent when drawing to a surface.
     offscreen: Option<Offscreen>,
@@ -628,7 +636,10 @@ impl Renderer {
             },
             primitive,
             depth_stencil: Some(depth(wgpu::DepthBiasState::default())),
-            multisample: wgpu::MultisampleState::default(),
+            multisample: wgpu::MultisampleState {
+                count: SAMPLES,
+                ..Default::default()
+            },
             fragment: Some(wgpu::FragmentState {
                 module: &module,
                 entry_point: Some("fs_main"),
@@ -653,7 +664,10 @@ impl Renderer {
             },
             primitive,
             depth_stencil: Some(depth(wgpu::DepthBiasState::default())),
-            multisample: wgpu::MultisampleState::default(),
+            multisample: wgpu::MultisampleState {
+                count: SAMPLES,
+                ..Default::default()
+            },
             fragment: Some(wgpu::FragmentState {
                 module: &module,
                 entry_point: Some("fs_road"),
@@ -704,6 +718,7 @@ impl Renderer {
             shadow_pipeline,
             main_pipeline,
             road_pipeline,
+            colour_format,
             dummy_shadow,
             uniforms,
             cache: None,
@@ -1302,6 +1317,23 @@ impl Renderer {
                 shadow_size: style.shadow_size,
                 depth_view: depth_texture_sized(&self.device, rw, rh, "depth")
                     .create_view(&Default::default()),
+                msaa_view: self
+                    .device
+                    .create_texture(&wgpu::TextureDescriptor {
+                        label: Some("colour samples"),
+                        size: wgpu::Extent3d {
+                            width: rw,
+                            height: rh,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: SAMPLES,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: self.colour_format,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                        view_formats: &[],
+                    })
+                    .create_view(&Default::default()),
                 shadow_view: depth_texture(&self.device, style.shadow_size, "shadow")
                     .create_view(&Default::default()),
                 offscreen,
@@ -1421,12 +1453,12 @@ impl Renderer {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("main"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: colour_view,
+                    view: &targets.msaa_view,
                     depth_slice: None,
-                    resolve_target: None,
+                    resolve_target: Some(colour_view),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(clear),
-                        store: wgpu::StoreOp::Store,
+                        store: wgpu::StoreOp::Discard,
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
@@ -1693,7 +1725,7 @@ fn depth_texture_sized(device: &wgpu::Device, w: u32, h: u32, label: &str) -> wg
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
-        sample_count: 1,
+        sample_count: SAMPLES,
         dimension: wgpu::TextureDimension::D2,
         format: DEPTH_FORMAT,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
