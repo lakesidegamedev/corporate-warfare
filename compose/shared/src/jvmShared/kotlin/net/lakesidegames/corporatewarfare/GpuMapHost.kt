@@ -82,6 +82,12 @@ interface GpuMapSession {
     /** The newest frame and its camera as one read, so the two can never come from different frames. */
     val shown: GpuShown?
 
+    /**
+     * True once a finished frame can be put on screen (copied: a frame has landed; direct: a frame has been presented to the
+     * window). Until then the map keeps drawing what it drew before, so the screen never shows an undrawn window.
+     */
+    val ready: Boolean get() = shown != null
+
     /** Sends game state as JSON (plants, holdings, map mode, night, clouds). */
     fun update(json: String)
 

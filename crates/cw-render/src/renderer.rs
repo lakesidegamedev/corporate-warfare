@@ -233,6 +233,11 @@ pub struct FrameStats {
     /// A surface frame that was not drawn because the window could not take one (hidden,
     /// minimised, timed out). Always false for offscreen renders.
     pub skipped: bool,
+    /// Countryside and city chunks drawn, the band (stride) they belong to, and how many the view
+    /// wanted that were not built yet (drawn from the last complete band meanwhile).
+    pub prop_chunks: u32,
+    pub prop_stride: u8,
+    pub props_waiting: u32,
 }
 
 pub struct Frame {
@@ -289,7 +294,16 @@ struct PropCache {
     rev: (u64, u64, u64),
     chunks: HashMap<props::ChunkKey, (GpuMesh, u64)>,
     frame: u64,
+    /// The band drawn last time every chunk of the view was ready: drawn whole while the chunks of
+    /// a new band are being built, so a zoom across a band edge never shows a gap.
+    drawn: Option<u8>,
 }
+
+/// Time a frame may spend building chunks the view does not need yet (the ring just past it and
+/// the neighbouring bands), so they are ready before the camera gets there.
+const PROP_AHEAD_BUDGET: Duration = Duration::from_millis(4);
+/// Time a frame may spend building the chunks of a new band while the last band stands in.
+const PROP_SWAP_BUDGET: Duration = Duration::from_millis(8);
 
 struct GpuScene {
     /// Address of the scene it was built from; identity only, never dereferenced.
@@ -866,6 +880,7 @@ impl Renderer {
                 rev: (scene.season_rev, scene.buildings_rev, scene.props_rev),
                 chunks: HashMap::new(),
                 frame: 0,
+                drawn: None,
             },
             season_rev: scene.season_rev,
             mask_rev: scene.mask_rev,
@@ -892,17 +907,24 @@ impl Renderer {
     }
 
     /// Build the prop chunks a camera needs that are not built yet, drop the ones that stopped
-    /// being used, and return the keys to draw. Nothing here depends on the camera but the choice
-    /// of chunks, so a still camera costs a hash lookup.
+    /// being used, and return the keys to draw with how many the view still waits for. Nothing here
+    /// depends on the camera but the choice of chunks, so a still camera costs a hash lookup.
+    ///
+    /// Never a hole: when the view enters a new band and the last band drawn is complete for this
+    /// view, that band is drawn whole while the new band's chunks are built a few at a time; the new
+    /// band takes over in one frame once all of its chunks are ready. Otherwise the missing chunks
+    /// are built now. Spare time then builds the chunks just past the view and those of the
+    /// neighbouring bands, so a pan or a zoom finds them ready.
     fn prepare_props(
         &mut self,
         scene: &Scene,
         target: (f32, f32),
         width_km: f32,
-    ) -> Vec<props::ChunkKey> {
+    ) -> (Vec<props::ChunkKey>, u32) {
         let keys = props::visible_chunks(target, width_km);
+        let device = &self.device;
         let Some(c) = &mut self.cache else {
-            return Vec::new();
+            return (Vec::new(), 0);
         };
         let rev = (scene.season_rev, scene.buildings_rev, scene.props_rev);
         if c.props.rev != rev {
@@ -911,23 +933,86 @@ impl Renderer {
             }
             c.props.rev = rev;
             c.props.chunks.clear();
+            c.props.drawn = None;
         }
         c.props.frame += 1;
         let frame = c.props.frame;
-        for k in &keys {
-            match c.props.chunks.get_mut(k) {
-                Some(entry) => entry.1 = frame,
-                None => {
-                    let m = props::chunk_mesh(scene, &c.props.index, *k);
-                    c.props
-                        .chunks
-                        .insert(*k, (upload(&self.device, &m, "props"), frame));
+        let started = Instant::now();
+        let p = &mut c.props;
+        let build = |p: &mut PropCache, k: props::ChunkKey| {
+            let m = props::chunk_mesh(scene, &p.index, k);
+            p.chunks.insert(k, (upload(device, &m, "props"), frame));
+        };
+        let Some(stride) = keys.first().map(|k| k.stride) else {
+            p.chunks.retain(|_, e| frame - e.1 < 240);
+            return (keys, 0);
+        };
+        // Nearest the target first, so what is built first is what the eye is on.
+        let near = |k: &props::ChunkKey| {
+            let ck = 4.0 * k.stride as f32;
+            let (cx, cy) = ((k.ix as f32 + 0.5) * ck, (k.iy as f32 + 0.5) * ck);
+            (cx - target.0).hypot(cy - target.1)
+        };
+        let mut missing: Vec<props::ChunkKey> = keys
+            .iter()
+            .filter(|k| !p.chunks.contains_key(k))
+            .copied()
+            .collect();
+        missing.sort_by(|a, b| near(a).total_cmp(&near(b)));
+        let stand_in = p
+            .drawn
+            .filter(|&d| d != stride && !missing.is_empty())
+            .map(|d| props::chunks_around(target, 0.85 * width_km, d))
+            .filter(|ks| ks.iter().all(|k| p.chunks.contains_key(k)));
+        let mut waiting = 0u32;
+        let shown = if let Some(old) = stand_in {
+            for k in &missing {
+                if started.elapsed() >= PROP_SWAP_BUDGET {
+                    waiting += 1;
+                    continue;
                 }
+                build(p, *k);
+            }
+            if waiting == 0 { keys } else { old }
+        } else {
+            for k in &missing {
+                build(p, *k);
+            }
+            keys
+        };
+        for k in &shown {
+            if let Some(e) = p.chunks.get_mut(k) {
+                e.1 = frame;
             }
         }
+        if waiting == 0 {
+            p.drawn = Some(stride);
+        }
+        // Spare time: the ring just past the view, then the neighbouring bands.
+        let mut ahead = props::chunks_around(target, 1.3 * width_km, stride);
+        for d in [stride.saturating_sub(1), stride + 1] {
+            if d >= 1
+                && d != stride
+                && props::stride_for(width_km * d as f32 / stride as f32).is_some()
+            {
+                ahead.extend(props::chunks_around(
+                    target,
+                    0.85 * width_km * d as f32 / stride as f32,
+                    d,
+                ));
+            }
+        }
+        ahead.retain(|k| !p.chunks.contains_key(k));
+        ahead.sort_by(|a, b| near(a).total_cmp(&near(b)));
+        for k in ahead {
+            if started.elapsed() >= PROP_AHEAD_BUDGET {
+                break;
+            }
+            build(p, k);
+        }
         // Keep a margin of chunks for panning back, drop what has been idle for a while.
-        c.props.chunks.retain(|_, e| frame - e.1 < 240);
-        keys
+        p.chunks.retain(|_, e| frame - e.1 < 240);
+        (shown, waiting)
     }
 
     fn ensure_roads(&mut self, scene: &Scene, band: usize) {
@@ -1084,7 +1169,10 @@ impl Renderer {
         self.prepare(scene, style);
         let road_band = mesh::road_band(camera.width_km);
         if style.roads {
-            self.ensure_roads(scene, road_band);
+            // Every band at once, the first time: a zoom across a band edge never waits on a build.
+            for band in 0..3 {
+                self.ensure_roads(scene, band);
+            }
         }
         let ps = if to_surface {
             1
@@ -1242,10 +1330,10 @@ impl Renderer {
         {
             c.plan.build_routes(scene);
         }
-        let prop_keys = if style.props && style.buildings {
+        let (prop_keys, props_waiting) = if style.props && style.buildings {
             self.prepare_props(scene, (tx, ty), camera.width_km)
         } else {
-            Vec::new()
+            (Vec::new(), 0)
         };
         let gpu = self.cache.as_ref().expect("prepared");
         // Smoke, construction, growth, beacons and vehicles: built for this clock and camera.
@@ -1414,6 +1502,9 @@ impl Renderer {
         let mut stats = FrameStats {
             width: rw * ps,
             height: rh * ps,
+            prop_chunks: prop_keys.len() as u32,
+            prop_stride: prop_keys.first().map_or(0, |k| k.stride),
+            props_waiting,
             ..Default::default()
         };
         let mut enc = self.device.create_command_encoder(&Default::default());

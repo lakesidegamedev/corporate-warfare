@@ -12,6 +12,9 @@ heading.
 ## [Unreleased]
 
 ### Fixed
+- The 3D map is now the one map everywhere it can draw. The map docked beside a page, the Freight mode (its lanes now sit on the 3D ground) and every zoom down to the globe all use it, and the hand-over to the globe happens at one zoom with no frame of both or of neither. The classic map remains only for the globe and for computers with no usable graphics card.
+- No more black while moving the map. The 3D map takes over only once it has a finished picture for the view, it keeps a picture ready while you zoom toward it, and the globe redraws whole when it takes back over. Trees and city buildings for the next zoom step are built ahead, and the last complete set stands in while a new one finishes, so the view never shows gaps.
+- Opening a second map view (the docked map, or the map page again) no longer rebuilds the whole scene, so it shows the 3D map much sooner.
 - On a phone, the save browser's rows and the scenario cards no longer clip: long save and scenario names end in an ellipsis, the two lines of detail may wrap, and the New career here and Customize buttons drop to a second line when they do not both fit.
 - The main menu's scenario outlines and labels were drawn off the globe, out in space to its left. The globe and every layer on it now share one position at every window size, and the globe turns to face the scenario of your latest save, so that scenario's outline is always on the visible side.
 - New career, at the helm: the sales column is left out when no company has sales yet instead of showing dashes, and the chosen company now has a full description beside the list: sector, region, plants, workers, price of control and what the board will expect of you, read from the engine.
@@ -31,6 +34,7 @@ Corporate Warfare 2.0 is the biggest change since the first release. The company
 - Edges on the 3D map are smoothed, so roads, coastlines and buildings are clean lines that do not crawl or shimmer when the map moves.
 - Roads are proper ribbons whose width follows the zoom smoothly: highways have a light carriageway inside a darker edge, with centre dashes when you are close, and main roads are a clear light line.
 - Every sector's plant now uses the new model shapes: pitched hangar and terrace roofs, a radar dome, round masts and chillers, a crowned finance tower, conifers, and heaps that look like heaps.
+- Cities on the 3D map are full of buildings up close: low houses with pitched roofs in the suburbs, mid-rise blocks in the inner city, sheds in the industrial districts and towers downtown, each on its own city block and never on a street, on water or on a plant's ground. They stay in place at a fixed size and thin out by number as you pull back.
 - The 3D map is now the map. It is on by default (Settings, Graphics, "3D map"; the classic flat map stays for computers with no usable graphics card). A plant keeps its true size up close and never shrinks below a readable size as you pull back, and plants stand far enough apart that they never overlap or stand in the water.
 - Plant models are built from proper solids instead of stacked boxes: round tanks and silos with domed lids, waisted cooling towers, round banded chimneys, sawtooth factory roofs and pitched barn roofs.
 - City streets lie on a fixed grid of the real world, with blocks about 150 metres across, so a city is the same city at every zoom. The small streets drop out as you pull back, then the avenues.

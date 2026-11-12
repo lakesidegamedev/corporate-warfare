@@ -6,8 +6,9 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use cw_render::{
-    AssetDirs, CHUNK_MAX_PROPS, ChunkKey, LINE_RIVER, PropIndex, PropKind, SCENARIOS, ScenarioSpec,
-    Scene, SceneOptions, prop_chunk_mesh, prop_chunk_placed, prop_chunks, prop_stride,
+    AssetDirs, CHUNK_MAX_CITY, CHUNK_MAX_PROPS, CITY_MAX_WIDTH_KM, ChunkKey, LINE_RIVER, PropIndex,
+    PropKind, SCENARIOS, ScenarioSpec, Scene, SceneOptions, city_street_at, prop_chunk_mesh,
+    prop_chunk_placed, prop_chunks, prop_stride,
 };
 
 fn scene() -> &'static Scene {
@@ -137,21 +138,32 @@ fn counts_stay_inside_the_budget() {
     for (name, lon, lat) in SPOTS {
         for width in [8.0f32, 25.0, 45.0, 60.0] {
             let chunks = placed_at(lon, lat, width);
-            let mut total = 0;
+            let (mut total, mut city_total) = (0, 0);
             for (k, props) in &chunks {
+                // City lots have their own budget; trees, scrub and farms keep the old one.
+                let city = props
+                    .iter()
+                    .filter(|p| p.half != [0.0, 0.0] || p.kind == PropKind::House)
+                    .count();
+                let rest = props.len() - city;
+                assert!(rest <= CHUNK_MAX_PROPS, "{name} {k:?}: {rest}");
                 assert!(
-                    props.len() <= CHUNK_MAX_PROPS,
-                    "{name} {k:?}: {}",
-                    props.len()
+                    city <= CHUNK_MAX_CITY,
+                    "{name} {k:?}: {city} city buildings"
                 );
-                total += props.len();
+                total += rest;
+                city_total += city;
                 built += 1;
             }
             eprintln!(
-                "{name} at {width} km: {} chunks, {total} props",
+                "{name} at {width} km: {} chunks, {total} props, {city_total} city buildings",
                 chunks.len()
             );
             assert!(total <= 16_000, "{name} at {width} km: {total} props");
+            assert!(
+                city_total <= 30_000,
+                "{name} at {width} km: {city_total} city buildings"
+            );
         }
     }
     eprintln!("{built} chunks placed in {:?}", t.elapsed());
@@ -244,4 +256,98 @@ fn every_scenario_builds_props_without_panic() {
             let _ = prop_chunk_mesh(&s, &index, k);
         }
     }
+}
+
+/// Downtown, the inner city and the docks of three cities, close up.
+const CITIES: [(&str, f32, f32); 3] = [
+    ("cleveland", -81.69, 41.49),
+    ("chicago", -87.65, 41.88),
+    ("detroit", -83.05, 42.33),
+];
+
+#[test]
+fn city_buildings_fill_the_blocks_and_never_stand_on_a_street() {
+    let s = scene();
+    for (name, lon, lat) in CITIES {
+        let mut buildings = 0usize;
+        let mut houses = 0usize;
+        for (_, props) in placed_at(lon, lat, 10.0) {
+            for p in props {
+                if p.half == [0.0, 0.0] {
+                    continue;
+                }
+                if p.kind == PropKind::House {
+                    houses += 1;
+                } else {
+                    assert_eq!(p.kind, PropKind::Building);
+                    buildings += 1;
+                }
+                // Every point of the footprint (on a 6 m grid) is block ground as the shader
+                // draws it, never a street or an avenue.
+                let [hw, hd] = p.half;
+                let n = 6;
+                for a in 0..=n {
+                    for b in 0..=n {
+                        let x = p.x - hw + 2.0 * hw * a as f32 / n as f32;
+                        let y = p.y - hd + 2.0 * hd * b as f32 / n as f32;
+                        assert!(
+                            !city_street_at(s, x, y),
+                            "{name}: a {:?} at ({:.3}, {:.3}) covers a street at ({x:.3}, {y:.3})",
+                            p.kind,
+                            p.x,
+                            p.y
+                        );
+                    }
+                }
+            }
+        }
+        eprintln!("{name} at 10 km: {buildings} city buildings, {houses} houses");
+        assert!(buildings > 300, "{name}: only {buildings} city buildings");
+    }
+}
+
+#[test]
+fn city_buildings_thin_out_by_count_and_stop_past_their_band() {
+    let s = scene();
+    let (_, lon, lat) = CITIES[0];
+    let target = s.projection.to_km(lon, lat);
+    let count = |width: f32| -> usize {
+        prop_chunks(target, width)
+            .into_iter()
+            .map(|k| {
+                prop_chunk_placed(s, index(), k)
+                    .into_iter()
+                    .filter(|p| p.kind == PropKind::Building)
+                    .filter(|p| (p.x - target.0).abs() < 4.0 && (p.y - target.1).abs() < 4.0)
+                    .count()
+            })
+            .sum()
+    };
+    let (near, mid, far) = (count(10.0), count(20.0), count(CITY_MAX_WIDTH_KM + 2.0));
+    eprintln!(
+        "buildings within 4 km of downtown: {near} at 10 km, {mid} at 20 km, {far} past the band"
+    );
+    assert!(near > 100);
+    assert!(mid < near / 2, "a wider band keeps fewer: {mid} of {near}");
+    assert_eq!(far, 0, "no city buildings past {CITY_MAX_WIDTH_KM} km");
+    // The same lot gives the same building at the same size in both bands: positions of the wider
+    // band are a subset of the closer one's.
+    let at = |width: f32| -> HashSet<(i32, i32, i32)> {
+        prop_chunks(target, width)
+            .into_iter()
+            .flat_map(|k| prop_chunk_placed(s, index(), k))
+            .filter(|p| p.kind == PropKind::Building)
+            .filter(|p| (p.x - target.0).abs() < 3.0 && (p.y - target.1).abs() < 3.0)
+            .map(|p| {
+                (
+                    (p.x * 1000.0) as i32,
+                    (p.y * 1000.0) as i32,
+                    (p.half[0] * 1e4) as i32,
+                )
+            })
+            .collect()
+    };
+    let (close, wide) = (at(10.0), at(20.0));
+    assert!(!wide.is_empty());
+    assert!(wide.is_subset(&close), "a wider band only drops buildings");
 }

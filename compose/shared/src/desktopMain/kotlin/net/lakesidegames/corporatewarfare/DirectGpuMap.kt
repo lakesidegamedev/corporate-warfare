@@ -2,6 +2,7 @@ package net.lakesidegames.corporatewarfare
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import com.sun.jna.Library
@@ -118,6 +119,10 @@ internal class DirectGpuSession(
     override val frameCamera: GpuCamera? get() = null
     override val shown: GpuShown? get() = null
     override var version by mutableLongStateOf(0L)
+        private set
+
+    /** Set when the first frame has been presented: until then the window holds nothing worth showing and the map keeps drawing what it drew before. */
+    override var ready by mutableStateOf(false)
         private set
 
     /** Frames put on the screen, and a listener called on the render thread for each one. */
@@ -266,6 +271,7 @@ internal class DirectGpuSession(
             // Something moves: the next frame follows at once; presenting waits for the display, which paces it.
             if (animating) lock.withLock { dirty = true }
             val seq = presented.incrementAndGet()
+            if (seq == 1L) ready = true
             frameListener?.invoke(DirectFrame(seq, job.camera, job.width, job.height, timing[0], timing[1], total, t0))
         }
     }

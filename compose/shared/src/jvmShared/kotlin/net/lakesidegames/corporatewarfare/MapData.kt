@@ -300,6 +300,12 @@ data class MapCamera(val lon: Double, val lat: Double, val zoom: Double, val bea
         const val FLAT_START = 2.4
         const val FLAT_END = 6.0
 
+        /**
+         * Where the 3D map hands over to the globe: at this zoom and closer the 3D map draws (when the machine has one), below
+         * it the classic globe, which is fully round here, so one zoom point separates the two and no frame shows both.
+         */
+        const val GPU_FROM = FLAT_START
+
         /** The camera that frames the scenario's playable states. */
         fun scenario(size: Size, map: WorldMap): MapCamera {
             val b = map.playBounds

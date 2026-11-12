@@ -34,6 +34,7 @@ const SNOW_M_PER_DEG: f32 = 220.0;
 /// Marks a texel that never takes snow (water, cities).
 const NO_SNOW: i16 = i16::MIN;
 
+#[derive(Clone)]
 pub struct Ground {
     pub w: usize,
     pub h: usize,

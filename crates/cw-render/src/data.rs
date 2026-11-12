@@ -60,6 +60,7 @@ pub struct Bounds {
 }
 
 /// Elevation in metres on a regular lon/lat grid, north row first.
+#[derive(Clone)]
 pub struct Heightmap {
     pub w: usize,
     pub h: usize,
@@ -121,6 +122,7 @@ impl Heightmap {
 }
 
 /// A raster of the map's own data: RGBA8, R region, G state, B water kind, A tint class.
+#[derive(Clone)]
 pub struct Mask {
     pub w: usize,
     pub h: usize,
@@ -172,6 +174,7 @@ impl Mask {
 }
 
 /// An RGBA8 image that covers a geographic box (rows north first).
+#[derive(Clone)]
 pub struct GeoImage {
     pub w: u32,
     pub h: u32,
@@ -343,6 +346,7 @@ pub struct Lane {
     pub goods: String,
 }
 
+#[derive(Clone)]
 pub struct Scene {
     pub projection: Projection,
     pub heightmap: Heightmap,

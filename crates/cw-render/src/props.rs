@@ -13,7 +13,9 @@ use std::collections::HashMap;
 use crate::data::{
     LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, LINE_RIVER, Scene, WATER_LAKE, WATER_OCEAN,
 };
-use crate::ground::{G_FIELD, G_FOREST, G_ROCK, G_SNOW, G_SOIL, G_URBAN, ZONE_OUTER};
+use crate::ground::{
+    G_CORE, G_FIELD, G_FOREST, G_ROCK, G_SNOW, G_SOIL, G_URBAN, ZONE_INDUSTRIAL, ZONE_OUTER,
+};
 use crate::mesh::{self, KIND_PROP, Mesh, Vertex};
 use crate::palette::{Palette, Rgb, ramp};
 
@@ -28,11 +30,18 @@ const CHUNK_KM: f32 = 4.0;
 const TREE_CELL_KM: f32 = 0.26;
 /// Trees are drawn this much bigger than the models are built, so a stand of them reads at close zoom.
 const TREE_SCALE: f32 = 1.5;
-const LOT_KM: f32 = 0.14;
 /// Farmsteads: one chance per cell of this size.
 const FARM_CELL_KM: f32 = 3.0;
-/// The ground texture's texel at close zoom, which the city block pattern is laid out in.
-const TEXEL_KM: f32 = 0.125;
+/// The city's street lattice: one cell is 31.25 m, the cell the ground shader lays its streets and
+/// blocks out in (`city_texel` in scene.wgsl), so a city building stands on the block it is drawn on.
+const CELL_KM: f32 = 0.03125;
+/// City buildings stand on lots of this many cells a side, one building (or none) a lot.
+const LOT_CELLS: i32 = 3;
+/// City buildings show only when the camera sees at most this many kilometres across; further
+/// out they thin by the band's stride (fewer of them, never smaller or softer) and then stop.
+pub const CITY_MAX_WIDTH_KM: f32 = 36.0;
+/// Hard limit on the city buildings one chunk may hold.
+pub const CHUNK_MAX_CITY: usize = 2600;
 /// Clear ground kept round a road, a river and a building, in km.
 const ROAD_CLEAR_KM: f32 = 0.1;
 const RIVER_CLEAR_KM: f32 = 0.13;
@@ -68,8 +77,13 @@ pub fn visible_chunks(target: (f32, f32), width_km: f32) -> Vec<ChunkKey> {
     let Some(stride) = stride_for(width_km) else {
         return Vec::new();
     };
+    chunks_around(target, 0.85 * width_km, stride)
+}
+
+/// The chunks of a band (`stride`) within `reach` km of the target: the renderer uses it to build
+/// the chunks just past the view and those of the neighbouring bands before the camera gets there.
+pub fn chunks_around(target: (f32, f32), reach: f32, stride: u8) -> Vec<ChunkKey> {
     let ck = chunk_km(stride);
-    let reach = 0.85 * width_km;
     let (x0, x1) = (
         ((target.0 - reach) / ck).floor() as i32,
         ((target.0 + reach) / ck).floor() as i32,
@@ -330,14 +344,23 @@ fn axis_street(
     (on, if t >= off { k } else { k - 1 })
 }
 
-/// (tone, green) of an outer residential texel: tone below 0 is street, green 1 lawn, 2 a tree,
-/// 3 the dark lawn of a park. The same rule as `city_texel` in the shader for zone 0.
-fn outer_texel(tx: i32, ty: i32) -> (i32, i32) {
-    let (span, lo, rng, av) = (12, 3, 6u32, 48);
+/// (tone, green) of a city cell at close zoom: the ground shader's `city_texel` with its avenues
+/// two cells wide. Tone below 0 is an avenue or a street, 0 or 1 a block; green 0 none, 1 lawn,
+/// 2 a tree, 3 the dark lawn of a park. `core` is downtown ground, `zone` the city zone.
+fn city_cell(core: bool, zone: u8, tx: i32, ty: i32) -> (i32, i32) {
+    let (span, lo, rng, av) = if core {
+        (6, 2, 2u32, 24)
+    } else if zone == ZONE_OUTER {
+        (12, 3, 6, 48)
+    } else if zone == ZONE_INDUSTRIAL {
+        (20, 4, 10, 64)
+    } else {
+        (8, 2, 4, 32)
+    };
     let avx = imod(tx - (ihash(tx >> 6, 91) % 5) as i32, av);
     let avy = imod(ty - (ihash(ty >> 6, 92) % 5) as i32, av);
     if avx < 2 || avy < 2 {
-        return (-1, 0);
+        return (-2, 0);
     }
     let sx = axis_street(tx, ty >> 6, 11, span, lo, rng, 1);
     let sy = axis_street(ty, tx >> 6, 23, span, lo, rng, 1);
@@ -346,23 +369,31 @@ fn outer_texel(tx: i32, ty: i32) -> (i32, i32) {
     }
     let bh = ihash(sx.1 * 7 + 3, sy.1 * 13 + 5) % 100;
     let th = ihash(tx + 17, ty + 29) % 100;
-    if bh < 30 {
-        return (0, if th < 14 { 2 } else { 1 });
+    if core {
+        return (i32::from(bh < 72), 0);
     }
-    if bh < 38 {
-        return (1, 0);
+    if zone == ZONE_OUTER {
+        if bh < 30 {
+            return (0, if th < 14 { 2 } else { 1 });
+        }
+        if bh < 38 {
+            return (1, 0);
+        }
+        if th < 12 {
+            return (0, 1);
+        }
+        if th < 16 {
+            return (0, 2);
+        }
+        return (0, 0);
     }
-    if th < 12 {
-        return (0, 1);
+    if zone == ZONE_INDUSTRIAL {
+        return (i32::from(bh < 22), 0);
     }
-    if th < 16 {
-        return (0, 2);
+    if bh < 7 {
+        return (0, if th < 10 { 2 } else { 3 });
     }
-    (0, 0)
-}
-
-fn texel_of(x: f32, y: f32) -> (i32, i32) {
-    ((x / TEXEL_KM).floor() as i32, (y / TEXEL_KM).floor() as i32)
+    (i32::from(bh < 30), 0)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -657,48 +688,6 @@ fn farmstead(b: &mut Build, snow: bool, r: u32) {
     }
 }
 
-fn house(b: &mut Build, snow: bool, r: u32) {
-    let walls = [
-        pc(ramp::CLOUD, 2),
-        pc(ramp::SOIL, 3),
-        pc(ramp::BRICK, 2),
-        pc(ramp::URBAN, 3),
-        pc(ramp::CLOUD, 1),
-    ];
-    let roofs = [
-        pc(ramp::ROCK, 1),
-        pc(ramp::BRICK, 1),
-        pc(ramp::SOIL, 1),
-        pc(ramp::ROCK, 0),
-        pc(ramp::WATER, 1),
-    ];
-    let wide = 0.034 + 0.01 * unit(r >> 4);
-    let deep = 0.026 + 0.008 * unit(r >> 9);
-    b.put(
-        [-wide, -deep, 0.0],
-        [wide, deep, 0.016],
-        walls[(r >> 13) as usize % walls.len()],
-    );
-    let roof = roofs[(r >> 17) as usize % roofs.len()];
-    b.put(
-        [-wide - 0.003, -deep - 0.003, 0.016],
-        [wide + 0.003, deep + 0.003, 0.022],
-        roof,
-    );
-    b.put(
-        [-wide + 0.004, -deep + 0.005, 0.022],
-        [wide - 0.004, deep - 0.005, 0.027],
-        roof,
-    );
-    if snow {
-        b.put(
-            [-wide + 0.004, -deep + 0.005, 0.027],
-            [wide - 0.004, deep - 0.005, 0.03],
-            pc(ramp::SNOW, 2),
-        );
-    }
-}
-
 // ---------------------------------------------------------------------------------------------
 // Placement.
 
@@ -725,6 +714,8 @@ pub struct Placed {
     pub kind: PropKind,
     pub x: f32,
     pub y: f32,
+    /// Half the footprint east and north in km, for a city building (0 for the others).
+    pub half: [f32; 2],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -733,6 +724,8 @@ pub enum PropKind {
     Scrub,
     House,
     Farm,
+    /// A city building on a block: a mid-rise, an industrial shed or a downtown tower.
+    Building,
 }
 
 /// The mesh of one chunk.
@@ -858,86 +851,26 @@ fn build_chunk(scene: &Scene, index: &PropIndex, key: ChunkKey) -> (Mesh, Vec<Pl
             },
             x,
             y,
+            half: [0.0; 2],
         });
         count += 1;
     }
 
-    // Suburbs: houses on the blocks of the outer residential ground, trees on its tree texels.
-    for (i, j) in cells(LOT_KM) {
-        if count >= CHUNK_MAX_PROPS {
-            break;
-        }
-        let (x, y) = ((i as f32 + 0.5) * LOT_KM, (j as f32 + 0.5) * LOT_KM);
-        let Some(g) = ground_at(scene, x, y) else {
-            continue;
-        };
-        if g.base != G_URBAN || g.zone != ZONE_OUTER {
-            continue;
-        }
-        let (tx, ty) = texel_of(x, y);
-        let (tone, green) = outer_texel(tx, ty);
-        if tone < 0 {
-            continue;
-        }
-        let h = hash(i, j, 0x91);
-        if green >= 2 {
-            // The texture's own tree texel, and about every third texel of a park.
-            if green == 2 || unit(h) < 0.35 {
-                let ts = scale * 1.2;
-                let r = 0.045 * ts;
-                if let Some((z, low, ..)) = clear(x, y, r) {
-                    let mut b = Build::new(&mut m, [x, y, z], ts, 0.0);
-                    plant_tree(
-                        &mut b,
-                        &g,
-                        0.3,
-                        scene.week,
-                        (z - low) / ts,
-                        hash(i, j, 0x92),
-                    );
-                    placed.push(Placed {
-                        kind: PropKind::Tree,
-                        x,
-                        y,
-                    });
-                    count += 1;
-                }
+    // Cities: one building (or none) on each lot of the street lattice, by the zone it stands in:
+    // houses in the outer residential ground, mid-rise blocks in the inner city, sheds in the
+    // industrial ground and towers downtown, at their fixed size. A wider band keeps every n-th lot.
+    if city_band(key.stride) {
+        let lot_km = LOT_CELLS as f32 * CELL_KM;
+        let mut city = 0usize;
+        for (i, j) in cells(lot_km) {
+            if city >= CHUNK_MAX_CITY {
+                break;
             }
-            continue;
+            if let Some(p) = city_lot(scene, &mut m, &clear, i, j) {
+                placed.push(p);
+                city += 1;
+            }
         }
-        // The house stands when its rank is under the region's limit: the classic map's rule,
-        // steady at 45 and up to 55 percent more or fewer as people move in or out.
-        let rank = (h % 100) as f32;
-        let (lon, lat) = scene.projection.to_lonlat(x, y);
-        let limit = house_limit(scene, lon, lat);
-        if rank >= limit {
-            continue;
-        }
-        // The whole footprint must sit on block texels, not across a street.
-        let r = 0.046 * scale;
-        let on_block = [(-r, -r), (r, -r), (r, r), (-r, r)].iter().all(|(ox, oy)| {
-            let (ax, ay) = texel_of(x + ox, y + oy);
-            outer_texel(ax, ay).0 >= 0
-        });
-        if !on_block {
-            continue;
-        }
-        let Some((z, low, ..)) = clear(x, y, r) else {
-            continue;
-        };
-        // Houses face the road grid: axis aligned, a quarter turn at random.
-        let yaw = if unit(h >> 12) < 0.5 { 0.0 } else { 90.0 };
-        let mut b = Build::new(&mut m, [x, y, z], scale, yaw);
-        if z - low > 1e-4 {
-            b.block(0.04, -(z - low) / scale, 0.0, pc(ramp::SOIL, 1));
-        }
-        house(&mut b, snowy(scene, x, y), hash(i, j, 0x93));
-        placed.push(Placed {
-            kind: PropKind::House,
-            x,
-            y,
-        });
-        count += 1;
     }
 
     // Farmsteads: one chance per big cell, on farmland only.
@@ -1004,10 +937,321 @@ fn build_chunk(scene: &Scene, index: &PropIndex, key: ChunkKey) -> (Mesh, Vec<Pl
                 kind: PropKind::Farm,
                 x,
                 y,
+                half: [0.0; 2],
             });
         }
     }
     (m, placed)
+}
+
+/// Whether a point is a street or an avenue of the city as the ground shader draws it up close
+/// (false off city ground), so tests can check that no building stands on one.
+pub fn city_street_at(scene: &Scene, x: f32, y: f32) -> bool {
+    let Some(g) = ground_at(scene, x, y) else {
+        return false;
+    };
+    let core = g.base == G_CORE;
+    if g.base != G_URBAN && !core {
+        return false;
+    }
+    let (cx, cy) = ((x / CELL_KM).floor() as i32, (y / CELL_KM).floor() as i32);
+    city_cell(core, g.zone, cx, cy).0 < 0
+}
+
+/// The prop placement's check that a spot is free: (x, y, half side) to the ground height under it,
+/// the lowest ground round it, and the distances to the nearest road and river.
+type Clear<'a> = dyn Fn(f32, f32, f32) -> Option<(f32, f32, f32, f32, f32)> + 'a;
+
+/// Whether a band (`stride`) draws the city's buildings.
+fn city_band(stride: u8) -> bool {
+    stride as f32 * 12.0 <= CITY_MAX_WIDTH_KM
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum CityKind {
+    House,
+    MidRise,
+    Shed,
+    Tower,
+}
+
+/// The building (or tree) of one lot of the street lattice, built into `m`; None for an empty lot.
+/// Its footprint is a whole number of lattice cells inside the lot, every one of them block ground
+/// of the city (never a street, an avenue, a park or another zone's street), and the spot must be
+/// clear of roads, rivers, water and the placed buildings like every prop.
+fn city_lot(scene: &Scene, m: &mut Mesh, clear: &Clear, i: i32, j: i32) -> Option<Placed> {
+    let (lx, ly) = (i * LOT_CELLS, j * LOT_CELLS);
+    let km = |c: i32| (c as f32 + 0.5) * CELL_KM;
+    let mid = LOT_CELLS / 2;
+    let g = ground_at(scene, km(lx + mid), km(ly + mid))?;
+    let core = g.base == G_CORE;
+    if g.base != G_URBAN && !core {
+        return None;
+    }
+    let kind = if core {
+        CityKind::Tower
+    } else if g.zone == ZONE_OUTER {
+        CityKind::House
+    } else if g.zone == ZONE_INDUSTRIAL {
+        CityKind::Shed
+    } else {
+        CityKind::MidRise
+    };
+    let h = hash(i, j, 0xC17);
+    let roll = unit(h) * 100.0;
+    // The texture's own tree cell in the middle of the lot gets a tree, as the old suburbs did.
+    let (_, green) = city_cell(core, g.zone, lx + mid, ly + mid);
+    if green == 2 {
+        let (x, y) = (km(lx + mid), km(ly + mid));
+        let r = 0.045 * 1.2;
+        let (z, low, ..) = clear(x, y, r)?;
+        let mut b = Build::new(m, [x, y, z], 1.2, 0.0);
+        plant_tree(
+            &mut b,
+            &g,
+            0.3,
+            scene.week,
+            (z - low) / 1.2,
+            hash(i, j, 0x92),
+        );
+        return Some(Placed {
+            kind: PropKind::Tree,
+            x,
+            y,
+            half: [0.0; 2],
+        });
+    }
+    let wanted = match kind {
+        CityKind::House => {
+            let (lon, lat) = scene.projection.to_lonlat(km(lx), km(ly));
+            house_limit(scene, lon, lat)
+        }
+        CityKind::MidRise => 82.0,
+        CityKind::Shed => 70.0,
+        CityKind::Tower => 88.0,
+    };
+    if roll >= wanted {
+        return None;
+    }
+    let bit = |k: u32| (h >> k) & 1 == 1;
+    let (fw, fh) = match kind {
+        CityKind::House => {
+            if bit(9) {
+                (2, 1)
+            } else {
+                (1, 2)
+            }
+        }
+        CityKind::MidRise | CityKind::Tower => (2 + bit(9) as i32, 2 + bit(10) as i32),
+        CityKind::Shed => {
+            if bit(9) {
+                (3, 2)
+            } else {
+                (2, 3)
+            }
+        }
+    };
+    let ox = (hash(i, j, 0xC18) % (LOT_CELLS - fw + 1) as u32) as i32;
+    let oy = (hash(i, j, 0xC19) % (LOT_CELLS - fh + 1) as u32) as i32;
+    let (cx0, cy0) = (lx + ox, ly + oy);
+    // Every cell under the footprint is block ground of the city. The shader reads the zone (and
+    // so the street layout) per pixel, and a ground texel's edge can cross a cell, so each cell is
+    // read at its middle and near its four corners with the zone found there: any part of the cell
+    // that some zone draws as a street holds at least one of those points.
+    const AT: [(f32, f32); 5] = [
+        (0.5, 0.5),
+        (0.001, 0.001),
+        (0.999, 0.001),
+        (0.001, 0.999),
+        (0.999, 0.999),
+    ];
+    for cy in cy0..cy0 + fh {
+        for cx in cx0..cx0 + fw {
+            for (fx, fy) in AT {
+                let (px, py) = ((cx as f32 + fx) * CELL_KM, (cy as f32 + fy) * CELL_KM);
+                let gc = ground_at(scene, px, py)?;
+                let c_core = gc.base == G_CORE;
+                if gc.base != G_URBAN && !c_core {
+                    return None;
+                }
+                let (tone, green) = city_cell(c_core, gc.zone, cx, cy);
+                if tone < 0 || green != 0 {
+                    return None;
+                }
+            }
+        }
+    }
+    // A sliver of the block stays open round the walls, so no wall sits on the street's edge.
+    let gap = 0.004;
+    let hw = fw as f32 * CELL_KM / 2.0 - gap;
+    let hd = fh as f32 * CELL_KM / 2.0 - gap;
+    let x = cx0 as f32 * CELL_KM + fw as f32 * CELL_KM / 2.0;
+    let y = cy0 as f32 * CELL_KM + fh as f32 * CELL_KM / 2.0;
+    let (z, low, ..) = clear(x, y, hw.max(hd))?;
+    let mut b = Build::new(m, [x, y, z], 1.0, 0.0);
+    if z - low > 1e-4 {
+        b.put([-hw, -hd, -(z - low)], [hw, hd, 0.0], pc(ramp::ROCK, 1));
+    }
+    let r = hash(i, j, 0xC1A);
+    let snow = snowy(scene, x, y);
+    match kind {
+        CityKind::House => city_house(&mut b, hw, hd, snow, r),
+        CityKind::MidRise => mid_rise(&mut b, hw, hd, snow, r),
+        CityKind::Shed => shed(&mut b, hw, hd, snow, r),
+        CityKind::Tower => tower(&mut b, hw, hd, r),
+    }
+    Some(Placed {
+        kind: if kind == CityKind::House {
+            PropKind::House
+        } else {
+            PropKind::Building
+        },
+        x,
+        y,
+        half: [hw, hd],
+    })
+}
+
+/// A low house with a pitched roof: the roof steps in toward a ridge along the long side.
+fn city_house(b: &mut Build, hw: f32, hd: f32, snow: bool, r: u32) {
+    let walls = [
+        pc(ramp::CLOUD, 2),
+        pc(ramp::SOIL, 3),
+        pc(ramp::BRICK, 2),
+        pc(ramp::URBAN, 3),
+        pc(ramp::CLOUD, 1),
+    ];
+    let roofs = [
+        pc(ramp::ROCK, 1),
+        pc(ramp::BRICK, 1),
+        pc(ramp::SOIL, 1),
+        pc(ramp::ROCK, 0),
+        pc(ramp::WATER, 1),
+    ];
+    let wall_h = 0.007;
+    b.put(
+        [-hw, -hd, 0.0],
+        [hw, hd, wall_h],
+        walls[(r >> 3) as usize % walls.len()],
+    );
+    let roof = if snow {
+        pc(ramp::SNOW, 2)
+    } else {
+        roofs[(r >> 7) as usize % roofs.len()]
+    };
+    // Three steps up to the ridge, each narrower across the short side.
+    let along_x = hw >= hd;
+    for k in 0..3 {
+        let f = 1.0 - k as f32 / 3.0;
+        let (ex, ey) = if along_x {
+            (hw + 0.002, (hd + 0.002) * f)
+        } else {
+            ((hw + 0.002) * f, hd + 0.002)
+        };
+        let z0 = wall_h + k as f32 * 0.003;
+        b.put([-ex, -ey, z0], [ex, ey, z0 + 0.003], roof);
+    }
+}
+
+/// An inner city block: three to seven floors, a darker shop floor, a roof edge and a stair house.
+fn mid_rise(b: &mut Build, hw: f32, hd: f32, snow: bool, r: u32) {
+    let bodies = [
+        pc(ramp::BRICK, 2),
+        pc(ramp::URBAN, 3),
+        pc(ramp::CLOUD, 2),
+        pc(ramp::BRICK, 1),
+        pc(ramp::SOIL, 3),
+        pc(ramp::ROCK, 2),
+    ];
+    let floors = 3 + (r >> 4) % 5;
+    let top = 0.006 * floors as f32;
+    let body = bodies[(r >> 9) as usize % bodies.len()];
+    b.put([-hw, -hd, 0.0], [hw, hd, 0.005], pc(ramp::ROCK, 1));
+    b.put([-hw, -hd, 0.005], [hw, hd, top], body);
+    let roof = if snow {
+        pc(ramp::SNOW, 2)
+    } else {
+        pc(ramp::ROCK, 1)
+    };
+    b.put(
+        [-hw - 0.001, -hd - 0.001, top],
+        [hw + 0.001, hd + 0.001, top + 0.002],
+        roof,
+    );
+    let (sx, sy) = (hw * 0.3, hd * 0.3);
+    b.put(
+        [-sx, -sy, top + 0.002],
+        [sx, sy, top + 0.006],
+        pc(ramp::ROCK, 2),
+    );
+}
+
+/// An industrial shed: low and wide, with a sawtooth roof of three ridges.
+fn shed(b: &mut Build, hw: f32, hd: f32, snow: bool, r: u32) {
+    let walls = [pc(ramp::CLOUD, 2), pc(ramp::ROCK, 2), pc(ramp::URBAN, 2)];
+    let top = 0.008 + 0.004 * unit(r);
+    b.put(
+        [-hw, -hd, 0.0],
+        [hw, hd, top],
+        walls[(r >> 11) as usize % walls.len()],
+    );
+    let roof = if snow {
+        pc(ramp::SNOW, 2)
+    } else {
+        pc(ramp::ROCK, 1)
+    };
+    let along_x = hw >= hd;
+    for k in 0..3 {
+        let t = -1.0 + (2 * k + 1) as f32 / 3.0;
+        let (a, c) = if along_x {
+            (
+                [t * hw - hw / 6.0, -hd, top],
+                [t * hw + hw / 12.0, hd, top + 0.003],
+            )
+        } else {
+            (
+                [-hw, t * hd - hd / 6.0, top],
+                [hw, t * hd + hd / 12.0, top + 0.003],
+            )
+        };
+        b.put(a, c, roof);
+    }
+    if (r >> 15).is_multiple_of(4) {
+        let s = 0.003;
+        b.put(
+            [hw * 0.6 - s, -s, top],
+            [hw * 0.6 + s, s, top + 0.02],
+            pc(ramp::BRICK, 1),
+        );
+    }
+}
+
+/// A downtown tower: a body in two or three setbacks, glass or stone, with a crown.
+fn tower(b: &mut Build, hw: f32, hd: f32, r: u32) {
+    let skins = [
+        pc(ramp::WATER, 2),
+        pc(ramp::URBAN, 3),
+        pc(ramp::CLOUD, 2),
+        pc(ramp::WATER, 3),
+        pc(ramp::ROCK, 2),
+    ];
+    let u = unit(r);
+    let top = 0.04 + 0.16 * u * u;
+    let skin = skins[(r >> 5) as usize % skins.len()];
+    let tiers = 2 + (r >> 9) % 2;
+    let mut z = 0.0;
+    for k in 0..tiers {
+        let f = 1.0 - 0.22 * k as f32;
+        let z1 = top * (k + 1) as f32 / tiers as f32;
+        b.put([-hw * f, -hd * f, z], [hw * f, hd * f, z1], skin);
+        z = z1;
+    }
+    let f = 1.0 - 0.22 * tiers as f32;
+    b.put(
+        [-hw * f, -hd * f, top],
+        [hw * f, hd * f, top + 0.006],
+        pc(ramp::ROCK, 1),
+    );
 }
 
 /// Rank a house needs to stand: steady at 45, 55 percent more (or fewer) at two percent net

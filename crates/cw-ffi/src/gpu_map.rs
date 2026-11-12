@@ -166,6 +166,35 @@ pub fn build_scene(assets: &Path, scenario: &str) -> Result<Scene, String> {
     )
 }
 
+/// The last scenario built, as it came from its files, so a second map view (the docked map beside a page, or the map opened
+/// again) starts from a copy instead of rebuilding the scene, which takes seconds. Not kept on a phone, where memory is short.
+#[cfg(not(target_os = "ios"))]
+static BUILT: Mutex<Option<(std::path::PathBuf, String, Arc<Scene>)>> = Mutex::new(None);
+
+/// The scenario's scene: a copy of the one built last when it is the same scenario, else a fresh build (kept for next time).
+fn scene_for(assets: &Path, scenario: &str) -> Result<Scene, String> {
+    #[cfg(not(target_os = "ios"))]
+    {
+        // Held through a build, so two views opening at once build it once.
+        let mut built = BUILT.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((a, s, scene)) = built.as_ref()
+            && a == assets
+            && s == scenario
+        {
+            return Ok(Scene::clone(scene));
+        }
+        let scene = build_scene(assets, scenario)?;
+        *built = Some((
+            assets.to_path_buf(),
+            scenario.to_string(),
+            Arc::new(scene.clone()),
+        ));
+        Ok(scene)
+    }
+    #[cfg(target_os = "ios")]
+    build_scene(assets, scenario)
+}
+
 pub struct AdapterInfo {
     pub name: String,
     pub backend: String,
@@ -233,7 +262,7 @@ impl GpuMap {
         scenario: &str,
         renderer: impl FnOnce() -> Result<Renderer, String>,
     ) -> Result<GpuMap, String> {
-        let scene = build_scene(assets, scenario)?;
+        let scene = scene_for(assets, scenario)?;
         let renderer = renderer()?;
         let a = renderer.adapter().clone();
         let renderer_surface = renderer.surface_summary();
