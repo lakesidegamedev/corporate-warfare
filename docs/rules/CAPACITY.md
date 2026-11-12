@@ -17,7 +17,11 @@ retooling and the rivals' build sums use the same price.
 One signal per strategy and state, read by the AI and exposed by `Session::capacity_openings`:
 - Traded goods: the corridor's smoothed imports, valued at the best import netback.
 - Services and retail goods: imports into the regions a plant there serves, plus the household
-  demand that found no seller there last week, valued at the last closing price.
+  demand that found no seller there last week, plus what plants buying the service there went
+  without (a power plant: over its whole grid), valued at the last closing price. Capacity the
+  sellers there left idle is taken off: what their plants could have run last week with the staff
+  and inputs they had, less what households and plants bought. A plant short of staff or of an
+  input cannot serve anyone with its idle blocks, so they are not counted.
 - Plants on order, or opened in the last eight weeks, are taken off the room.
 - Inputs: a plant can only sell what it can buy the inputs for. For each corridor good a strategy
   buys, the room a new plant could still get is what the corridor exported last week, what home

@@ -775,6 +775,36 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
                 // A service that goes unsold expires, so the plant is run toward what sold plus
                 // a tenth, one plan step a week, rather than held anywhere between half and
                 // nine-tenths of capacity where it could waste a third of its output.
+                let id = &dataset.products[product as usize].id;
+                let made: i64 = entity
+                    .facilities
+                    .iter()
+                    .filter_map(|h| world.facilities.get(*h))
+                    .filter(|p| p.status == crate::state::FacilityStatus::Operating)
+                    .map(|p| p.last_made(dataset, id).0)
+                    .sum();
+                // A plant that made nothing last week (new, or waiting for its first fuel) has
+                // no sales to plan on and holds: cutting it then, on a thirteen-week average
+                // still full of the weeks before it opened, sank a new power station to half.
+                if made <= 0 {
+                    return (handle, current);
+                }
+                let last: i64 = entity
+                    .last_closed_sales()
+                    .map(|week| {
+                        week.iter()
+                            .filter(|((_, p), _)| *p == product)
+                            .map(|(_, lots)| *lots)
+                            .sum()
+                    })
+                    .unwrap_or(0);
+                // Sales close in whole lots, so within a lot of what was made is all of it. When
+                // buyers took everything, the plant runs up a step: aiming at sales plus a tenth
+                // held a ten-lot plant at five and a half lots, its half lot lost to rounding.
+                if (last + 1) * 1_000 >= made {
+                    return (handle, (current + step).min(10_000));
+                }
+                let sold = sold.max(last);
                 let wanted = (sold * 11_000 / full.max(1)).clamp(1_000, 10_000) as i32;
                 let target = if wanted < current {
                     (current - step).max(wanted)

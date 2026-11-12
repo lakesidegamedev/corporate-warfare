@@ -256,7 +256,9 @@ its good sold (`plan_step_bps`, 5 points in 2.0 content so a glut or a gap persi
 after a plant opens or closes; 15 points before), floor 30 percent, so one product's glut never idles a firm's other plants. A goods
 plant with more than four weeks of unsold stock cuts, one under a week and a half raises; a
 service plant moves toward what the firm sold of it plus a tenth, between 10 percent and full, so
-it neither wastes a third of its output nor stays throttled below demand; a carrier cuts when its
+it neither wastes a third of its output nor stays throttled below demand; a service plant whose
+buyers took all it made last week (within one lot, as sales close in whole lots) raises a step, and
+one that made nothing last week (new, or waiting for its first fuel) holds; a carrier cuts when its
 capacity ran under 85 percent full by lot-km, unless its own lanes sent 40 percent or more of their
 lots to outside carriers, and raises from 90 percent (see Carrier planning); a plant whose good has not sold yet
 holds. A plant run down to its floor keeps at least one worker of every tier its recipe uses.

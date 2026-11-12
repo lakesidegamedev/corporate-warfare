@@ -11,6 +11,7 @@
 //!
 //! Heavy (up to a hundred two-year worlds), so it is ignored in the normal run:
 //! `cargo test -p cw-session --release --test entry_two_years -- --ignored --nocapture`.
+//! `ENTRY_CLASS=<class>` runs one class and `ENTRY_N=<n>` takes the top n openings of it.
 
 use cw_session::{PriceSetup, ScenarioConfig, Session};
 use cw_sim::commands::{CommandEnvelope, CommandIntent};
@@ -127,11 +128,19 @@ fn measure(scenario: &str) {
     };
     let mut failures = Vec::new();
     for class_name in CLASSES {
+        if std::env::var("ENTRY_CLASS").is_ok_and(|c| c != class_name) {
+            continue;
+        }
         let picks: Vec<_> = board
             .iter()
             .filter(|(c, _)| *c == class_name)
             .map(|(_, open)| open.clone())
-            .take(PER_CLASS)
+            .take(
+                std::env::var("ENTRY_N")
+                    .ok()
+                    .and_then(|n| n.parse().ok())
+                    .unwrap_or(PER_CLASS),
+            )
             .collect();
         if picks.is_empty() {
             println!("{scenario} {class_name}: no opening on the board");
