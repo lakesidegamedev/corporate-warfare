@@ -66,8 +66,16 @@ enum Remedy {
         if detail.contains("rival_division") {
             return ("Nothing to take", "The rival needs at least two plants here: a raid never takes its last one.")
         }
-        if detail.contains("raid_cooldown") {
-            return ("Campaign still running", "You can raid the same market once every thirteen weeks.")
+        // The engine names what it expected first and what it found second: a new raid expects no
+        // campaign and finds one running; giving a raid up expects one running and finds none.
+        if let none = detail.range(of: "no_campaign"), let running = detail.range(of: "campaign_running") {
+            if none.lowerBound < running.lowerBound {
+                return ("Campaign still running", "A raid you announced there is still waiting to be decided. Raids are decided four weeks after they are announced.")
+            }
+            return ("No raid to give up", "That raid has already been decided, or it was never announced.")
+        }
+        if detail.contains("opening_grace") {
+            return ("Too new to raid", "A division cannot be raided until 26 weeks after its oldest plant was started.")
         }
         if detail.contains("rival_firm") {
             return ("That is your own group", "Raids target rivals outside the group you control.")

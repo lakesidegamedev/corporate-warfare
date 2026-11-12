@@ -17,8 +17,10 @@ struct CEOOfficeView: View {
                 OfficeRoomHost()
                 masthead(firm)
                 ChapterBlock()
+                CareerSection()
                 figures(firm)
                 RivalsCard()
+                MechanicsLinks()
                 NavigationLink {
                     StatsView().environment(store)
                 } label: {

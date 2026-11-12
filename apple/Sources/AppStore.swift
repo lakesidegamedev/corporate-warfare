@@ -112,6 +112,10 @@ final class AppStore {
     var showOnboarding = false
     /// Set from Settings (Set up again): shows the first-run setup over the app.
     var showSetup = false
+    /// Career asked for the end of career screen again (2.0).
+    var careerEndRequested = false
+    /// The end of career screen chose "Start a new career": the main menu opens on the new-game screen.
+    var wantsNewGame = false
     /// Set when a slot failed to import. Drives the recovery screen.
     var recoveryIssue: SaveRecoveryIssue?
     /// Set after a last-good save was accepted, so the next screen can say so once.
@@ -303,6 +307,27 @@ final class AppStore {
             } catch {
                 self.lastErrorKey = ErrorKey.of(error)
                 self.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// A new career with a start, an ambition and a length (2.0). A refusal reads as a plain sentence.
+    func startCareerWith(_ options: NewGameDto, _ career: CareerOptionsDto) async {
+        await perform {
+            do {
+                let overview = try await self.engine.start(options: options, career: career)
+                self.tutorial.beginCareer()
+                await self.prepareMap()
+                self.apply(overview)
+                await self.reload()
+                await self.save(slot: SaveManager.autosaveSlot(week: overview.tick), kind: .autosave)
+            } catch {
+                self.lastErrorKey = ErrorKey.of(error)
+                if let ffi = error as? FfiError, case .Domain(_, let detail) = ffi, !detail.isEmpty {
+                    self.errorMessage = detail
+                } else {
+                    self.errorMessage = error.localizedDescription
+                }
             }
         }
     }
@@ -1066,7 +1091,7 @@ final class AppStore {
         )
     }
 
-    /// Launch a market raid on a rival division; the outcome lands in `recentRaids`.
+    /// Announce a market raid on a rival division; it is decided four weeks later and the outcome then lands in `recentRaids`.
     func raid(_ option: RaidOptionDto, budgetCents: Int64) async -> CommandRejection? {
         guard let firm = selectedFirm ?? overview?.primaryFirm else {
             return CommandRejection(key: "error.invalid_entity", detail: "")

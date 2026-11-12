@@ -21,6 +21,14 @@ actor Engine {
         return handle.overview()
     }
 
+    /// A career with a start, an ambition and a length (2.0): at the helm of an established company or as a founder.
+    func start(options: NewGameDto, career: CareerOptionsDto) throws -> OverviewDto {
+        let handle = try SessionHandle.startCareer(options: options, career: career)
+        session = handle
+        applyReportingPreference(handle)
+        return handle.overview()
+    }
+
     func startCustom(_ scenario: CustomScenarioDto, guided: Bool, seed: UInt64, fiveYear: Bool) throws -> OverviewDto {
         let handle = try SessionHandle.startCustom(seed: seed, guided: guided, fiveYear: fiveYear, scenario: scenario)
         session = handle
@@ -170,6 +178,14 @@ actor Engine {
         var map: [String: [PickDto]] = [:]
         for kind in ["bond", "my_bond", "my_venture", "open_campaign"] {
             map[kind] = structurePicks(kind: kind)
+        }
+        // Plants on offer (2.0): the lots still open to bid on, and the player's own listings.
+        let lots = session?.plantLots() ?? []
+        map["plant_lot"] = lots.filter { $0.weeksLeft > 0 && !$0.yours }.map {
+            PickDto(value: String($0.lot), label: PlantLotText.pickLabel($0))
+        }
+        map["my_listing"] = lots.filter { $0.yours }.map {
+            PickDto(value: String($0.lot), label: PlantLotText.pickLabel($0))
         }
         return map
     }
