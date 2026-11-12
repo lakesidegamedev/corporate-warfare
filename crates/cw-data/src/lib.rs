@@ -275,6 +275,8 @@ pub struct RecipeTables {
     uses: Vec<bool>,
     /// Whether the recipe makes the product, as its output or a by-product.
     makes: Vec<bool>,
+    /// Whether any recipe names the product among its inputs, by product.
+    any_use: Vec<bool>,
 }
 
 impl RecipeTables {
@@ -285,6 +287,7 @@ impl RecipeTables {
             input_lots: vec![0; products.len() * n],
             uses: vec![false; products.len() * n],
             makes: vec![false; products.len() * n],
+            any_use: vec![false; products.len()],
         };
         for (p, product) in products.iter().enumerate() {
             for (r, recipe) in recipes.iter().enumerate() {
@@ -292,6 +295,7 @@ impl RecipeTables {
                 if let Some(lots) = recipe.weekly_inputs_lots.get(&product.id) {
                     tables.input_lots[at] = *lots;
                     tables.uses[at] = true;
+                    tables.any_use[p] = true;
                 }
                 tables.makes[at] = recipe.makes(&product.id);
             }
@@ -303,6 +307,11 @@ impl RecipeTables {
     pub fn input_lots(&self, product: u16, recipe: u16) -> Option<i64> {
         let at = product as usize * self.recipes + recipe as usize;
         self.uses[at].then(|| self.input_lots[at])
+    }
+
+    /// Whether any recipe uses the product as an input.
+    pub fn any_use(&self, product: u16) -> bool {
+        self.any_use[product as usize]
     }
 
     /// Whether the recipe makes the product.

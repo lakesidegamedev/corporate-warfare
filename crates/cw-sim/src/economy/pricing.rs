@@ -399,6 +399,9 @@ pub fn business_unmet_in(
     if !dataset.products[product as usize].kind.is_service() {
         return (0, 0);
     }
+    if !dataset.recipe_tables.any_use(product) {
+        return (0, 0);
+    }
     let id = &dataset.products[product as usize].id;
     let (mut need, mut made) = (0i64, 0i64);
     for (_, plant) in world.facilities.iter() {
