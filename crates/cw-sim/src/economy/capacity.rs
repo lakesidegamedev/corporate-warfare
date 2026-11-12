@@ -329,11 +329,21 @@ pub fn input_rooms(world: &World, dataset: &Dataset) -> InputRooms {
                 .any(|recipe| recipe.weekly_inputs_lots.get(id).is_some_and(|l| *l > 0))
         })
         .collect();
+    let totals: Vec<Option<crate::economy::pricing::ServiceTotals>> = (0..products as u16)
+        .map(|p| {
+            bought_services
+                .contains(&p)
+                .then(|| crate::economy::pricing::ServiceTotals::build(world, dataset, p))
+                .flatten()
+        })
+        .collect();
     for (region, row) in service_fill.iter_mut().enumerate() {
         for product in &bought_services {
             let supplied = crate::economy::markets::supply_regions(dataset, region as u8, *product);
-            let (unmet, need) =
-                crate::economy::pricing::business_unmet_in(world, dataset, *product, &supplied);
+            let Some(totals) = &totals[*product as usize] else {
+                continue;
+            };
+            let (unmet, need) = totals.unmet_in(&supplied);
             if need > 0 && unmet > 0 {
                 row[*product as usize] = ((need - unmet).max(0) * 10_000 / need).clamp(0, 10_000);
             }

@@ -438,6 +438,79 @@ pub fn business_unmet_in(
     ((need - supply).max(0) / 1_000, need / 1_000)
 }
 
+/// What `business_unmet_in` reads, summed per region once for a service so a caller asking for
+/// many region sets scans the plants once instead of once per set.
+pub struct ServiceTotals {
+    need: Vec<i64>,
+    made: Vec<i64>,
+    imports: Vec<i64>,
+}
+
+impl ServiceTotals {
+    /// None for a good (a good's buyers read their stock instead).
+    pub fn build(world: &World, dataset: &Dataset, product: u16) -> Option<ServiceTotals> {
+        if !dataset.products[product as usize].kind.is_service() {
+            return None;
+        }
+        let id = &dataset.products[product as usize].id;
+        let regions = dataset.regions.len().max(world.regions.len());
+        let mut totals = ServiceTotals {
+            need: vec![0; regions],
+            made: vec![0; regions],
+            imports: vec![0; regions],
+        };
+        let tables = &dataset.recipe_tables;
+        for (_, plant) in world.facilities.iter() {
+            if plant.status != crate::state::FacilityStatus::Operating {
+                continue;
+            }
+            let at = plant.region as usize;
+            if tables.makes(product, plant.recipe) {
+                totals.made[at] = totals.made[at].saturating_add(plant.last_made(dataset, id).0);
+            }
+            let Some(weekly) = tables.input_lots(product, plant.recipe) else {
+                continue;
+            };
+            if !world.firms.get(plant.firm).is_some_and(|f| f.operative()) {
+                continue;
+            }
+            totals.need[at] = totals.need[at].saturating_add(
+                weekly
+                    .saturating_mul(plant.blocks as i64)
+                    .saturating_mul(1_000)
+                    .saturating_mul(plant.target_bps.max(0) as i64)
+                    / 10_000,
+            );
+        }
+        for g in world.gateways.iter().filter(|g| g.product == product) {
+            if let Some(slot) = totals.imports.get_mut(g.region as usize) {
+                *slot += g.capacity_lots.max(0);
+            }
+        }
+        Some(totals)
+    }
+
+    /// The same answer as `business_unmet_in` for these regions.
+    pub fn unmet_in(&self, regions: &[u8]) -> (i64, i64) {
+        let (mut need, mut made, mut imports) = (0i64, 0i64, 0i64);
+        let mut seen = [false; 256];
+        for region in regions {
+            if std::mem::replace(&mut seen[*region as usize], true) {
+                continue;
+            }
+            let at = *region as usize;
+            need = need.saturating_add(self.need.get(at).copied().unwrap_or(0));
+            made = made.saturating_add(self.made.get(at).copied().unwrap_or(0));
+            imports += self.imports.get(at).copied().unwrap_or(0);
+        }
+        if need <= 0 {
+            return (0, 0);
+        }
+        let supply = made.saturating_add(imports.saturating_mul(1_000));
+        ((need - supply).max(0) / 1_000, need / 1_000)
+    }
+}
+
 /// The same for the regions one seller's operating plants serve (see `seller_household_unmet`).
 pub fn seller_business_unmet(
     world: &World,
