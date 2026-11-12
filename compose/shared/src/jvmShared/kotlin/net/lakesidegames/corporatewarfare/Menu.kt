@@ -409,6 +409,7 @@ internal fun NewGameScreen(
     store: GameStore,
     startStep: Int = 0,
     startHelm: Boolean = false,
+    startFounder: Boolean = false,
     startAmbition: String = "",
     startScenario: String? = null,
     startCustom: uniffi.cw_ffi.CustomScenarioDto? = null,
@@ -430,7 +431,7 @@ internal fun NewGameScreen(
     var step by remember { mutableStateOf(startStep) }
     val at = steps[step.coerceIn(0, steps.lastIndex)]
     BackAction { if (step == 0) onBack() else step-- }
-    var mode by remember { mutableStateOf(if (startHelm) Mode.Helm else Mode.Guided) }
+    var mode by remember { mutableStateOf(if (startHelm) Mode.Helm else if (startFounder) Mode.Founder else Mode.Guided) }
     val difficulties = remember { uniffi.cw_ffi.difficulties() }
     fun capitalOf(level: Level) = (difficulties.firstOrNull { it.key == level.key }?.startingCapitalCents ?: 0L) / 100.0
     var level by remember { mutableStateOf(Level.Standard) }
@@ -440,11 +441,15 @@ internal fun NewGameScreen(
     var history by remember { mutableStateOf(ScenarioHistory.Historical) }
     var capital by remember { mutableStateOf(capitalOf(Level.Standard)) }
     var advanced by remember { mutableStateOf(false) }
+    // One seed for the whole visit, so the companies offered at the helm are the ones the career starts with.
+    val seed = remember { (System.nanoTime() % 9_999_999).toULong() }
+    val seed0 = (seed % 8UL).toInt()
     val chiefs = remember { chiefChoices() }
     var chiefPick by remember { mutableStateOf(0) }
     var chiefName by remember { mutableStateOf("") }
-    // One seed for the whole visit, so the companies offered at the helm are the ones the career starts with.
-    val seed = remember { (System.nanoTime() % 9_999_999).toULong() }
+    // A founder start names the company here; the founding form opens with it. Other starts take a company that exists.
+    var companyName by remember { mutableStateOf(SuggestedNames[seed0 % SuggestedNames.size]) }
+    val companyProblem = remember(companyName) { uniffi.cw_ffi.companyNameProblem(companyName) }
     val career = remember { CareerChoice().also { it.ambition = startAmbition } }
     fun gameOptions(pick: ScenarioDto) = NewGameDto(
         seed = seed,
@@ -476,12 +481,14 @@ internal fun NewGameScreen(
     }
     val scenario = chosen
     val fallbackPath = PricePath.entries.firstOrNull { it.key == scenario?.defaultPricePath } ?: PricePath.Historical
-    val canStart = (scenario != null || chosenCustom != null) && !store.busy && (chosenCustom != null || mode != Mode.Helm || career.helmFirm != null)
+    val founderName = chosenCustom == null && mode == Mode.Founder
+    val canStart = (scenario != null || chosenCustom != null) && !store.busy && !(founderName && companyProblem != null) && (chosenCustom != null || mode != Mode.Helm || career.helmFirm != null)
     fun start() {
         chosenCustom?.let { store.startCustom(it, mode.guided, mode.fiveYear); return }
         val pick = scenario ?: return
-        if (career.isDefault(mode == Mode.Helm)) store.startCareer(gameOptions(pick))
-        else store.startCareerWith(gameOptions(pick), career.options(mode == Mode.Helm))
+        val named = if (founderName) companyName.trim() else null
+        if (career.isDefault(mode == Mode.Helm)) store.startCareer(gameOptions(pick), named)
+        else store.startCareerWith(gameOptions(pick), career.options(mode == Mode.Helm), named)
     }
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
@@ -578,7 +585,10 @@ internal fun NewGameScreen(
                             }
                         }
                     }
-                    CareerStep.Chief -> ChiefPicker(chiefs, chiefPick, chiefName, { chiefPick = it }, { chiefName = it.take(40) })
+                    CareerStep.Chief -> {
+                        if (founderName) CompanyNameField(companyName, companyProblem) { companyName = it }
+                        ChiefPicker(chiefs, chiefPick, chiefName, { chiefPick = it }, { chiefName = it.take(40) })
+                    }
                 }
             }
             Box(Modifier.fillMaxWidth().height(2.dp).background(Palette.stroke))
@@ -651,6 +661,22 @@ private fun <T> Options(items: List<T>, selected: T, title: (T) -> String, note:
             }
         }
     }
+}
+
+/** The founder start's company name, with the engine's plain-words reason when it cannot be used.
+ *  The engine has no company colour, so there is none to pick. */
+@Composable
+internal fun CompanyNameField(name: String, problem: String?, onName: (String) -> Unit) {
+    Text("Your company", color = Palette.gold, fontSize = 13.sp, fontFamily = Pixel.font)
+    OutlinedTextField(
+        name, { onName(it.filter { c -> !c.isISOControl() }.take(60)) },
+        label = { Text("Company name") },
+        singleLine = true,
+        isError = problem != null,
+        supportingText = { Text(problem ?: "You found it on the first turn of the career and can change it there.") },
+        modifier = Modifier.textEntry().widthIn(max = 360.dp),
+    )
+    Text("Your chief", color = Palette.gold, fontSize = 13.sp, fontFamily = Pixel.font)
 }
 
 /** The new-game screen's chief executive: a few portraits from the generated kit, one for each

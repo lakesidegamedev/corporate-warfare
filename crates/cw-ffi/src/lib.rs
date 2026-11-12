@@ -2601,6 +2601,45 @@ mod difficulty_tests {
     }
 }
 
+/// The longest company name the game keeps, the same limit as a chief's or a scenario's name.
+const COMPANY_NAME_MAX: usize = cw_sim::state::PlayerChief::NAME_MAX;
+
+/// Why a company name cannot be used, in plain words, or none when it can (2.0). A name has at
+/// least one visible character, no control characters and at most 40 characters.
+#[uniffi::export]
+pub fn company_name_problem(name: String) -> Option<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        Some("Give the company a name".to_owned())
+    } else if trimmed.chars().any(|c| c.is_control()) {
+        Some("The name cannot hold line breaks or other control characters".to_owned())
+    } else if trimmed.chars().count() > COMPANY_NAME_MAX {
+        Some(format!(
+            "The name can be at most {COMPANY_NAME_MAX} characters"
+        ))
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod company_name_tests {
+    use super::company_name_problem as problem;
+
+    #[test]
+    fn names_are_checked_in_plain_words() {
+        assert!(problem("Lakeshore Industries".into()).is_none());
+        assert!(problem("  Prairie Works  ".into()).is_none());
+        assert!(problem("".into()).is_some());
+        assert!(problem("    ".into()).is_some());
+        assert!(problem("Two\nLines".into()).is_some());
+        assert!(problem("x".repeat(40)).is_none());
+        assert!(problem("x".repeat(41)).is_some());
+        // Surrounding spaces do not count toward the limit.
+        assert!(problem(format!(" {} ", "x".repeat(40))).is_none());
+    }
+}
+
 /// Everything the new-game screen chooses.
 #[derive(uniffi::Record)]
 pub struct NewGameDto {

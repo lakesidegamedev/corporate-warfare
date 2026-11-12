@@ -50,6 +50,7 @@ class MenusRenderTest {
         both("new-3-ambition", settings) { NewGameScreen(fresh, startStep = 2, startAmbition = "richest", onBack = {}) }
         both("new-4-world", settings) { NewGameScreen(fresh, startStep = 3, onBack = {}) }
         both("new-5-chief", settings) { NewGameScreen(fresh, startStep = 4, onBack = {}) }
+        both("new-5-company", settings) { NewGameScreen(fresh, startStep = 4, startFounder = true, onBack = {}) }
         for (section in listOf(SettingsSection.Game, SettingsSection.Graphics, SettingsSection.Keys, SettingsSection.Data, SettingsSection.Updates)) {
             both("settings-${section.name.lowercase()}", settings) { SettingsScreen(career, settings, desktop = true, updater = updater, onSetupAgain = {}, startSection = section) {} }
         }
