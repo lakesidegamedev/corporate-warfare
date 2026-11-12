@@ -181,7 +181,7 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
             if (gameMenu && store.ready) GameMenuDialog(
                 store,
                 onResume = { closeGameMenu(resume = true) },
-                onLoad = { closeGameMenu(resume = false); loadInGame = true },
+                onLoad = { closeGameMenu(resume = false); store.saveNow(); loadInGame = true },
                 onSettings = { closeGameMenu(resume = false); showSettings = true },
                 onMainMenu = { closeGameMenu(resume = false); store.exitToMenu() },
                 onQuit = onQuit?.let { quit -> { closeGameMenu(resume = false); store.saveAndThen(quit) } },
@@ -910,7 +910,7 @@ internal fun GameMenuDialog(
                 androidx.compose.material3.OutlinedTextField(naming.orEmpty(), { naming = it.take(60) }, singleLine = true, label = { Text("Save name") }, modifier = Modifier.weight(1f).textEntry())
                 GoldButton("Save") { store?.saveAs(naming.orEmpty()); naming = null; savedNow = true }
             }
-            GameMenuButton("Load", onClick = onLoad)
+            GameMenuButton("Load", detail = "saves first", onClick = onLoad)
             GameMenuButton("Settings", onClick = onSettings)
             GameMenuButton("Main menu", detail = "saves first", onClick = onMainMenu)
             if (onQuit != null) GameMenuButton("Quit to desktop", detail = "saves first", onClick = onQuit)

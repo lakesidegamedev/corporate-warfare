@@ -130,14 +130,15 @@ internal fun AmbitionPicker(helm: Boolean, choice: CareerChoice, wide: Boolean) 
     val lengths = remember { uniffi.cw_ffi.careerLengths() }
     val shownYears = if (choice.years == 0) lengths.defaultYears.toInt() else choice.years
     val guide: List<AmbitionGuideDto> = remember(start, shownYears) { uniffi.cw_ffi.ambitionGuide(start, shownYears.toUInt()) }
-    val cardWidth: Dp = if (wide) 270.dp else 320.dp
+    // Fixed width beside each other on a wide screen, the full width one under the other on a phone.
+    val cardModifier = if (wide) Modifier.width(270.dp) else Modifier.fillMaxWidth()
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        PickCard(choice.ambition.isEmpty(), Modifier.width(cardWidth), { choice.ambition = "" }) {
+        PickCard(choice.ambition.isEmpty(), cardModifier, { choice.ambition = "" }) {
             Text("No ambition", color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             Text("A sandbox: no goal, no medals and no ending. Play as long as you like.", color = Palette.secondary, fontSize = 12.sp)
         }
         guide.forEach { a ->
-            PickCard(choice.ambition == a.key, Modifier.width(cardWidth), { choice.ambition = a.key }) {
+            PickCard(choice.ambition == a.key, cardModifier, { choice.ambition = a.key }) {
                 Text(a.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 Text(a.sentence, color = Palette.secondary, fontSize = 12.sp)
                 Text("Bronze: ${a.bronze}.", color = Palette.primaryText, fontSize = 12.sp)
