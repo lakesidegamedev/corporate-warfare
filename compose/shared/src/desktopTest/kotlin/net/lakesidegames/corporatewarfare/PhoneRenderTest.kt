@@ -1,5 +1,7 @@
 package net.lakesidegames.corporatewarfare
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -47,6 +49,44 @@ class PhoneRenderTest {
             nav.open(p)
             shoot("pane-" + p.name.lowercase(), store, settings, nav, tap = true)
         }
+    }
+
+    /** The new-game steps and the end of career screen on a phone, from a five year helm career. */
+    @Test
+    fun careerScreens() {
+        ProposalCareer.init()
+        val dir = kotlin.io.path.createTempDirectory("cwphone").toFile()
+        val store = GameStore(dir, CoroutineScope(Dispatchers.Default))
+        val settings = AppSettings(java.io.File(dir, "settings.properties")).apply {
+            finishSetup(); chooseTutorial(emptySet(), true); chooseGraphics(graphics.copy(animations = false))
+        }
+        val o = uniffi.cw_ffi.NewGameDto(
+            seed = 11uL, scenarioId = "great-lakes-2000", guided = false, fiveYear = false, difficulty = "standard", economy = "historic",
+            startingCapitalCents = null, pricePath = "historical",
+        )
+        val t0 = System.nanoTime()
+        val firm = uniffi.cw_ffi.helmOffers(o).first().firm
+        val settle = (System.nanoTime() - t0) / 1_000_000 * 2 + 4000
+        ProposalCareer.shoot("phone-newgame-scenario", 390, 844, settings, density = 2f) { NewGameScreen(store, startStep = 0, onBack = {}) }
+        ProposalCareer.shoot("phone-newgame-setup", 390, 844, settings, density = 2f, settleMs = settle) { NewGameScreen(store, startStep = 1, startHelm = true, startAmbition = "biggest", onBack = {}) }
+        ProposalCareer.shoot("phone-newgame-setup-long", 390, 2700, settings, density = 2f, settleMs = settle) { NewGameScreen(store, startStep = 1, startHelm = true, startAmbition = "dominant", onBack = {}) }
+        store.startCareerWith(o, uniffi.cw_ffi.CareerOptionsDto(start = "helm", helmFirm = firm, ambition = "biggest", years = 5u))
+        ProposalCareer.waitReady(store)
+        kotlinx.coroutines.runBlocking {
+            store.read { h ->
+                var guard = 0
+                while (h.overview().tick < 300u && guard++ < 700) {
+                    h.dismissPause()
+                    h.advance(1u)
+                    if (h.careerStanding()?.ended == true) break
+                }
+            }
+        }
+        store.refresh()
+        Thread.sleep(2500)
+        assertTrue(kotlinx.coroutines.runBlocking { store.read { it.careerSummary() } }?.ended == true, "the five-year career did not end")
+        ProposalCareer.shoot("phone-end-of-career", 390, 844, settings, density = 2f) { EndOfCareerHost(store, {}, {}) }
+        ProposalCareer.shoot("phone-end-of-career-long", 390, 1900, settings, density = 2f) { EndOfCareerHost(store, {}, {}) }
     }
 
     @Test
