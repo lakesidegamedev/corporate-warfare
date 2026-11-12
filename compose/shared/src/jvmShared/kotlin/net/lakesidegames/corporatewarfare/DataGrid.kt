@@ -787,6 +787,7 @@ private fun <T> TwoLineRows(
     val figures = columns.drop(1).filter { it.spark == null }
     val lead = sortCol?.takeIf { it != name && it.spark == null } ?: figures.firstOrNull()
     val rest = figures.filter { it != lead }.take(3)
+    val panes = LocalPhonePanes.current
     Column(Modifier.fillMaxSize()) {
         // Sorting on a phone: one chip that steps through the columns, and one that reverses.
         Row(Modifier.fillMaxWidth().background(Palette.ink).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -800,6 +801,13 @@ private fun <T> TwoLineRows(
             Spacer(Modifier.width(4.dp))
             GridButton(if (descending) "High first" else "Low first", false) { onSort(sortCol ?: name) }
         }
+        if (shown.isEmpty()) {
+            // Nothing to list: the screen's own words for it (its detail pane, when it has one) take the room.
+            val pane = panes?.entries?.firstOrNull()
+            if (pane != null) DetailPaneBody(pane.title, Modifier.fillMaxSize()) { pane.content?.invoke(this) }
+            else Text("Nothing here.", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
+            return@Column
+        }
         LazyColumn(Modifier.fillMaxSize()) {
             items(shown.size, key = { i -> key(shown[i]) }) { i ->
                 val r = shown[i]
@@ -807,16 +815,22 @@ private fun <T> TwoLineRows(
                 Column(
                     Modifier.fillMaxWidth()
                         .background(if (picked) Palette.gold.copy(alpha = 0.18f) else if (i % 2 == 1) Palette.panelRaised.copy(alpha = 0.45f) else Color.Transparent)
-                        .clickable { onSelect(r); onOpen?.invoke(r) }.padding(horizontal = 10.dp, vertical = 5.dp),
+                        .clickable { onSelect(r); onOpen?.invoke(r); if (onOpen == null) panes?.tap() }.padding(horizontal = 10.dp, vertical = 5.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(name.text(r), color = name.tone(r), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         if (lead != null) Text(lead.text(r), color = lead.tone(r), style = GridFigures, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        rest.forEach { c ->
-                            Text("${c.title} ", color = Palette.secondary, fontSize = 11.sp, maxLines = 1)
-                            Text(c.text(r), color = c.tone(r), style = GridFigures, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(start = 0.dp))
+                    // Up to three figures, in the same three equal columns on every row: the label over the figure, so they line up.
+                    Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (n in 0 until 3) {
+                            val c = rest.getOrNull(n)
+                            Column(Modifier.weight(1f)) {
+                                if (c != null) {
+                                    Text(c.title.uppercase(), color = Palette.secondary, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(c.text(r), color = c.tone(r), style = GridFigures, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
                         }
                     }
                 }

@@ -209,7 +209,7 @@ fun TycoonShell(store: GameStore, onSettings: () -> Unit, onMenu: () -> Unit = {
 }
 
 /** The tutorial's page id (the 1.x name its steps are written against) for a place of the 2.0 layout. */
-private fun tutorialPage(p: Place): String = when (p) {
+internal fun tutorialPage(p: Place): String = when (p) {
     Place.Overview, Place.Office -> "office"
     Place.Research -> "research"
     Place.Economy, Place.Goods, Place.Exchange -> "markets"
@@ -224,7 +224,7 @@ private fun keyName(k: Key): String = when (k) {
 }
 
 @Composable
-private fun PlaceContent(store: GameStore, place: Place, leaguePick: ULong?, onLeaguePick: (ULong) -> Unit, open: (Place) -> Unit, openRival: (ULong) -> Unit, goodsPick: UInt? = null) {
+internal fun PlaceContent(store: GameStore, place: Place, leaguePick: ULong?, onLeaguePick: (ULong) -> Unit, open: (Place) -> Unit, openRival: (ULong) -> Unit, goodsPick: UInt? = null) {
     when (place) {
         Place.Overview -> CompanyOverviewScreen(store)
         Place.Goods -> key(goodsPick) { GoodsScreen(store, goodsPick) }
@@ -393,7 +393,7 @@ object RailState {
  * are not shown. Folded, the rail is a column of three counts that open their tab.
  */
 @Composable
-fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onRival: (ULong) -> Unit, onGood: (UInt) -> Unit = { onOpen(Place.Goods) }) {
+fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onRival: (ULong) -> Unit, onGood: (UInt) -> Unit = { onOpen(Place.Goods) }, sheet: Boolean = false) {
     val o = store.overview
     val decisions = store.events.filter { it.mandatory }
     // Only what the player can act on: raids and rival moves from the last 13 weeks. Older ones live in the dossier.
@@ -413,7 +413,7 @@ fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onR
     val needs = decisions.size + alerts.size + store.unreadLetters + fired.size + if (o?.pauseInfo != null) 1 else 0
     GridDemo.railTab?.let { RailState.tab = it }
     val tabs = listOf(Triple("Needs you", "!", needs), Triple("Watch", "*", Watchlist.items.size), Triple("Feed", "~", raids.size + moves.size))
-    if (GridPrefs.railFolded) {
+    if (GridPrefs.railFolded && !sheet) {
         // Folded: a mark and a count per tab; a click opens the rail on that tab.
         Column(modifier.background(Palette.panel).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             GridButton("<", false, 9.sp) { GridPrefs.foldRail(false, prefs) }
@@ -437,7 +437,7 @@ fun AlertRail(store: GameStore, modifier: Modifier, onOpen: (Place) -> Unit, onR
         Row(Modifier.fillMaxWidth().background(Palette.ink).padding(horizontal = 4.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             tabs.forEach { (name, _, n) -> GridButton(if (n > 0) "$name $n" else name, RailState.tab == name, 9.sp) { RailState.tab = name } }
             Spacer(Modifier.weight(1f))
-            GridButton(">", false, 9.sp) { GridPrefs.foldRail(true, prefs) }
+            if (!sheet) GridButton(">", false, 9.sp) { GridPrefs.foldRail(true, prefs) }
         }
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
             when (RailState.tab) {
@@ -457,7 +457,7 @@ private fun watchFigure(store: GameStore, id: String): Pair<String, Long>? = whe
 }
 
 /** The watch alerts that have fired this week, as lines for Needs you. */
-private fun firedWatchAlerts(store: GameStore): List<String> = Watchlist.alerts.mapNotNull { (id, a) ->
+internal fun firedWatchAlerts(store: GameStore): List<String> = Watchlist.alerts.mapNotNull { (id, a) ->
     val (name, value) = watchFigure(store, id) ?: return@mapNotNull null
     if (!a.fired(value)) null else "$name is ${if (a.above) "above" else "below"} ${Format.money(a.level)}: now ${Format.money(value)}"
 }
@@ -624,8 +624,10 @@ private fun RailLine(text: String, note: String?, tone: Color, onClick: () -> Un
 
 /** A row of headline figures above a screen: label over value, tabular, no cards. */
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 fun FigureLine(vararg figures: Triple<String, String, Color>) {
-    Row(Modifier.fillMaxWidth().background(Palette.panel).border(1.dp, Palette.stroke).padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+    // The figures wrap onto more lines when the width runs out (a phone), and stay on one line when they fit.
+    androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().background(Palette.panel).border(1.dp, Palette.stroke).padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         figures.forEach { (label, value, tone) ->
             Explain(Words.about(label)) {
                 Column(Modifier.padding(horizontal = 4.dp)) {
@@ -637,9 +639,19 @@ fun FigureLine(vararg figures: Triple<String, String, Color>) {
     }
 }
 
-/** A titled side pane that scrolls on its own: the detail half of a split. */
+/**
+ * A titled side pane that scrolls on its own: the detail half of a split. On a phone it is not drawn beside the grid:
+ * it waits in [PhonePanes] and the phone shell opens it as a page when a row is tapped.
+ */
 @Composable
 fun DetailPane(title: String, modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val host = LocalPhonePanes.current
+    if (host != null && !LocalStackedPane.current) { PhonePaneEntry(host, title, content); return }
+    DetailPaneBody(title, modifier, content)
+}
+
+@Composable
+internal fun DetailPaneBody(title: String, modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.border(1.dp, Palette.stroke).background(Palette.panel)) {
         Text(
             title.uppercase(), color = Palette.primaryText, fontFamily = Pixel.font, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -666,7 +678,9 @@ fun CompanyOverviewScreen(store: GameStore, divisionRows: List<DivisionDto> = st
     var editing by remember { mutableStateOf<ProductLineDto?>(null) }
     val cur = firm.currency
     val last = store.history.lastOrNull()
-    Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // On a phone the page scrolls and the three tables take a fixed height each; the division's detail is a page of its own.
+    val phone = LocalPhonePanes.current != null
+    Column(if (phone) Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp) else Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FigureLine(
             Triple("Company cash", Format.compact(firm.cashCents, cur), Palette.primaryText),
             Triple("Equity", Format.compact(firm.equityCents, cur), Palette.primaryText),
@@ -679,7 +693,7 @@ fun CompanyOverviewScreen(store: GameStore, divisionRows: List<DivisionDto> = st
             Triple("Revenue, last period", Format.compact(last?.revenueCents ?: 0, cur), Palette.primaryText),
             Triple("Net income, last period", Format.compact(last?.netIncomeCents ?: 0, cur), tint(last?.netIncomeCents ?: 0)),
         )
-        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(if (phone) Modifier.fillMaxWidth().height(1000.dp) else Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             // Left: the tables. A table is as tall as its rows, up to 38 percent of the page, and the
             // room it does not use goes to the results table below, which scrolls when it is long.
             BoxWithConstraints(Modifier.weight(1.3f).fillMaxHeight()) {
@@ -836,7 +850,7 @@ fun GoodsScreen(store: GameStore, startPick: UInt? = null) {
     val flows = rememberEngine(store, store.overview?.tick) { h -> h.goodsSeries().associateBy { it.product } }.orEmpty()
     val closes = rememberEngine(store, store.overview?.tick) { h -> h.goodsPriceSeries().associate { it.id.toUInt() to it.values } }.orEmpty()
     BoxWithConstraints(Modifier.fillMaxSize().padding(8.dp)) {
-        val wide = maxWidth >= 900.dp
+        val wide = maxWidth >= 900.dp || LocalPhonePanes.current != null
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DataGrid(
                 "Goods", goods, goodsColumns(shares, flows, closes), key = { it.product },

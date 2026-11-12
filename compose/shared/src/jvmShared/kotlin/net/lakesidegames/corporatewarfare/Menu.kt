@@ -384,7 +384,7 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, startHelm: Bool
                                     val on = chosenCustom?.id == custom.id
                                     val shape = Pixel.shape
                                     Column(
-                                        Modifier.width(if (wide) 380.dp else 320.dp).clip(shape)
+                                        (if (wide) Modifier.width(380.dp) else Modifier.fillMaxWidth()).clip(shape)
                                             .background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.panel)
                                             .border(if (on) 2.dp else 1.dp, if (on) Palette.gold else Palette.stroke, shape)
                                             .clickable { chosenCustom = custom }.padding(14.dp),
@@ -524,7 +524,7 @@ private fun <T> Options(items: List<T>, selected: T, title: (T) -> String, note:
             val on = item == selected
             val shape = Pixel.shape
             Column(
-                Modifier.width(if (wide) 250.dp else 320.dp).clip(shape)
+                (if (wide) Modifier.width(250.dp) else Modifier.fillMaxWidth()).clip(shape)
                     .background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.panel)
                     .border(if (on) 2.dp else 1.dp, if (on) Palette.gold else Palette.stroke, shape)
                     .clickable { onPick(item) }.padding(14.dp),

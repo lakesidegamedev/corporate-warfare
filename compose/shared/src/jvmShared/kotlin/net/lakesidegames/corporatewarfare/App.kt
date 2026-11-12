@@ -87,6 +87,7 @@ val LocalAppSettings = androidx.compose.runtime.staticCompositionLocalOf<AppSett
 fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Updater? = null, onQuit: (() -> Unit)? = null, saveFolder: String? = null) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     var showSettings by remember { mutableStateOf(false) }
+    val phoneNav = remember { PhoneNav() }
     // Set up again, or the wizard a 1.8 player chose from What's new.
     var rerunSetup by remember { mutableStateOf(false) }
     // The desktop game menu (Escape): pauses time while open and resumes it at the same speed after.
@@ -165,6 +166,9 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                                 else DesktopShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
                                 if (settings.showBriefEachWeek) BriefWeeklyHost(store)
                             }
+                        }
+                        else if (NewShell.enabled(settings)) Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                            PhoneShell(store, phoneNav, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
                         }
                         else MainScreen(store, onSettings = { showSettings = true })
                         EndOfCareerHost(store, onNewCareer = { store.openNewGame = true; store.exitToMenu() }, onMainMenu = { store.exitToMenu() })
@@ -660,7 +664,7 @@ private fun ChipRow(steps: List<Int>, prefix: String = "", onPick: (Int) -> Unit
  * every other pause has Continue. Shown wherever the time controls are, never only in the Inbox.
  */
 @Composable
-fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
+fun PauseBanner(store: GameStore, modifier: Modifier = Modifier, compact: Boolean = false) {
     val info = store.overview?.pauseInfo ?: return
     var card by remember { mutableStateOf<ULong?>(null) }
     val event = info.eventId?.let { id -> store.events.firstOrNull { it.id == id } }
@@ -681,7 +685,7 @@ fun PauseBanner(store: GameStore, modifier: Modifier = Modifier) {
                 OutlinedButton(onClick = { store.dismissPause() }, enabled = !store.busy) { Text("Continue", color = Palette.primaryText) }
             }
         }
-        Text(info.detail, color = Palette.secondary, fontSize = 12.sp)
+        if (!compact) Text(info.detail, color = Palette.secondary, fontSize = 12.sp)
     }
     val open = card?.let { id -> store.events.firstOrNull { it.id == id } }
     if (open != null) {
