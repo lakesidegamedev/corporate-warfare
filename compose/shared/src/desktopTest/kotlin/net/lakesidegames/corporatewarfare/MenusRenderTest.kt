@@ -44,6 +44,9 @@ class MenusRenderTest {
         both("main-first", settings) { StartScreen(fresh, updater, onSettings = {}, onQuit = {}) }
         both("main", settings) { StartScreen(career, updater, onSettings = {}, onQuit = {}) }
         both("load", settings) { LoadGameScreen(career) {} }
+        val news = WhatsNew.topChanges(BuildChangelog.text, BuildInfo.VERSION)
+        both("whats-new", settings) { WhatsNewPanel(BuildInfo.VERSION, news, onClose = {}, onFull = {}) }
+        both("changelog", settings) { ChangelogScreen(BuildChangelog.text) {} }
         both("scenarios", settings) { ScenariosScreen(fresh, {}, {}, {}, { _, _ -> }) }
         both("new-1-scenario", settings) { NewGameScreen(fresh, startStep = 0, onBack = {}) }
         both("new-2-start", settings, settleMs = 2500) { NewGameScreen(fresh, startStep = 1, startHelm = true, onBack = {}) }

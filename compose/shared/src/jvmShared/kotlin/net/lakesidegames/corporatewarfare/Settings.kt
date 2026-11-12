@@ -126,6 +126,15 @@ class AppSettings(private val file: File) : ViewPrefs {
         },
     ); private set
 
+    /** The version whose changes the player has been shown on the main menu. A first install starts at the running version, so nothing is shown. */
+    var whatsNewSeen: String? = props.getProperty("whatsNewSeen") ?: if (existedAtLaunch) null else BuildInfo.VERSION
+        private set
+
+    /** Whether the main menu should show the What's new panel for [version]. */
+    fun whatsNewDue(version: String): Boolean = WhatsNew.due(whatsNewSeen, version)
+
+    fun markWhatsNewSeen(version: String) { whatsNewSeen = version; store() }
+
     /** Finished or left careers, newest first: a few lines each, for the main menu's Hall of Careers. */
     var careers by mutableStateOf(loadCareers()); private set
 
@@ -150,7 +159,7 @@ class AppSettings(private val file: File) : ViewPrefs {
         ?: java.util.UUID.randomUUID().toString().also { props.setProperty("installId", it); store() }
 
     /** Mark setup finished (or What's new dismissed); never touches any other choice. */
-    fun finishSetup() { setupFlag = "true"; setupState = SetupState.Done; store() }
+    fun finishSetup() { setupFlag = "true"; setupState = SetupState.Done; whatsNewSeen = BuildInfo.VERSION; store() }
 
     fun chooseGraphics(value: GraphicsConfig) { graphics = value; graphicsChosen = true; store() }
 
@@ -249,6 +258,7 @@ class AppSettings(private val file: File) : ViewPrefs {
         docks.forEach { (id, share) -> props.setProperty("dock.$id", share.toString()) }
         props.stringPropertyNames().filter { it.startsWith("key.") }.forEach { props.remove(it) }
         KeyBindings.changed().forEach { (id, name) -> props.setProperty("key.$id", name) }
+        whatsNewSeen?.let { props.setProperty("whatsNewSeen", it) }
         props.setProperty("uiScale", uiScale.toString())
         props.setProperty("windowMode", windowMode.name)
         props.setProperty("resolution", "${resolution.first}x${resolution.second}")

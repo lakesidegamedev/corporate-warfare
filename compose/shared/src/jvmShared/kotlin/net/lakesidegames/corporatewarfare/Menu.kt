@@ -92,6 +92,12 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
     var customPick by remember { mutableStateOf<uniffi.cw_ffi.CustomScenarioDto?>(null) }
     var editing by remember { mutableStateOf<Pair<String?, uniffi.cw_ffi.CustomScenarioDto?>>(null to null) }
     val settings = LocalAppSettings.current
+    // What's new, once, after an update: shown when this version has not been seen, never on a first install.
+    val news = remember { settings?.takeIf { it.whatsNewDue(BuildInfo.VERSION) }?.let { WhatsNew.topChanges(BuildChangelog.text, BuildInfo.VERSION) }.orEmpty() }
+    var newsOpen by remember { mutableStateOf(news.isNotEmpty()) }
+    var changelogOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { if (news.isNotEmpty()) settings?.markWhatsNewSeen(BuildInfo.VERSION) }
+    if (changelogOpen) { BackAction { changelogOpen = false }; ChangelogScreen(BuildChangelog.text) { changelogOpen = false }; return }
     when (page) {
         MenuPage.Hall -> { BackAction { page = MenuPage.Main }; CareerListScreen(settings?.careers.orEmpty()) { page = MenuPage.Main }; return }
         MenuPage.Editor -> { ScenarioEditorScreen(store, baseId = editing.first, existing = editing.second, onBack = { page = MenuPage.Scenarios }); return }
@@ -153,6 +159,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
                 color = Palette.secondary, fontSize = 11.sp,
             )
         }
+        if (newsOpen) WhatsNewPanel(BuildInfo.VERSION, news, onClose = { newsOpen = false }, onFull = { newsOpen = false; changelogOpen = true })
     }
 }
 
