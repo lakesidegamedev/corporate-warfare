@@ -481,6 +481,13 @@ struct StartView: View {
                 menu
             }
         }
+        .onAppear {
+            // "Start a new career" on the end of career screen comes straight to the new-game screen.
+            if store.wantsNewGame {
+                store.wantsNewGame = false
+                screen = .newGame
+            }
+        }
         .sheet(isPresented: $showingSettings) {
             SettingsView().environment(store)
         }

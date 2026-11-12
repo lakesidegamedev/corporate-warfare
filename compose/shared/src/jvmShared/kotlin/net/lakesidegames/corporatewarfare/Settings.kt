@@ -278,18 +278,9 @@ fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, up
                             colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
                         )
                     }
+                    // The classic layout switch is on every platform: the five tabs on a phone, the pages on a desktop.
+                    ClassicLayoutRow(settings, desktop)
                     if (desktop) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Classic layout", color = Palette.primaryText)
-                                Text("Go back to the page layout from version 1. It is kept for this release only, then removed.", color = Palette.secondary, fontSize = 12.sp)
-                            }
-                            Switch(
-                                checked = settings.classicLayout,
-                                onCheckedChange = { settings.chooseClassicLayout(it) },
-                                colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
-                            )
-                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("Show the brief each week", color = Palette.primaryText)
@@ -632,5 +623,25 @@ fun UpdatePanel(updater: Updater, compact: Boolean = false) {
 fun CurrencyChoices(store: GameStore, fx: uniffi.cw_ffi.FxDto) {
     Choices(fx.currencies.map { it.id }, fx.reporting, { id -> fx.currencies.firstOrNull { it.id == id }?.let { "${it.symbol} ${it.name}" } ?: id }) {
         store.chooseReportingCurrency(it)
+    }
+}
+
+/** Switch back to the version 1 layout: the five tabs on a phone, the page layout on a desktop. Kept for this release only. */
+@Composable
+private fun ClassicLayoutRow(settings: AppSettings, desktop: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Classic layout", color = Palette.primaryText)
+            Text(
+                if (desktop) "Go back to the page layout from version 1. It is kept for this release only, then removed."
+                else "Go back to the five tabs from version 1. It is kept for this release only, then removed.",
+                color = Palette.secondary, fontSize = 12.sp,
+            )
+        }
+        Switch(
+            checked = settings.classicLayout,
+            onCheckedChange = { settings.chooseClassicLayout(it) },
+            colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
+        )
     }
 }

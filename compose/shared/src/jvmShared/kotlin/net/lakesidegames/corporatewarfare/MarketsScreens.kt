@@ -347,7 +347,7 @@ internal val RaidViews = listOf(
 @Composable
 fun FindPalette(
     store: GameStore, start: String, onPlace: (Place) -> Unit, onGood: (UInt) -> Unit, onRival: (ULong) -> Unit,
-    onAction: (String) -> Unit, onAllActions: () -> Unit, onClose: () -> Unit,
+    onAction: (String) -> Unit, onAllActions: () -> Unit, onClose: () -> Unit, phone: Boolean = false,
 ) {
     var q by remember { mutableStateOf(start) }
     val prefs: ViewPrefs = LocalAppSettings.current ?: MapViewPrefs()
@@ -355,7 +355,7 @@ fun FindPalette(
     fun hit(vararg text: String) = words.isEmpty() || words.all { w -> text.any { it.lowercase().contains(w) } }
     data class Hit(val kind: String, val text: String, val hint: String, val go: () -> Unit)
     val hits = buildList {
-        Place.entries.filter { hit(it.title, it.group) }.forEach { p -> add(Hit("Place", p.title, p.group + if (p.key.isNotEmpty()) "  ${p.key}" else "") { onPlace(p) }) }
+        Place.entries.filter { hit(it.title, it.group) }.forEach { p -> add(Hit("Place", p.title, p.group + if (p.key.isNotEmpty() && !phone) "  ${p.key}" else "") { onPlace(p) }) }
         if (words.isNotEmpty()) {
             store.commodities.filter { hit(it.name, Sectors.name(it.sector)) }.take(8).forEach { g -> add(Hit("Good", g.name, Format.money(g.priceCents)) { onGood(g.product) }) }
             store.stocks.filter { hit(it.name) }.take(8).forEach { s -> add(Hit("Company", s.name, Format.price(s.priceCents)) { onRival(s.firm) }) }
@@ -375,6 +375,17 @@ fun FindPalette(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     Column(Modifier.fillMaxSize().background(Palette.panel)) {
+        if (phone) {
+            // A phone: the search field takes the line, the two buttons sit under it.
+            Column(Modifier.fillMaxWidth().background(Palette.panelRaised).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("FIND", color = Palette.gold, fontFamily = Pixel.font, fontSize = 12.sp)
+                GridSearch(q, "A good, a company, a view or an action", 560.dp, {}, { q = it }, { hits.firstOrNull()?.go?.invoke() }, Modifier.fillMaxWidth().focusRequester(focus).focusable())
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GridButton("All actions", false, 11.sp, onAllActions)
+                    GridButton("Close", false, 11.sp, onClose)
+                }
+            }
+        } else
         Row(Modifier.fillMaxWidth().background(Palette.panelRaised).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("FIND", color = Palette.gold, fontFamily = Pixel.font, fontSize = 12.sp)
             Spacer(Modifier.width(10.dp))

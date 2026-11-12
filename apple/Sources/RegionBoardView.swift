@@ -327,7 +327,9 @@ struct RaidSheet: View {
     @State private var multiple: Double = 2
     @State private var quote: RaidQuoteDto?
     @State private var rejection: CommandRejection?
-    @State private var result: RaidRecordDto?
+    /// The campaign once announced (2.0): a raid is decided four weeks later, not at once.
+    @State private var launched = false
+    @State private var announced: RaidCampaignDto?
 
     private var budget: Int64 { Int64((Double(option.quote.defenceCents) * multiple).rounded()) }
 
@@ -364,17 +366,18 @@ struct RaidSheet: View {
                                 }
                                 row("Most it can cost", Format.money(budget + quote.priceCents + quote.surchargeCents))
                             }
-                            Text("The budget buys advertising whatever happens. If the raid lands you take the plants into your division at your strategy and pay the rival half their book value.")
+                            Text("The campaign is announced now and decided four weeks later, against the defence they have then. The budget is committed today and buys advertising whatever happens. If the raid lands you take the plants into your division at your strategy and pay the rival half their book value.")
                                 .font(.caption).foregroundStyle(Theme.secondary)
                         }
                     }
-                    if let result {
-                        PixelLabel(
-                            result.success ? "Took \(result.blocks) plant\(result.blocks == 1 ? "" : "s") from \(result.defender)" : "The campaign did not move \(result.defender)'s customers",
-                            icon: result.success ? "check" : "blocked"
-                        )
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(result.success ? Theme.positive : Theme.warning)
+                    if launched {
+                        PixelLabel("Campaign announced against \(option.targetName)", icon: "flag")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(Theme.positive)
+                        if let announced {
+                            Text("\(RaidText.decided(announced)). Chance today \(Format.percentBps(announced.chanceBps)); it is decided against the defence they have then.")
+                                .font(.footnote).foregroundStyle(Theme.secondary)
+                        }
                     }
                     if let rejection {
                         Text(rejection.message).font(.callout).foregroundStyle(Theme.negative)
@@ -387,7 +390,7 @@ struct RaidSheet: View {
                     }
                     .buttonStyle(PixelButtonStyle(prominent: true))
                     .tint(Theme.negative)
-                    .disabled(store.isBusy || result != nil)
+                    .disabled(store.isBusy || launched)
                 }
                 .padding(16)
             }
@@ -395,7 +398,7 @@ struct RaidSheet: View {
             .navigationTitle("Market raid")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(result == nil ? "Cancel" : "Done") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(launched ? "Done" : "Cancel") { dismiss() } }
             }
             .task { await refresh() }
         }
@@ -416,7 +419,12 @@ struct RaidSheet: View {
     private func launch() async {
         rejection = await store.raid(option, budgetCents: budget)
         if rejection == nil {
-            result = store.recentRaids.first
+            launched = true
+            let campaigns = await store.read { $0.raidCampaigns() } ?? []
+            announced = campaigns.first {
+                $0.role == "by_player" && $0.defender == option.target
+                    && $0.region == option.regionIndex && $0.industry == option.industryIndex
+            }
         }
     }
 }

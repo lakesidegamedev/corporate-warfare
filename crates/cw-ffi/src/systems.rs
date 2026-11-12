@@ -56,6 +56,8 @@ pub struct GoodDepthDto {
     pub cover_x100: Option<i64>,
     pub your_share_bps: i64,
     pub drivers: Vec<DriverDto>,
+    /// The engine's one plain sentence on why the price moved this quarter (2.0).
+    pub price_reason: String,
     pub sellers: Vec<ShareRowDto>,
     /// Weekly use by plants that consume it, and households' purchases.
     pub buyers: Vec<ShareRowDto>,
@@ -597,6 +599,7 @@ impl SessionHandle {
             cover_x100: cover_x100(now.stock, now.sold),
             your_share_bps: share_bps(now.your_sold, now.sold),
             drivers: drivers(&facts),
+            price_reason: pricing::price_reason(world, dataset, code),
             sellers: share_rows(sellers, 6),
             buyers: share_rows(buyers, 6),
             series: vec![
@@ -1417,6 +1420,23 @@ mod tests {
             .find(|r| r.firm == you)
             .unwrap();
         assert_ne!(mine.industry, "financial");
+    }
+
+    #[test]
+    fn a_good_carries_the_engines_price_reason() {
+        let session = SessionHandle::new(181, true, true).unwrap();
+        session.advance(4);
+        let product = {
+            let handle = session.lock();
+            handle
+                .dataset
+                .products
+                .iter()
+                .position(|p| p.reference_price_cents > 0)
+                .unwrap() as u32
+        };
+        let depth = session.good_depth(product).unwrap();
+        assert!(!depth.price_reason.is_empty());
     }
 
     #[test]
