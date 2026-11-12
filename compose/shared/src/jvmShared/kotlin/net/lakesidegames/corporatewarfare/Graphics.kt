@@ -54,7 +54,7 @@ data class GraphicsConfig(
     val moves: Boolean get() = animations && (traffic > 0 || clouds > 0 || buildings > 0 || dayNight || lighting == 2)
 
     /** The preset this matches, or null when the player has mixed their own. */
-    val preset: GraphicsPreset? get() = GraphicsPreset.entries.firstOrNull { it.config(animations, showFps) == copy(newMap = false, directMap = null) }
+    val preset: GraphicsPreset? get() = GraphicsPreset.entries.firstOrNull { it.config(animations, showFps).copy(newMap = newMap, directMap = directMap) == this }
 
     companion object {
         /** What the map draws with no settings file, as in tests and previews. */
