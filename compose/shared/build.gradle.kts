@@ -25,7 +25,7 @@ val baseVersion = (findProperty("cw.version") as String?) ?: cargoVersion
 val displayVersion = if (buildChannel == "preview") "$baseVersion-preview.$previewNumber" else baseVersion
 val installerVersion = if (buildChannel == "preview") {
     val (major, minor, _) = baseVersion.split('.').map(String::toInt)
-    "$major.${minor - 1}.${9_000 + previewNumber}"
+    if (minor > 0) "$major.${minor - 1}.${9_000 + previewNumber}" else "${major - 1}.255.${9_000 + previewNumber}"
 } else {
     baseVersion
 }

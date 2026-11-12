@@ -93,9 +93,22 @@ pub struct Multiples {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Richest {
     pub multiples: Vec<Multiples>,
+    /// Rows for one scenario, by scenario id, where its founders grow at a different pace;
+    /// a length a scenario does not list falls back to `multiples`.
+    #[serde(default)]
+    pub scenarios: std::collections::BTreeMap<String, Vec<Multiples>>,
 }
 
 impl Richest {
+    /// The multiples for a career length in a scenario: the scenario's own row for that length
+    /// when it has one, else the shared row (`for_years`).
+    pub fn for_scenario_years(&self, scenario: &str, years: u32) -> &Multiples {
+        self.scenarios
+            .get(scenario)
+            .and_then(|rows| rows.iter().find(|m| m.years == years))
+            .unwrap_or_else(|| self.for_years(years))
+    }
+
     /// The multiples for a career length (the nearest shorter row, else the first).
     pub fn for_years(&self, years: u32) -> &Multiples {
         self.multiples
@@ -160,7 +173,12 @@ impl CareerTable {
         if self.richest.multiples.is_empty() {
             return Err("richest has no multiples".into());
         }
-        for m in &self.richest.multiples {
+        for m in self
+            .richest
+            .multiples
+            .iter()
+            .chain(self.richest.scenarios.values().flatten())
+        {
             if !(10_000 < m.bronze_bps
                 && m.bronze_bps <= m.silver_bps
                 && m.silver_bps <= m.gold_bps)

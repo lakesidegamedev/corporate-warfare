@@ -132,8 +132,12 @@ pub fn room_lots(world: &World, dataset: &Dataset, product: u16, region: u8) -> 
     (imports + unmet + business - coming - spare).max(0)
 }
 
-/// Lots a week of a local product the operating plants in `regions` could make at full run but
-/// did not sell last week: their capacity less what households and plants there bought of it.
+/// Lots a week of a local product the operating plants in `regions` could have made last week
+/// but did not sell: what they can actually run, less what households and plants there bought.
+/// A plant short of staff or of an input cannot run its idle blocks, so they answer no buyer:
+/// counting them at full run read households who went without beside an understaffed telecom
+/// exchange or care home as short of budget, and took their unmet demand off the room to build.
+/// A plant runs at most its staff ratio; one short of an input made all it could.
 pub fn idle_lots(world: &World, dataset: &Dataset, product: u16, regions: &[u8]) -> i64 {
     let id = &dataset.products[product as usize].id;
     let capacity: i64 = world
@@ -144,7 +148,7 @@ pub fn idle_lots(world: &World, dataset: &Dataset, product: u16, regions: &[u8])
             plant.status == FacilityStatus::Operating && regions.contains(&plant.region)
         })
         .filter(|plant| world.firms.get(plant.firm).is_some_and(|f| f.operative()))
-        .map(|plant| dataset.recipes[plant.recipe as usize].lots_of(id) * plant.blocks as i64)
+        .map(|plant| runnable_lots(dataset, plant, id))
         .sum();
     if capacity <= 0 {
         return 0;
@@ -154,6 +158,18 @@ pub fn idle_lots(world: &World, dataset: &Dataset, product: u16, regions: &[u8])
         crate::economy::pricing::business_unmet_in(world, dataset, product, regions);
     let bought = (wanted - unmet).max(0) + (business - business_unmet).max(0);
     (capacity - bought).max(0)
+}
+
+/// Lots a week of `id` a plant could have made last week with the staff and inputs it had: its
+/// full run scaled by its staff ratio, or what it made when an input ran short.
+fn runnable_lots(dataset: &Dataset, plant: &crate::state::Facility, id: &str) -> i64 {
+    let full = dataset.recipes[plant.recipe as usize].lots_of(id) * plant.blocks as i64;
+    let made = plant.last_made(dataset, id).0 / 1_000;
+    if plant.last_inputs_short {
+        return made.min(full);
+    }
+    let staffed = full * plant.last_staff_ratio_bps.clamp(0, 10_000) as i64 / 10_000;
+    staffed.max(made).min(full)
 }
 
 /// Lots a week of each corridor good a new plant could still buy, read once per pass

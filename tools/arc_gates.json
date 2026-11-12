@@ -32,6 +32,8 @@
       "text": "the median surviving top-ten rival ends the decade with more blocks than it started" },
     { "id": "unmet_local_falls", "policy": "any", "metric": "unmet_local_fall_pct_median", "min": 5.0,
       "text": "household demand for services and retail that goes without falls at least 5 points over the decade (median)" },
+    { "id": "business_inputs_filled", "policy": "any", "metric": "business_inputs_fill_worst_from_year3_pct_median", "min": 80.0,
+      "text": "plants that buy inputs make at least 80 percent of their plan (within their staff) in every year from year 3 (median over careers of the worst year)" },
     { "id": "raid_warning", "policy": "any", "metric": "raid_warning_weeks_median", "min": 4.0,
       "text": "raids on the player are announced at least 4 weeks before they resolve (median; n/a until raid warnings exist)" },
     { "id": "career_passive_no_medal", "policy": "passive", "start": "founder", "ambition": "biggest", "metric": "career_no_medal_share", "min": 0.80,

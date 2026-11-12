@@ -48,6 +48,10 @@ const RESERVE_WEEKS: i64 = 26;
 const MAX_PAYBACK_WEEKS: i64 = 104;
 /// Cash the founder keeps personally, in cents ($100,000).
 const FOUNDER_KEEPS_CENTS: i64 = 10_000_000;
+/// New plants the script may have building or waiting to be judged at once, each of a different
+/// strategy and division. One at a time left a five million founder with four million idle for
+/// its first two years outside Great Lakes, while the board listed plants that paid.
+const MAX_PENDING: usize = 3;
 
 /// Score, recipe, region, cost, discounted weekly profit, industry, blocks, from the sheet.
 type Candidate = (i64, u16, u8, i64, i64, u8, i64, bool);
@@ -71,7 +75,7 @@ pub(super) struct SkilledBuild {
 /// What the careful script remembers between cadences.
 #[derive(Clone, Debug)]
 pub(super) struct SkilledState {
-    pending: Option<SkilledBuild>,
+    pending: Vec<SkilledBuild>,
     /// How far to believe the engine's opening signal, in basis points, from its own record.
     trust_bps: i64,
     /// The same for the sheet figure plus the import room test (the older signal).
@@ -100,7 +104,7 @@ pub(super) struct SkilledState {
 impl Default for SkilledState {
     fn default() -> Self {
         SkilledState {
-            pending: None,
+            pending: Vec::new(),
             trust_bps: 5_000,
             sheet_trust_bps: 5_000,
             passed: 0,
@@ -351,12 +355,15 @@ impl PolicyRunner {
     /// plant's expected profit on top of what it earned before? Adjust trust in the engine's
     /// opening signal by how it actually did.
     fn skilled_judge(&mut self, session: &mut Session, firm: u64) {
-        let Some(build) = self.skilled.pending.clone() else {
-            return;
-        };
+        for build in self.skilled.pending.clone() {
+            self.skilled_judge_one(session, firm, build);
+        }
+    }
+
+    fn skilled_judge_one(&mut self, session: &mut Session, firm: u64, build: SkilledBuild) {
         let now = session.world.tick.0;
         let Some(plant) = session.world.facilities.get(build.plant) else {
-            self.skilled.pending = None;
+            self.skilled.pending.retain(|b| b.plant != build.plant);
             return;
         };
         if plant.status == cw_sim::state::FacilityStatus::Building
@@ -388,7 +395,7 @@ impl PolicyRunner {
                 trust_now
             );
         }
-        self.skilled.pending = None;
+        self.skilled.pending.retain(|b| b.plant != build.plant);
         if passed {
             self.skilled.passed += 1;
             self.skilled.strikes = 0;
@@ -542,7 +549,7 @@ impl PolicyRunner {
         use cw_sim::economy::sectors;
         let now = session.world.tick.0;
         let handle = Handle(firm);
-        if self.skilled.pending.is_some()
+        if self.skilled.pending.len() >= MAX_PENDING
             || now < self.skilled.pause_until
             || session.world.pending_pause.is_some()
         {
@@ -552,22 +559,24 @@ impl PolicyRunner {
         let Some(entity) = session.world.firm(handle) else {
             return;
         };
-        // Nothing may be under construction, and the firm must have traded a quarter at a profit.
-        let building = entity.facilities.iter().any(|h| {
-            session
-                .world
-                .facilities
-                .get(*h)
-                .is_some_and(|p| p.status == cw_sim::state::FacilityStatus::Building)
-        });
+        // The firm must have traded a quarter at a profit before it builds on borrowed money, or
+        // after a plant failed its judgement. Until then it may build from its own cash, several
+        // plants at once, each judged on its own.
         let plants = entity.facilities.len() as i64;
-        if building
-            || now < SETTLING_WEEKS
-            || fin.ebitda_trailing_cents <= 0
-            || fin.net_income_trailing_cents <= 0
-        {
+        let profitable = fin.ebitda_trailing_cents > 0 && fin.net_income_trailing_cents > 0;
+        if now < SETTLING_WEEKS || (!profitable && (self.skilled.strikes > 0 || plants > 4)) {
             return;
         }
+        // Equipment still owed on plants under construction is paid on delivery from this cash.
+        let owed: i64 = entity
+            .facilities
+            .iter()
+            .filter_map(|h| session.world.facilities.get(*h))
+            .filter(|p| p.status == cw_sim::state::FacilityStatus::Building)
+            .map(|p| p.equipment_due_cents.max(0))
+            .sum();
+        let pending_recipes: Vec<u16> = self.skilled.pending.iter().map(|b| b.recipe).collect();
+        let pending_keys: Vec<(u8, u8)> = self.skilled.pending.iter().map(|b| b.key).collect();
         let outflow = cw_sim::economy::insolvency::mandatory_weekly_outflow(&session.world, handle);
         let reserve = outflow
             .saturating_mul(RESERVE_WEEKS)
@@ -581,7 +590,9 @@ impl PolicyRunner {
                 continue;
             };
             let industry = sectors::recipe_industry(&session.dataset, recipe);
-            if self.skilled.failed_places.contains(&(recipe, open.region))
+            if pending_recipes.contains(&recipe)
+                || pending_keys.contains(&(open.region, industry))
+                || self.skilled.failed_places.contains(&(recipe, open.region))
                 || self
                     .skilled
                     .failed_recipes
@@ -656,6 +667,8 @@ impl PolicyRunner {
             let recipe = o.recipe;
             let industry = sectors::recipe_industry(&session.dataset, recipe);
             if o.room_pct < 80
+                || pending_recipes.contains(&recipe)
+                || pending_keys.contains(&(o.region, industry))
                 || o.weekly_cents <= 0
                 || self.skilled.failed_places.contains(&(recipe, o.region))
                 || self
@@ -700,7 +713,7 @@ impl PolicyRunner {
             return;
         };
         let cash = fin.cash_cents;
-        let need = cost + reserve;
+        let need = cost + reserve + owed;
         if cash < need {
             // Borrow only against proven earnings, only for the shortfall.
             let proven = self.skilled.passed >= 1;
@@ -714,6 +727,7 @@ impl PolicyRunner {
             // Weekly debt service of everything borrowed must stay under half of weekly operating profit.
             let service = (fin.liabilities_cents + amount) / 104;
             if !proven
+                || !profitable
                 || amount > capacity
                 || amount > headroom
                 || service * 2 > fin.ebitda_trailing_cents / 13
@@ -758,7 +772,7 @@ impl PolicyRunner {
         let base_profit = self
             .skilled_division_profit(session, firm, key, now.saturating_sub(26))
             .map_or(0, |(p, _)| p);
-        self.skilled.pending = Some(SkilledBuild {
+        self.skilled.pending.push(SkilledBuild {
             plant,
             key,
             recipe,

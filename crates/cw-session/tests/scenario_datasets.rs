@@ -172,18 +172,21 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     // The world pins moved in 2.0 when electricity began to be dispatched over a grid at its
     // generators' asking prices, generators began to be paid for every lot they deliver and
     // services began pricing on their business buyers' shortfall (the dataset hash is unchanged).
+    // They moved again when idle capacity netted off the room to build came to count only what
+    // sellers could run with the staff and inputs they had, and when a service plant whose buyers
+    // took all it made began to raise its plan instead of settling at its sales plus a tenth.
     let pins = [
         (
             1u64,
-            "71be4e21f01ed53f8696cd069f539846ec15d8c2751e9b14a9aecc53c4182b56",
+            "dab2d00e6ebc48c5d1e1a064f03ada7861b1e659e8ee12aa873cf990e14e2428",
         ),
         (
             2,
-            "ecfcb8db7d6746356bb0585b26efcff52c0667105fa4107b6343bc6da52cb10a",
+            "a330b01b5a3659cb1f5ca72a725da34579a319b030facf433827d17ce09fdc78",
         ),
         (
             3,
-            "6dbb205d252789b5ed897ac7755e92cee2271708303bc39fc1710020d827e468",
+            "c7dc5c68cf7662073e89f02b13bcedd05eed38b0e391b46ad5bf7f0464529164",
         ),
     ];
     for (seed, hash) in pins {
@@ -195,12 +198,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "4d2a142631ba3a051ffa93b618d9c7d5125a3eeebedd7f7fa5341c38ff8263a5"
+        "8487ae2cadb9f3386015afad627e8429d58d7ebb8430c16e7ac18b003b53bb0a"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "cfdebc30d34df5f07bcfd754eb63ed62181aa9bff1422d442cebcd2757a956be"
+        "01a1ac96d8767be7f364d888033ebfae22a01b0522b6d34d4c15c7218b75872e"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();

@@ -365,13 +365,13 @@ mod guide_tests {
     fn the_guide_reads_the_content() {
         let g = ambition_guide("founder", 10);
         assert_eq!(g.len(), 4);
-        assert_eq!(g[0].bronze, "End with 10 times the fortune you start with");
-        assert_eq!(g[0].gold, "End with 35 times the fortune you start with");
+        assert_eq!(g[0].bronze, "End with 17 times the fortune you start with");
+        assert_eq!(g[0].gold, "End with 40 times the fortune you start with");
         assert_eq!(g[1].bronze, "Finish in the top half of the league by value");
         assert_eq!(g[1].gold, "Finish in the top 3 of the league by value");
         let h = ambition_guide("helm", 5);
         assert_eq!(h[1].gold, "Finish in first place of the league by value");
-        assert!(h[0].silver.contains("4.5 times"));
+        assert!(h[0].silver.contains("5 times"));
         assert!(g[2].bronze.contains("20 percent"));
         assert_eq!(career_lengths().0, vec![5, 10, 20]);
     }
