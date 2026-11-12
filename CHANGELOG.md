@@ -12,6 +12,7 @@ heading.
 ## [Unreleased]
 
 ### Fixed
+- On a phone, the save browser's rows and the scenario cards no longer clip: long save and scenario names end in an ellipsis, the two lines of detail may wrap, and the New career here and Customize buttons drop to a second line when they do not both fit.
 - The main menu's scenario outlines and labels were drawn off the globe, out in space to its left. The globe and every layer on it now share one position at every window size, and the globe turns to face the scenario of your latest save, so that scenario's outline is always on the visible side.
 - New career, at the helm: the sales column is left out when no company has sales yet instead of showing dashes, and the chosen company now has a full description beside the list: sector, region, plants, workers, price of control and what the board will expect of you, read from the engine.
 

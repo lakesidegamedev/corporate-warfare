@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -295,12 +296,12 @@ fun LoadGameScreen(store: GameStore, onBack: () -> Unit) {
                                 .clickable { picked = s.file; confirm = false; renaming = null }.padding(10.dp),
                         ) {
                             Row {
-                                Text(s.info.title, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
-                                Text(cell(s.info, SaveColumn.NetWorth, format), color = Palette.primaryText, fontSize = 14.sp)
+                                Text(s.info.title, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(cell(s.info, SaveColumn.NetWorth, format), color = Palette.primaryText, fontSize = 14.sp, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
                             }
                             Text(
                                 listOf(cell(s.info, SaveColumn.Scenario, format), cell(s.info, SaveColumn.Date, format), cell(s.info, SaveColumn.Medal, format), cell(s.info, SaveColumn.Played, format)).joinToString("  |  "),
-                                color = Palette.secondary, fontSize = 12.sp, maxLines = 1,
+                                color = Palette.secondary, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                             )
                             Text(cell(s.info, SaveColumn.Saved, format) + "  |  " + cell(s.info, SaveColumn.Version, format), color = Palette.secondary, fontSize = 11.sp)
                         }

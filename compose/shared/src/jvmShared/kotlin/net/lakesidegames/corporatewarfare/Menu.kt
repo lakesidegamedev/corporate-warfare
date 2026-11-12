@@ -329,7 +329,7 @@ private fun CustomRow(
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text(custom.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text(custom.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Text("Based on ${base?.name ?: custom.baseScenarioId}" + (base?.let { ", starts ${it.startYear}" } ?: "") + ", ${custom.difficulty}", color = Palette.secondary, fontSize = 12.sp)
         }
         MenuBarButton("Edit", onClick = onEdit)
@@ -338,6 +338,7 @@ private fun CustomRow(
 }
 
 /** One scenario: its art on a solid frame, the facts, and two lines on what makes it different. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun ScenarioCard(
     scenario: ScenarioDto, selected: Boolean, wide: Boolean, modifier: Modifier,
@@ -364,7 +365,8 @@ private fun ScenarioCard(
             Text(scenario.tagline, color = Palette.primaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Text(firstSentence(scenario.summary), color = Palette.secondary, fontSize = 12.sp, maxLines = 2)
             if (scenario.available && (onPlay != null || onCustomize != null)) {
-                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Wraps to a second line when a phone or large text leaves too little width for both.
+                FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     onPlay?.let { GoldButton("New career here", onClick = it) }
                     onCustomize?.let { MenuBarButton("Customize", onClick = it) }
                 }
