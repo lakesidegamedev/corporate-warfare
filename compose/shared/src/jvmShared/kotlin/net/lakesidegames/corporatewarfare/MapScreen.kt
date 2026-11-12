@@ -230,8 +230,8 @@ fun WorldMapView(
     val takeovers = remember { TakeoverLog() }
     val acquired = remember(store.mapPlants, store.overview?.tick) { takeovers.update(store.mapPlants, store.overview?.tick?.toInt() ?: 0) }
     val heightsNow by rememberUpdatedState(heights)
-    // The new GPU map (desktop preview): drawn instead of the classic ground, clouds, traffic and buildings while the
-    // camera is flat; the globe, the Freight mode and any failure keep the classic map.
+    // The 3D map: drawn instead of the classic map in every mode and at every zoom from the globe's hand-over in, as soon as it
+    // has a finished frame. Only the globe and a machine without a usable graphics card keep the classic map.
     // On a desktop that can do it, the map is drawn by the graphics card straight into a native surface behind the UI.
     var surface by remember { mutableStateOf<Any?>(null) }
     var surfaceBad by remember { mutableStateOf(false) }
@@ -249,7 +249,11 @@ fun WorldMapView(
         }
     }
     // Smoke, cranes, beacons and vehicles move while the map is showing and animations are on; leaving the map or turning them off lets it idle.
-    val gpuShown by remember(gpu, layer) { derivedStateOf { gpu != null && layer != MapLayer.Freight && (camera?.zoom ?: MapCamera.FLAT_END) >= MapCamera.FLAT_END } }
+    val gpuShown by remember(gpu) {
+        derivedStateOf { gpu != null && gpu.version >= 0 && gpu.ready && (camera?.zoom ?: MapCamera.FLAT_END) >= MapCamera.GPU_FROM }
+    }
+    // Set while the 3D map is on screen: the first classic frame after it (the globe) is drawn whole, never a stale picture.
+    val gpuWasOn = remember { BooleanArray(1) }
     DisposableEffect(gpu, graphics.animations, gpuShown) {
         gpu?.setAnimation(graphics.animations && gpuShown)
         onDispose { gpu?.setAnimation(false) }
@@ -329,6 +333,14 @@ fun WorldMapView(
             // The GPU map picks from its own geometry: a plant under the tap opens its division (or its firm),
             // else the region under it is the one drawn there. Both use the camera the picture is shown for.
             val gc = gpuCamera(now, viewSize.width, viewSize.height, pitch)
+            if (layer == MapLayer.Freight && onLane != null) {
+                val lane = laneAt(store.lanes, tap, gpuHubs(gpu, gc, viewSize.width.toInt(), viewSize.height.toInt(), map, store.lanes))
+                if (lane != null) {
+                    onLane(if (laneKey(lane) == pickedLane) null else laneKey(lane))
+                    return
+                }
+                onLane(null)
+            }
             val plant = gpuBuildingAt(gpu, gc, viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
             if (plant != null && openPlant(plant)) return
             val code = gpu.pick(gc, viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
@@ -438,8 +450,13 @@ fun WorldMapView(
                     // The newest frame carried to this camera, so the ground, names, badges and building boxes all agree.
                     // On a native surface the card has drawn this very camera already, so there is nothing to carry or warp.
                     val shown = if (gpu.direct) gc else drawGpuFrame(gpu, gc) ?: gc
+                    gpuWasOn[0] = true
                     // Names and division badges, projected by the camera of the frame on screen so nothing slides.
                     gpu.version
+                    // The Freight mode's lanes, their hubs placed by the same camera as the ground under them.
+                    if (layer == MapLayer.Freight) {
+                        drawLanes(map, store.lanes, selected, pickedLane, gpuHubs(gpu, shown, size.width.toInt(), size.height.toInt(), map, store.lanes))
+                    }
                     drawGpuLabels(gpu, shown, map, store.mapPlants, store.mapDivisions, graphics, shown.widthKm, labelMeasurer, labelPlanner)
                     hover?.let { at ->
                         val b = gpuBuildingAt(gpu, shown, size.width.toInt(), size.height.toInt(), at.x, at.y) ?: return@let
@@ -465,6 +482,15 @@ fun WorldMapView(
                         drawText(label, topLeft = Offset(12f, size.height - label.size.height - 10f))
                     }
                     return@Canvas
+                }
+                // The 3D map keeps drawing (unseen, behind this one) as the camera nears its zoom or while its first frame is on the
+                // way, so the moment it takes over it has a frame for this very view.
+                if (gpu != null && cam.zoom >= MapCamera.GPU_FROM / 1.6) {
+                    gpu.request(gpuCamera(cam, size.width, size.height, pitch), size.width.toInt(), size.height.toInt(), true)
+                }
+                if (gpuWasOn[0]) {
+                    gpuWasOn[0] = false
+                    layers.forget()
                 }
                 val tint = layerTint(layer)
                 val lanes = store.lanes

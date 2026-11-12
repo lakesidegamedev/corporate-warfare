@@ -96,6 +96,12 @@ internal class MapLayerSet(private val scope: CoroutineScope, private val carryK
     fun close() = synchronized(lock) { closed = true; wanted = null; job?.cancel() }
 
     /**
+     * Drops the set on show, so the next frame draws every layer directly for its own camera. Called when this map takes over
+     * from the 3D map: the last set was baked for some old view, and carrying it would show a stale picture over empty space.
+     */
+    fun forget() { baked = null }
+
+    /**
      * Draws every layer of [frame] for [cam]. With bakes switched off, or before the first set lands, each layer is drawn
      * directly at [cam]. Otherwise the newest set is drawn, carried to [cam] by one transform.
      */

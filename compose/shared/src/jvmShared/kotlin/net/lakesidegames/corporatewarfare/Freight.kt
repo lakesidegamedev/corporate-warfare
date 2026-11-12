@@ -145,11 +145,15 @@ private fun hubKm(map: WorldMap, lane: LaneDto): Double {
     return acos(dot.coerceIn(-1.0, 1.0)) * GroundDashes.EARTH_KM
 }
 
-private fun arcOf(map: WorldMap, projection: MapProjection, lane: LaneDto, plinth: Double): Arc? {
+private fun arcOf(map: WorldMap, projection: MapProjection, lane: LaneDto, plinth: Double): Arc? =
+    arcOf(lane) { code -> map.anchor(code)?.let { projection.project(it, plinth) } }
+
+/** A lane's arc between its hubs as [hub] places them on screen (any camera: the classic map's or the 3D map's). */
+private fun arcOf(lane: LaneDto, hub: (String) -> Offset?): Arc? {
     // The same two hubs always bow the same way, whichever end is listed first.
     val (from, to) = if (lane.a < lane.b) lane.a to lane.b else lane.b to lane.a
-    val a = map.anchor(from)?.let { projection.project(it, plinth) } ?: return null
-    val b = map.anchor(to)?.let { projection.project(it, plinth) } ?: return null
+    val a = hub(from) ?: return null
+    val b = hub(to) ?: return null
     val d = b - a
     val len = d.getDistance()
     if (len < 2f) return null
@@ -165,13 +169,17 @@ private fun arcOf(map: WorldMap, projection: MapProjection, lane: LaneDto, plint
  * drawn. Sea lanes are dashed. A dark casing keeps the stack readable on any
  * ground; the picked lane is outlined in white and lanes away from a selected region fade.
  */
-internal fun DrawScope.drawLanes(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>, focus: String?, picked: String? = null, plinth: Double = 0.0) {
+internal fun DrawScope.drawLanes(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>, focus: String?, picked: String? = null, plinth: Double = 0.0) =
+    drawLanes(map, lanes, focus, picked) { code -> map.anchor(code)?.let { projection.project(it, plinth) } }
+
+/** The lanes with their hubs placed by [hub]: the 3D map passes its own projection, so the lanes sit on the ground it drew. */
+internal fun DrawScope.drawLanes(map: WorldMap, lanes: List<LaneDto>, focus: String?, picked: String?, hub: (String) -> Offset?) {
     val busiest = busiestLanes(lanes)
     val top = busiest.maxOfOrNull { it.capacityLots + it.outsideLots }?.coerceAtLeast(1) ?: return
     // Thin, quiet lanes first so the busy ones lie on top, and the player's own over all.
     val (mine, others) = busiest.asReversed().partition(::laneIsMine)
     (others + mine).forEach { lane ->
-        val arc = arcOf(map, projection, lane, plinth) ?: return@forEach
+        val arc = arcOf(lane, hub) ?: return@forEach
         val parts = stripes(lane)
         val total = parts.sumOf { it.lots }.coerceAtLeast(1)
         val width = 5f + 13f * (lane.capacityLots + lane.outsideLots).toFloat() / top
@@ -188,18 +196,22 @@ internal fun DrawScope.drawLanes(map: WorldMap, projection: MapProjection, lanes
     }
     // The hubs the lanes meet at.
     busiest.flatMap { listOf(it.a, it.b) }.distinct().forEach { code ->
-        val at = map.anchor(code)?.let { projection.project(it, plinth) } ?: return@forEach
+        val at = hub(code) ?: return@forEach
         drawCircle(Palette.ink, 5f, at)
         drawCircle(Color.White, 3f, at)
     }
 }
 
 /** The lane drawn nearest a tap, within a finger's width, or null. */
-internal fun laneAt(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>, tap: Offset): LaneDto? {
+internal fun laneAt(map: WorldMap, projection: MapProjection, lanes: List<LaneDto>, tap: Offset): LaneDto? =
+    laneAt(lanes, tap) { code -> map.anchor(code)?.let { projection.project(it, 0.0) } }
+
+/** The lane nearest a tap with the hubs placed by [hub], within a finger's width, or null. */
+internal fun laneAt(lanes: List<LaneDto>, tap: Offset, hub: (String) -> Offset?): LaneDto? {
     var best: LaneDto? = null
     var bestDistance = 22f
     busiestLanes(lanes).forEach { lane ->
-        val arc = arcOf(map, projection, lane, 0.0) ?: return@forEach
+        val arc = arcOf(lane, hub) ?: return@forEach
         for (k in 0..24) {
             val d = (arc.at(k / 24f) - tap).getDistance()
             if (d < bestDistance) {
@@ -579,4 +591,19 @@ internal fun ReserveLane(store: GameStore, lane: LaneDto, initialLots: Int? = nu
         }
     }
     Spacer(Modifier.height(2.dp))
+}
+
+/** The lanes' hubs on screen as the 3D map projects them for [camera], so lanes drawn with them sit on the ground of that frame. */
+internal fun gpuHubs(session: GpuMapSession, camera: GpuCamera, width: Int, height: Int, map: WorldMap, lanes: List<LaneDto>): (String) -> Offset? {
+    val codes = busiestLanes(lanes).flatMap { listOf(it.a, it.b) }.distinct().filter { map.anchor(it) != null }
+    if (codes.isEmpty()) return { null }
+    val pts = DoubleArray(codes.size * 2)
+    codes.forEachIndexed { k, code ->
+        val a = map.anchor(code)!!
+        pts[2 * k] = Math.toDegrees(a.lon[0]); pts[2 * k + 1] = Math.toDegrees(a.lat[0])
+    }
+    val out = session.project(camera, width, height, pts)
+    val at = HashMap<String, Offset>()
+    codes.forEachIndexed { k, code -> if (!out[2 * k].isNaN() && !out[2 * k + 1].isNaN()) at[code] = Offset(out[2 * k], out[2 * k + 1]) }
+    return { at[it] }
 }

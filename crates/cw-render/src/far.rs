@@ -17,6 +17,7 @@ pub const SMOOTH_LEVELS: usize = 4;
 const NONE: u8 = 255;
 
 /// A grey picture (0 sea, 255 land) over a box of the world.
+#[derive(Clone)]
 struct Mask8 {
     w: usize,
     h: usize,
@@ -35,6 +36,7 @@ impl Mask8 {
     }
 }
 
+#[derive(Clone)]
 pub struct FarWorld {
     /// The whole world, longitude -180 to 180 and latitude 90 to -90.
     world: Mask8,
