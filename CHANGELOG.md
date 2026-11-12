@@ -11,10 +11,15 @@ heading.
 
 ## [Unreleased]
 
+### Fixed
+- The main menu's scenario outlines and labels were drawn off the globe, out in space to its left. The globe and every layer on it now share one position at every window size, and the globe turns to face the scenario of your latest save, so that scenario's outline is always on the visible side.
+- New career, at the helm: the sales column is left out when no company has sales yet instead of showing dashes, and the chosen company now has a full description beside the list: sector, region, plants, workers, price of control and what the board will expect of you, read from the engine.
+
 Corporate Warfare 2.0 is the biggest change since the first release. The company you run now has a goal and an ending, the rivals build and fail and raid on the same rules you do, prices move for reasons you can read, and the desktop game has a new layout built around tables you can shape. Saves from every earlier version still open and play on as before: a game started without a career stays a sandbox.
 
 ### Added
 
+- The main menu, new career, settings and first run are rebuilt. Continue sits at the top with the last save's company, scenario, game date, net worth, ambition and medal, and time played. Load is a save browser: every save in a grid you can sort by name, scenario, game date, net worth, medal, play time, version or when it was saved, with Rename, Duplicate, Export, Import and Delete. Scenarios shows the four with their start year and what makes each different, plus your own. New career runs in five steps (scenario, how you start, ambition, world, chief) with a summary line, Back and Next always in the same place, and Quick start on every step; the starting capital for each difficulty comes from the engine. Settings has sections down the side, a search box that finds any setting, a sentence on what each one does, Reset section and Reset all, and says plainly whether this machine can run the 3D map. The game menu (Escape) shows the save's name and when it was last saved and adds Save as and Load. First run ends by opening New career.
 - Edges on the 3D map are smoothed, so roads, coastlines and buildings are clean lines that do not crawl or shimmer when the map moves.
 - Roads are proper ribbons whose width follows the zoom smoothly: highways have a light carriageway inside a darker edge, with centre dashes when you are close, and main roads are a clear light line.
 - Every sector's plant now uses the new model shapes: pitched hangar and terrace roofs, a radar dome, round masts and chillers, a crowned finance tower, conifers, and heaps that look like heaps.

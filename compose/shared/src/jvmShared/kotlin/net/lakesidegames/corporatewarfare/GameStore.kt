@@ -203,11 +203,35 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     fun saveSlots(): List<SaveSlot> = Saves.list(saveDir)
 
+    /** The folder the saves live in, for export and import. */
+    val saveFolder: File get() = saveDir
+
+    /** The name the player gave this career's saves with Save as; empty until then. */
+    var saveName by mutableStateOf(""); private set
+
+    /** When this career was last written to disk (milliseconds), 0 when not yet this session. */
+    var lastSavedAt by mutableStateOf(0L); private set
+
+    private var playBaseSeconds = 0L
+    private var playSince = System.currentTimeMillis()
+
+    /** Time spent in this career, carried from save to save: the opened save's time plus this session's. */
+    val playSeconds: Long get() = playBaseSeconds + (System.currentTimeMillis() - playSince) / 1000
+
+    private fun began(info: SaveInfo?) {
+        playBaseSeconds = info?.playSeconds ?: 0L
+        playSince = System.currentTimeMillis()
+        saveName = info?.name.orEmpty()
+        lastSavedAt = info?.savedAt ?: 0L
+    }
+
     private val autosave get() = File(saveDir, "autosave.cwsave")
 
     fun newCareer(seed: Long, guided: Boolean, fiveYear: Boolean = false) = perform {
+        val opened: SaveInfo? = null
         val handle = withContext(engine) { SessionHandle(seed.toULong(), guided, fiveYear) }
         session = handle
+        began(opened)
         selectedFirm = withContext(engine) {
             if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
             handle.overview().primaryFirm
@@ -218,8 +242,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     /** A new career from the new-game screen. */
     fun startCareer(options: uniffi.cw_ffi.NewGameDto) = perform {
+        val opened: SaveInfo? = null
         val handle = withContext(engine) { SessionHandle.start(options) }
         session = handle
+        began(opened)
         selectedFirm = withContext(engine) {
             if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
             handle.overview().primaryFirm
@@ -230,8 +256,10 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     /** A new career with a start, an ambition and a length (2.0). */
     fun startCareerWith(options: uniffi.cw_ffi.NewGameDto, career: uniffi.cw_ffi.CareerOptionsDto) = perform {
+        val opened: SaveInfo? = null
         val handle = withContext(engine) { SessionHandle.startCareer(options, career) }
         session = handle
+        began(opened)
         selectedFirm = withContext(engine) {
             if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
             handle.overview().primaryFirm
@@ -245,9 +273,11 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     /** A new career from an edited scenario. Its own difficulty, economy and capital apply. */
     fun startCustom(scenario: uniffi.cw_ffi.CustomScenarioDto, guided: Boolean, fiveYear: Boolean) = perform {
+        val opened: SaveInfo? = null
         val seed = (System.nanoTime() % 9_999_999).toULong()
         val handle = withContext(engine) { SessionHandle.startCustom(seed, guided, fiveYear, scenario) }
         session = handle
+        began(opened)
         selectedFirm = withContext(engine) {
             if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
             handle.overview().primaryFirm
@@ -258,9 +288,11 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     /** Open a save from the load screen. */
     fun loadSave(file: File) = perform {
+        val opened = Saves.infoOf(file)
         val bytes = withContext(engine) { file.readBytes() }
         val handle = withContext(engine) { importSave(bytes) }
         session = handle
+        began(opened)
         selectedFirm = withContext(engine) {
             if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
             handle.overview().primaryFirm
@@ -271,9 +303,11 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
 
     fun continueCareer() = perform {
         val latest = Saves.list(saveDir).firstOrNull()?.file ?: autosave
+        val opened = Saves.infoOf(latest)
         val bytes = withContext(engine) { latest.readBytes() }
         val handle = withContext(engine) { importSave(bytes) }
         session = handle
+        began(opened)
         selectedFirm = withContext(engine) {
             if (preferredCurrency.isNotEmpty()) handle.setReportingCurrency(preferredCurrency)
             handle.overview().primaryFirm
@@ -671,6 +705,13 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         status = "Saved."
     }
 
+    /** Save under a name the player chose; later saves of this career keep the name. */
+    fun saveAs(name: String) = perform {
+        saveName = name.trim().take(60)
+        save(manual = true)
+        status = "Saved as ${saveName.ifEmpty { "a new save" }}."
+    }
+
     /**
      * Export on the engine thread, then write on the save thread. An autosave does not wait for
      * the disk, so time keeps running; a manual save and leaving the career wait for it.
@@ -679,13 +720,24 @@ class GameStore(private val saveDir: File, private val scope: CoroutineScope) {
         val handle = session ?: return
         val now = overview
         val bytes = withContext(engine) { handle.exportSave() }
+        val standing = withContext(engine) { runCatching { handle.careerStanding() }.getOrNull() }
+        val scenario = withContext(engine) { runCatching { handle.scenarioId() }.getOrDefault("") }
         val info = SaveInfo(
             company = now?.primaryName.orEmpty(),
             week = now?.weekLabel.orEmpty(),
             tick = now?.tick?.toInt() ?: 0,
             savedAt = System.currentTimeMillis(),
             autosave = !manual,
+            name = saveName,
+            scenario = scenarioName(scenario),
+            netWorthCents = now?.investorNetWorthCents ?: 0L,
+            currency = now?.reportingCurrency.orEmpty(),
+            ambition = standing?.ambition.orEmpty(),
+            medal = standing?.medal.orEmpty(),
+            playSeconds = playSeconds,
+            version = BuildInfo.VERSION,
         )
+        lastSavedAt = info.savedAt
         val write = {
             Saves.write(saveDir, if (manual) "save-${System.currentTimeMillis()}" else "autosave", bytes, info)
             if (manual) Saves.prune(saveDir)
