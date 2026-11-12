@@ -101,30 +101,30 @@ pub fn room_lots(world: &World, dataset: &Dataset, product: u16, region: u8) -> 
         .map(|g| g.smoothed_import_lots)
         .sum();
     let unmet = if dataset.capacity.local_room && household_good(dataset, product) {
-        unmet_in(world, product, &regions).0
+        unmet_in(world, product, regions).0
     } else {
         0
     };
     // Plants that buy the service and went without are room too, over the area a plant here
     // would supply (a power plant feeds its whole grid).
     let supplied = crate::economy::markets::supply_regions(dataset, region, product);
-    let business = crate::economy::pricing::business_unmet_in(world, dataset, product, &supplied).0;
+    let business = crate::economy::pricing::business_unmet_in(world, dataset, product, supplied).0;
     let coming = if business > 0 {
-        coming_lots(world, dataset, product, Some(&supplied)).max(coming_lots(
+        coming_lots(world, dataset, product, Some(supplied)).max(coming_lots(
             world,
             dataset,
             product,
-            Some(&regions),
+            Some(regions),
         ))
     } else {
-        coming_lots(world, dataset, product, Some(&regions))
+        coming_lots(world, dataset, product, Some(regions))
     };
     // Capacity the sellers already there left idle answers the same buyers first: households
     // that went without beside idle sellers went without for their budget, not for want of a
     // plant, and are no room for a new one.
     let spare = if unmet + business > 0 {
         let area: &[u8] = if business > 0 { supplied } else { regions };
-        idle_lots(world, dataset, product, &area)
+        idle_lots(world, dataset, product, area)
     } else {
         0
     };
@@ -341,7 +341,7 @@ pub fn input_rooms(world: &World, dataset: &Dataset) -> InputRooms {
             let Some(totals) = &totals[*product as usize] else {
                 continue;
             };
-            let (unmet, need) = totals.unmet_in(&supplied);
+            let (unmet, need) = totals.unmet_in(supplied);
             if need > 0 && unmet > 0 {
                 row[*product as usize] = ((need - unmet).max(0) * 10_000 / need).clamp(0, 10_000);
             }
@@ -698,7 +698,7 @@ pub fn opening_with(
     let (unmet, wanted) = if traded {
         (0, 0)
     } else {
-        unmet_in(world, product, &served(dataset, product, region))
+        unmet_in(world, product, served(dataset, product, region))
     };
     let price = if traded {
         import_netback(world, dataset, product, region)
