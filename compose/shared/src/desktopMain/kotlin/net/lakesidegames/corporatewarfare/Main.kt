@@ -219,9 +219,14 @@ private fun game() = application {
             val pixels = window.width * (scale?.scaleX ?: 1.0) * window.height * (scale?.scaleY ?: 1.0)
             settings.suggestGraphics(pixels.toLong(), RenderInfo.software)
         }
+        // Started from the Lakeside launcher: the launcher owns updates, so the built-in updater is off.
+        val launcher = LauncherSession.current
         val updater = remember {
-            Updater(DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel })
+            if (launcher.managed) null
+            else Updater(DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel })
         }
+        // The handoff is redeemed off the main thread; the menu never waits for it and a failure shows nothing.
+        LaunchedEffect(Unit) { withContext(Dispatchers.IO) { launcher.redeemOnce() } }
         CorporateWarfareApp(store, settings, updater, onQuit = ::exitApplication, saveFolder = saveDirectory().path)
     }
 }

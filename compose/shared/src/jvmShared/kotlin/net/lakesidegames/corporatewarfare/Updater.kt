@@ -14,6 +14,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
 /** What each platform does with a new release: download and run its installer, or open a page. */
 interface UpdatePlatform {
@@ -43,9 +44,15 @@ data class Release(
     val installer: Asset?,
     val date: String = "",
     val prerelease: Boolean = false,
+    /** False when the release has no files at all: its installers are delivered elsewhere (the Lakeside launcher or a store). */
+    val hasFiles: Boolean = true,
 )
 
-data class Asset(val name: String, val url: String, val bytes: Long)
+/**
+ * A release file. [sha256] is the lowercase hex SHA-256 GitHub publishes for it, or null when the
+ * release predates published digests or lists another algorithm.
+ */
+data class Asset(val name: String, val url: String, val bytes: Long, val sha256: String? = null)
 
 @Serializable
 private data class GitHubRelease(
@@ -59,7 +66,13 @@ private data class GitHubRelease(
 )
 
 @Serializable
-private data class GitHubAsset(val name: String, @SerialName("browser_download_url") val url: String, val size: Long = 0)
+private data class GitHubAsset(
+    val name: String,
+    @SerialName("browser_download_url") val url: String,
+    val size: Long = 0,
+    /** "sha256:<hex>" on assets GitHub has hashed; null or empty on older ones. */
+    val digest: String? = null,
+)
 
 sealed interface UpdateStatus {
     data object Idle : UpdateStatus
@@ -77,6 +90,9 @@ sealed interface UpdateStatus {
     data class NeedsUninstall(val release: Release) : UpdateStatus
     data class Downloading(val release: Release, val fraction: Float) : UpdateStatus
     data class Failed(val reason: String) : UpdateStatus
+
+    /** This release has no installer to fetch here: it is delivered through the Lakeside launcher or a store. */
+    data class NoInstaller(val release: Release) : UpdateStatus
 }
 
 /** The version picker's list, loaded only when the player opens it. */
@@ -174,6 +190,8 @@ class Updater(
             }
             when {
                 !copied -> status = UpdateStatus.Failed("Could not copy your saves, so nothing was installed.")
+                !confirm.release.hasFiles || (platform.installerSuffix != null && confirm.release.installer == null) ->
+                    status = UpdateStatus.NoInstaller(confirm.release)
                 confirm.release.installer == null || platform.installerSuffix == null -> {
                     platform.open(confirm.release.page)
                     status = if (backup != null) UpdateStatus.BackedUp(confirm.release, backup) else UpdateStatus.Idle
@@ -190,6 +208,10 @@ class Updater(
     /** Download and run the installer, or open the release page where the platform cannot. */
     fun update(release: Release) {
         val installer = release.installer
+        if (!release.hasFiles || (platform.installerSuffix != null && installer == null)) {
+            status = UpdateStatus.NoInstaller(release)
+            return
+        }
         if (installer == null || platform.installerSuffix == null) {
             platform.open(release.page)
             return
@@ -197,10 +219,18 @@ class Updater(
         status = UpdateStatus.Downloading(release, 0f)
         scope.launch {
             val file = withContext(Dispatchers.IO) {
-                runCatching { download(installer) { status = UpdateStatus.Downloading(release, it) } }.getOrNull()
+                try {
+                    download(installer) { status = UpdateStatus.Downloading(release, it) }
+                } catch (e: ChecksumMismatch) {
+                    MISMATCH
+                } catch (e: Exception) {
+                    null
+                }
             }
             if (file == null) {
                 status = UpdateStatus.Failed("The download did not finish. Try again, or get it from the release page.")
+            } else if (file === MISMATCH) {
+                status = UpdateStatus.Failed("The download did not match the checksum published for it, so it was thrown away and nothing was installed.")
             } else {
                 platform.install(file, release.version)
             }
@@ -239,6 +269,7 @@ class Updater(
         }
         try {
             val total = connection.contentLengthLong.takeIf { it > 0 } ?: asset.bytes
+            val hash = MessageDigest.getInstance("SHA-256")
             connection.inputStream.use { input ->
                 partial.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
@@ -247,12 +278,21 @@ class Updater(
                         val read = input.read(buffer)
                         if (read < 0) break
                         output.write(buffer, 0, read)
+                        hash.update(buffer, 0, read)
                         done += read
                         if (total > 0) progress((done.toFloat() / total).coerceIn(0f, 1f))
                     }
                 }
             }
-            if (asset.bytes > 0 && partial.length() != asset.bytes) error("short download")
+            if (asset.bytes > 0 && partial.length() != asset.bytes) {
+                partial.delete()
+                error("short download")
+            }
+            // A published digest must match. With none published (older releases) the byte count is all there is.
+            if (asset.sha256 != null && !asset.sha256.equals(hash.digest().toHex(), ignoreCase = true)) {
+                partial.delete()
+                throw ChecksumMismatch()
+            }
             target.delete()
             partial.renameTo(target)
             return target
@@ -261,7 +301,18 @@ class Updater(
         }
     }
 
+    private class ChecksumMismatch : Exception()
+
     companion object {
+        /** Stands for "the download failed its checksum" between the IO thread and the status update. */
+        private val MISMATCH = File("checksum-mismatch")
+
+        private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+        /** The SHA-256 in a GitHub "sha256:<64 hex>" digest, lowercased; null for anything else. */
+        internal fun sha256Of(digest: String?): String? =
+            digest?.trim()?.removePrefix("sha256:")?.takeIf { digest.trim().startsWith("sha256:") && it.matches(Regex("[0-9a-fA-F]{64}")) }?.lowercase()
+
         const val LIST = "https://api.github.com/repos/lakesidegamedev/corporate-warfare/releases?per_page=100"
 
         /** The Play Store's installer package. */
@@ -292,9 +343,10 @@ class Updater(
                         version = release.tag.removePrefix("v"),
                         notes = release.body.orEmpty(),
                         page = release.page,
-                        installer = asset?.let { Asset(it.name, it.url, it.size) },
+                        installer = asset?.let { Asset(it.name, it.url, it.size, sha256Of(it.digest)) },
                         date = release.published.orEmpty().take(10),
                         prerelease = release.prerelease,
+                        hasFiles = release.assets.isNotEmpty(),
                     )
                 }
 

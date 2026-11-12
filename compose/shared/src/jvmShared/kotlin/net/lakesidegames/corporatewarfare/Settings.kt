@@ -539,6 +539,9 @@ private fun settingRows(store: GameStore, settings: AppSettings, desktop: Boolea
     if (updater != null) rows += SettingRow(SettingsSection.Updates, "Updates", "", "version release preview channel check install", below = true) {
         UpdatesSection(settings, updater)
     }
+    else if (LauncherSession.current.managed) rows += SettingRow(
+        SettingsSection.Updates, "Updates", LauncherSession.current.updatesNote(), "version release launcher lakeside update",
+    )
 
     val info = remember { uniffi.cw_ffi.engineInfo() }
     rows += SettingRow(SettingsSection.About, "Corporate Warfare ${BuildInfo.VERSION}", "Engine ${info.version}." + if (BuildInfo.CHANNEL == "preview") " Tester preview." else "", "version")
@@ -706,6 +709,9 @@ fun UpdatePanel(updater: Updater, compact: Boolean = false) {
                     GoldButton(label) { updater.choose(status.release) }
                     TextButton(onClick = { updater.openPage(status.release) }) { Text("What's new", color = Palette.secondary) }
                 }
+                if (status.release.installer != null && status.release.installer.sha256 == null) {
+                    Text("This release publishes no checksum, so only the file size is checked before installing.", color = Palette.secondary, fontSize = 11.sp)
+                }
             }
             is UpdateStatus.ConfirmDowngrade -> {
                 Text("Go back to ${status.release.version}?", color = Palette.warning, fontWeight = FontWeight.SemiBold)
@@ -741,6 +747,13 @@ fun UpdatePanel(updater: Updater, compact: Boolean = false) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { updater.openPage(status.release) }) { Text("Open its page", color = Palette.secondary) }
                     TextButton(onClick = { updater.cancel() }) { Text("Cancel", color = Palette.gold) }
+                }
+            }
+            is UpdateStatus.NoInstaller -> {
+                Text("Version ${status.release.version} is delivered through the Lakeside launcher or your store, not as a download here.", color = Palette.primaryText, fontSize = 12.sp)
+                Row {
+                    TextButton(onClick = { updater.openPage(status.release) }) { Text("What's new", color = Palette.secondary) }
+                    TextButton(onClick = { updater.cancel() }) { Text("Done", color = Palette.gold) }
                 }
             }
             is UpdateStatus.Downloading -> {

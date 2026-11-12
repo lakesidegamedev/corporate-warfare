@@ -148,23 +148,16 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
             AccountEntry()
             if (onQuit != null) MenuButton("Quit", onClick = onQuit)
             Spacer(Modifier.height(4.dp))
+            if (updater == null && LauncherSession.current.managed) Text(
+                "The Lakeside launcher keeps this copy up to date.",
+                color = Palette.secondary, fontSize = 11.sp,
+            )
             if (updater == null) Text(
                 "Version ${BuildInfo.VERSION}" + if (BuildInfo.CHANNEL == "preview") ", tester preview" else "",
                 color = Palette.secondary, fontSize = 11.sp,
             )
         }
     }
-}
-
-/** The account entry of the main menu and Settings. Accounts come in a later release; until then it draws nothing. */
-@Composable
-internal fun AccountEntry() {
-    if (!Account.available) return
-}
-
-/** Whether a Lakeside account can be used in this build. Off until the account release. */
-internal object Account {
-    const val available = false
 }
 
 private fun updateDetail(updater: Updater): String = when (val s = updater.status) {
