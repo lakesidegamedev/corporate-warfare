@@ -267,7 +267,11 @@ fn main() {
                 Style::default()
             }
         };
-        let (rw, rh) = if clean { (2400, 1500) } else { (1200, 750) };
+        let (rw, rh) = if std::env::var("CW_BIG").is_ok() {
+            (2400, 1500)
+        } else {
+            (1200, 750)
+        };
         let f = renderer.render_to_rgba(scene, &cam, &style, rw, rh);
         let rgb: Vec<u8> = f
             .rgba
