@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -90,9 +91,17 @@ enum class Place(val title: String, val group: String, val key: String, val conv
     Hall("Hall of Careers", "You", "F9", true),
 }
 
-/** Switch the 2.0 shell on for a session: CW_UI=2.0 in the environment or -Dcw.ui=2.0. */
+/**
+ * The 2.0 layout is the desktop default. A player can switch to the classic layout in Settings; CW_UI=1.0 in the
+ * environment or -Dcw.ui=1.0 forces the classic layout for a session, and CW_UI=2.0 forces the new one.
+ */
 object NewShell {
-    val enabled: Boolean by lazy { System.getenv("CW_UI") == "2.0" || System.getProperty("cw.ui") == "2.0" }
+    private val forced: Boolean? by lazy {
+        val v = System.getenv("CW_UI") ?: System.getProperty("cw.ui")
+        when (v) { "2.0" -> true; "1.0" -> false; else -> null }
+    }
+
+    fun enabled(settings: AppSettings?): Boolean = forced ?: !(settings?.classicLayout ?: false)
 }
 
 /**
@@ -115,7 +124,23 @@ fun TycoonShell(store: GameStore, onSettings: () -> Unit, onMenu: () -> Unit = {
     var allActions by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    fun open(p: Place) { place = p; palette = false; action = null }
+    fun open(p: Place) { place = p; palette = false; action = null; Tutorial.visited(tutorialPage(p)) }
+    fun openPalette() { palette = true; Tutorial.visited("actions") }
+    DisposableEffect(Unit) { Tutorial.newLayout = true; onDispose { Tutorial.newLayout = false } }
+    LaunchedEffect(place) { Tutorial.visited(tutorialPage(place)) }
+    // "Show me" in the tutorial opens the place its step needs.
+    LaunchedEffect(Tutorial.requestedPage) {
+        val wanted = Tutorial.requestedPage ?: return@LaunchedEffect
+        when (wanted) {
+            "office" -> open(Place.Overview)
+            "research" -> open(Place.Research)
+            "markets" -> open(Place.Economy)
+            "map" -> open(Place.Regions)
+            "stats" -> open(Place.Finance)
+            "actions" -> openPalette()
+        }
+        Tutorial.requestedPage = null
+    }
     fun openRival(firm: ULong) { leaguePick = firm; open(Place.League) }
     fun openGood(product: UInt) { goodsPick = product; open(Place.Goods) }
     fun closePalette() { palette = false; action = null; allActions = false }
@@ -126,7 +151,7 @@ fun TycoonShell(store: GameStore, onSettings: () -> Unit, onMenu: () -> Unit = {
                 Keys.ctrl = e.isCtrlPressed
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when {
-                    e.isCtrlPressed && e.key == Key.K -> { if (palette) closePalette() else palette = true; true }
+                    e.isCtrlPressed && e.key == Key.K -> { if (palette) closePalette() else openPalette(); true }
                     e.isCtrlPressed && e.key == Key.M -> { docked = !docked; true }
                     e.key == Key.Escape && palette -> { closePalette(); true }
                     else -> Place.entries.firstOrNull { it.key.isNotEmpty() && keyName(e.key) == it.key }?.let { open(it); true } ?: false
@@ -135,7 +160,7 @@ fun TycoonShell(store: GameStore, onSettings: () -> Unit, onMenu: () -> Unit = {
     ) {
         DivisionDetailHost(store)
         Column(Modifier.fillMaxSize()) {
-            TopStrip(store, onOpen = ::open, onPalette = { palette = true })
+            TopStrip(store, onOpen = ::open, onPalette = { openPalette() })
             Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
             Row(Modifier.fillMaxWidth().weight(1f)) {
                 PlaceNav(place, store.inboxBadge, ::open, onSettings, onMenu, docked) { docked = !docked }
@@ -161,6 +186,7 @@ fun TycoonShell(store: GameStore, onSettings: () -> Unit, onMenu: () -> Unit = {
                 AlertRail(store, Modifier.width(if (GridPrefs.railFolded) 38.dp else 250.dp).fillMaxHeight(), ::open, ::openRival, ::openGood)
             }
         }
+        TutorialPanel(compact = false, modifier = Modifier.align(Alignment.BottomEnd).padding(end = if (GridPrefs.railFolded) 54.dp else 266.dp, bottom = 16.dp).width(360.dp), researchHint = store.research?.let { r -> store.selectedFirmDto?.let { Tutorial.researchHint(it.cashCents, r) } })
         if (palette || GridDemo.find != null) {
             Box(Modifier.fillMaxSize().background(Palette.ink.copy(alpha = 0.7f)).clickable { closePalette() }, contentAlignment = Alignment.TopCenter) {
                 Box(Modifier.padding(top = 60.dp).width(900.dp).height(640.dp).border(2.dp, Palette.gold).background(Palette.panel).clickable(enabled = false) {}) {
@@ -178,6 +204,16 @@ fun TycoonShell(store: GameStore, onSettings: () -> Unit, onMenu: () -> Unit = {
             }
         }
     }
+}
+
+/** The tutorial's page id (the 1.x name its steps are written against) for a place of the 2.0 layout. */
+private fun tutorialPage(p: Place): String = when (p) {
+    Place.Overview, Place.Office -> "office"
+    Place.Research -> "research"
+    Place.Economy, Place.Goods, Place.Exchange -> "markets"
+    Place.Regions, Place.Map -> "map"
+    Place.Finance -> "stats"
+    else -> p.name.lowercase()
 }
 
 private fun keyName(k: Key): String = when (k) {

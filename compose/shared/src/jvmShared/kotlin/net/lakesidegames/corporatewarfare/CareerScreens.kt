@@ -119,7 +119,7 @@ fun CareerScreen(store: GameStore) {
                 standing?.ambition?.let { Triple("Ambition", ambitionWords(it), Palette.gold) },
                 standing?.let { Triple("Medal", medalWords(it.medal), medalTint(it.medal)) },
                 standing?.takeIf { it.league > 0u }?.let { Triple("Rank", "#${it.rank} of ${it.league}", Palette.primaryText) },
-                standing?.let { Triple("Growth", changeText(it.growthBps), changeTint(it.growthBps)) },
+                standing?.let { Triple("Net worth vs start", growthWords(it.growthBps), changeTint(it.growthBps - 10_000)) },
                 standing?.takeIf { it.weeksLeft > 0u && !it.ended }?.let { Triple("Weeks left", "${it.weeksLeft}", Palette.primaryText) },
                 score?.let { Triple("Five-year score", it.total.toString(), Palette.gold) },
                 score?.let { Triple("Return", it.returnComponent.toString(), Palette.primaryText) },
@@ -155,7 +155,8 @@ fun CareerScreen(store: GameStore) {
                     if (standing.ended && summary != null) {
                         Text(summary.ending.replace('_', ' ').replaceFirstChar { it.uppercase() }, color = if (summary.lost) Palette.negative else Palette.gold, fontFamily = Pixel.font, fontSize = 14.sp)
                         if (summary.sentence.isNotEmpty()) Text(summary.sentence, color = Palette.primaryText, fontSize = 12.sp, lineHeight = 16.sp)
-                        Text("Net worth ${Format.compact(summary.startWorthCents)} to ${Format.compact(summary.netWorthCents)}, ${changeText(summary.growthBps)}. Medal: ${medalWords(summary.medal)}.", color = Palette.primaryText, fontSize = 12.sp)
+                        Text("Net worth ${Format.compact(summary.startWorthCents)} to ${Format.compact(summary.netWorthCents)}, ${growthWords(summary.growthBps)} the start. Medal: ${medalWords(summary.medal)}.", color = Palette.primaryText, fontSize = 12.sp)
+                        GridButton("See the end of career summary", false) { EndOfCareer.requested = true }
                     } else {
                         if (standing.detail.isNotEmpty()) Text(standing.detail, color = Palette.primaryText, fontSize = 12.sp, lineHeight = 16.sp)
                         if (standing.next.isNotEmpty()) Text("Next medal: ${standing.next}", color = Palette.gold, fontSize = 12.sp, lineHeight = 16.sp)
@@ -229,6 +230,11 @@ fun HallGridScreen(store: GameStore, settings: AppSettings? = LocalAppSettings.c
             Triple("Achievements", "${hall?.achievementsEarned ?: 0} of ${hall?.achievements?.size ?: 0}", Palette.gold),
             Triple("Earlier careers", "${earlier.size}", Palette.primaryText),
         )
+        val ended = rememberEngine(store, store.overview?.tick) { h -> h.careerStanding()?.ended == true } == true
+        if (ended) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("This career has ended.", color = Palette.primaryText, fontSize = 12.sp)
+            GridButton("See the end of career summary", false) { EndOfCareer.requested = true }
+        }
         SplitOrStack(Modifier.fillMaxWidth().weight(1f), 1.4f, 1f, 560.dp, 300.dp, left = { m ->
             DataGrid(
                 "Achievements", hall?.achievements.orEmpty(), achievementColumns(), key = { it.id },
@@ -249,7 +255,7 @@ fun HallGridScreen(store: GameStore, settings: AppSettings? = LocalAppSettings.c
     }
 }
 
-private fun ambitionWords(key: String) = when (key) {
+internal fun ambitionWords(key: String) = when (key) {
     "richest" -> "Richest"
     "biggest" -> "Biggest"
     "dominant" -> "Dominant"
@@ -257,15 +263,18 @@ private fun ambitionWords(key: String) = when (key) {
     else -> key.replaceFirstChar { it.uppercase() }
 }
 
-private fun medalWords(key: String) = when (key) { "bronze" -> "Bronze"; "silver" -> "Silver"; "gold" -> "Gold"; else -> "None yet" }
+internal fun medalWords(key: String) = when (key) { "bronze" -> "Bronze"; "silver" -> "Silver"; "gold" -> "Gold"; else -> "None yet" }
 
-private fun medalTint(key: String) = if (key == "none") Palette.secondary else Palette.gold
+/** Net worth over the starting fortune in basis points (10000 is no growth) as "2.3 times". */
+internal fun growthWords(bps: Long) = "%.1f times".format(bps / 10_000.0)
+
+internal fun medalTint(key: String) = if (key == "none") Palette.secondary else Palette.gold
 
 internal val YearViews = listOf(
     ViewState("Years", cols("year", "rank", "value", "worth", "wealth", "medal"), sort = "year", descending = false),
 )
 
-private fun yearColumns(): List<GridColumn<CareerYearDto>> = listOf(
+internal fun yearColumns(): List<GridColumn<CareerYearDto>> = listOf(
     GridColumn("year", "Year", null, numeric = false, text = { "Year ${it.year}" }, sort = { it.year.toLong() }, minWidth = 80.dp, bold = true, topic = "About"),
     GridColumn("rank", "Company rank", 100.dp, text = { "#${it.rank} of ${it.league}" }, sort = { it.rank.toLong() }, topic = "Company"),
     GridColumn("value", "Company value", 100.dp, text = { Format.compact(it.companyValueCents) }, sort = { it.companyValueCents }, scale = 100.0, topic = "Company"),

@@ -84,14 +84,14 @@ object ProposalCareer {
         return store to settings
     }
 
-    private fun waitReady(store: GameStore) {
+    internal fun waitReady(store: GameStore) {
         val deadline = System.currentTimeMillis() + 60_000
         while (!store.ready && System.currentTimeMillis() < deadline) Thread.sleep(100)
         check(store.ready) { "the proposal career did not start" }
     }
 
     /** Render [content] at [width] x [height] logical pixels and keep it as [name].png in CW_MAP_RENDER_DIR. */
-    fun shoot(name: String, width: Int, height: Int, settings: AppSettings, density: Float = 1f, content: @Composable () -> Unit) {
+    fun shoot(name: String, width: Int, height: Int, settings: AppSettings, density: Float = 1f, settleMs: Long = 0L, content: @Composable () -> Unit) {
         val out = System.getenv("CW_MAP_RENDER_DIR")?.let(::File)?.also { it.mkdirs() }
         val scene = ImageComposeScene((width * density).toInt(), (height * density).toInt(), Density(density)) {
             CorporateWarfareTheme {
@@ -104,7 +104,7 @@ object ProposalCareer {
         scene.render(0L)
         Thread.sleep(1200)
         scene.render(1_000_000_000L)
-        Thread.sleep(600)
+        Thread.sleep(600 + settleMs)
         scene.render(2_000_000_000L)
         val image = scene.render(3_000_000_000L)
         // Count what is drawn from the semantics tree, before the scene is closed.

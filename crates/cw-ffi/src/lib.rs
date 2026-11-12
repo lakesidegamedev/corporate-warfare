@@ -2521,6 +2521,23 @@ pub fn helm_offers(options: NewGameDto) -> Result<Vec<career::HelmOfferDto>, Ffi
         .collect())
 }
 
+/// The four ambitions, with their bronze, silver and gold in plain words for a start ("founder"
+/// or "helm") and a length in years (0 takes the default), read from the content table (2.0).
+#[uniffi::export]
+pub fn ambition_guide(start: String, years: u32) -> Vec<career::AmbitionGuideDto> {
+    career::ambition_guide(&start, years)
+}
+
+/// The career lengths the content offers, and the default (2.0).
+#[uniffi::export]
+pub fn career_lengths() -> career::CareerLengthsDto {
+    let (years, default_years) = career::career_lengths();
+    career::CareerLengthsDto {
+        years,
+        default_years,
+    }
+}
+
 /// Everything the new-game screen chooses.
 #[derive(uniffi::Record)]
 pub struct NewGameDto {
