@@ -32,11 +32,20 @@ Full description:
 > - Trade on the exchange: stocks with a market index, commodities with their own price history.
 > - Fight rivals who undercut, invade and raid, or take them over.
 > - Ride the business cycle through booms, busts and historical commodity shocks.
-> - Play a five-year scored career, or keep going as long as you like.
+> - Play a career for a bronze, silver or gold medal over five, ten or twenty years (richest,
+>   biggest, dominant or survivor), or keep going as a sandbox as long as you like.
 >
 > No account, no ads, no in-app purchases. The game plays fully offline. An anonymous market
 > summary is shared every five game weeks to balance the economy, and can be switched off in
 > Settings.
+
+## What's new in 2.0 (draft; Play allows 500 characters, this one is under 450)
+
+> Careers: take the helm of an established company or found your own, pick a goal and play for
+> bronze, silver or gold. Rivals now build, close plants and compete for room to grow. Raids come
+> with four weeks' warning so you can defend. A failed company's plants go to auction and you can
+> bid. World prices have weather. A livelier map with smoke, traffic and night lights. Saves from
+> earlier versions still open.
 
 ## Store settings (candidates)
 

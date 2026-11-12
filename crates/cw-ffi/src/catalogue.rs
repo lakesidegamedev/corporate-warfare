@@ -337,7 +337,7 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             "DisposeFacility",
             "Operations",
             "Sell off a site",
-            "Dispose of a site for its salvage value.",
+            "Sell a site to the rival that bids most; the buyer pays cash and takes it over with its staff. With no bid the site is written off for nothing. To see every bid before you choose, list the site for sale instead.",
             "sell scrap divest close",
             vec![f("facility", "Site", "my_facility")],
         ),
@@ -595,7 +595,7 @@ pub fn action_catalogue() -> Vec<ActionDto> {
             "RaidMarket",
             "Sales",
             "Raid a rival's market",
-            "Spend on a campaign against a rival division in a region and sector you both operate in, to take some of its plants.",
+            "Announce a campaign against a rival division in a region and sector you both operate in, to take some of its plants. The budget is committed now and spent whatever happens; the raid is decided four weeks later against the defence the rival has then.",
             "attack steal share campaign",
             vec![
                 firm(),

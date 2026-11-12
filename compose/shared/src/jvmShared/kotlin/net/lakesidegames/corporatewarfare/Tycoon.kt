@@ -135,8 +135,10 @@ fun TycoonShell(store: GameStore, onSettings: () -> Unit, onMenu: () -> Unit = {
             "office" -> open(Place.Overview)
             "research" -> open(Place.Research)
             "markets" -> open(Place.Economy)
-            "map" -> open(Place.Regions)
+            "map" -> open(Place.Openings)
             "stats" -> open(Place.Finance)
+            "career" -> open(Place.Career)
+            "raids" -> open(Place.Raids)
             "actions" -> openPalette()
         }
         Tutorial.requestedPage = null
