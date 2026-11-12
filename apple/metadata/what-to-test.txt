@@ -11,3 +11,10 @@ Please test the offline acceptance route on a real iPhone:
 6. Reach the week-260 score, then continue in sandbox.
 7. Report crashes, confusing copy, unreadable text at large Dynamic Type, and anything that
    looks like placeholder content.
+
+For 2.0, also try:
+8. Start a career: take the helm of one of the offered companies, pick an ambition and a length,
+   and confirm the board letter and the quarterly standing line read sensibly.
+9. Wait for a rival to announce a raid (the alert names the raider and says what extra marketing
+   buys), raise marketing, and confirm the raid is decided four weeks later.
+10. Open a save made by an earlier version and confirm it plays on with no career forced on it.

@@ -76,10 +76,9 @@ sessions and fixtures exist. Require a single aggregate verification job once th
 required platform checks are reliable. Protect default branch where account plan allows;
 record unavailable enforcement honestly, never claim protection from a failed API call.
 
-Full tests/builds on this shared VPS normally use `/root/bin/lakeside-check-queue`.
-Queue once, inspect terminal success/failure/cancellation/timeouts, and retain output.
-Use targeted checks while iterating. Do not install services, fetch live game databases
-or run a full check concurrently outside the scheduler.
+Full tests and builds are heavy: run one at a time, inspect terminal success, failure,
+cancellation and timeouts, and retain output. Use targeted checks while iterating. Do not
+install services or fetch live game databases.
 
 ## Evidence record
 

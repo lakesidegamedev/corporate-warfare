@@ -28,7 +28,8 @@ A command batch runs at the next opening boundary, not at arbitrary UI wall-cloc
 4. Dispatch utility generators from opening fuel stock, then allocate current-week
    electricity/water services to all industrial consumers simultaneously using the spot
    allocator and reserved budgets. Utilities are an explicit pre-production service
-   stage; they do not require their own current-week electrical output as an input.
+   stage; they do not require their own current-week electrical output as an input. Power is
+   pooled over a grid, not a region (POWER.md).
    Unserved consumers reduce planned output before consuming other inputs. Then produce
    from opening usable physical input stock plus allocated utility service, after staffing constraints. Newly produced
    output can sell this week. Goods purchased this week are never usable for production
@@ -331,17 +332,18 @@ business cycle runs. Both of a gateway's prices are scaled by the ratio of this 
 last week's, the same way inflation scales them, so the +/-15 percent spread and the finite
 capacity are unchanged. An index never leaves 20 to 800 percent of its day-one level.
 
-The new-game screen offers three modes; the scenario sets the default (Great Lakes 2000 is
-historical, Texas 1981 is historical with variance). A custom scenario carries its own choice.
+The new-game screen offers three modes. Since 2.0 historical with variance is the default for
+every scenario and for custom games; a custom scenario carries its own choice.
 
 - Historical: the scenario's anchor points, `[quarter, index]` with 100 meaning day one, linearly
   interpolated by week (13 weeks to a quarter) and held flat after the last anchor. The same
   every game.
 - Historical with variance: the same anchors with the whole path shifted in time by a shared
   offset of up to 20 weeks plus up to 10 weeks per family, each swing's depth scaled to 60 to
-  140 percent of history, and an autocorrelated weekly noise of about one percent, all drawn
-  from the game's seed on a stream of its own (per family, so adding a family does not change
-  another's draws). The path is rescaled so day one is exactly 10,000.
+  140 percent of history, all drawn from the game's seed on a stream of its own (per family, so
+  adding a family does not change another's draws). The path is rescaled so day one is exactly
+  10,000. Since 2.0 the weekly noise of earlier versions is gone: the week to week movement is
+  the texture of [WORLD-PRICES.md](WORLD-PRICES.md), a slow weather around the path.
 - Random: a neutral mean-reverting walk, `x += (10,000 - x) / 32 + shock`, shock uniform to
   plus or minus 2.5 to 4.5 percent per family, held between 50 and 200 percent. No drift and no
   scripted busts; busts come from the business cycle.
