@@ -11,6 +11,8 @@ heading.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-13
+
 ### Fixed
 - The 3D map is now the one map everywhere it can draw. The map docked beside a page, the Freight mode (its lanes now sit on the 3D ground) and every zoom down to the globe all use it, and the hand-over to the globe happens at one zoom with no frame of both or of neither. The classic map remains only for the globe and for computers with no usable graphics card.
 - No more black while moving the map. The 3D map takes over only once it has a finished picture for the view, it keeps a picture ready while you zoom toward it, and the globe redraws whole when it takes back over. Trees and city buildings for the next zoom step are built ahead, and the last complete set stands in while a new one finishes, so the view never shows gaps.
@@ -1998,7 +2000,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.9.0...v2.0.0
 [1.9.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.7.0...v1.7.1
