@@ -163,6 +163,7 @@ internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> 
                 color = Palette.secondary, fontSize = 11.sp,
             )
         }
+        if (newsOpen) BackAction { newsOpen = false }
         if (newsOpen) WhatsNewPanel(BuildInfo.VERSION, news, onClose = { newsOpen = false }, onFull = { newsOpen = false; changelogOpen = true })
     }
 }

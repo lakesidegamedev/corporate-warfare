@@ -20,6 +20,9 @@ heading.
 ### Fixed
 
 - On a phone or tablet, plant models on the 3D map are drawn at the same size in points as on a desktop screen. On a high resolution screen they came out too small to read.
+- The round launcher icon now uses the same adaptive layers as the square one, so Android 8 and later no longer draws it in a white circle, and themed icons on Android 13 and later work for both shapes.
+- Back on Android now works in the places it did not: it steps back through the first-run setup, closes the What's new panel, dismisses the end of career screen (same as Keep playing), and on a tablet opens the game menu instead of leaving the game.
+- The end of career screen no longer sits under the status or navigation bar on Android 15 and later.
 
 ### Changed
 
