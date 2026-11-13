@@ -11,6 +11,10 @@ heading.
 
 ## [Unreleased]
 
+### Fixed
+
+- On Android the game closed the first time it opened one of the new tables (plants, goods, rivals and the others). Row keys are now kept in a form Android can save.
+
 ## [2.0.2] - 2026-11-13
 
 ### Added
