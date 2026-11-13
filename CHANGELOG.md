@@ -11,6 +11,14 @@ heading.
 
 ## [Unreleased]
 
+### Added
+
+- Double-tap the map to zoom in about three times on the spot you tapped, and tap with two fingers to zoom back out. Double-tap a region that is already selected to fly straight to the zoom where plant models are easy to see. A single tap still selects.
+
+### Fixed
+
+- On a phone or tablet, plant models on the 3D map are drawn at the same size in points as on a desktop screen. On a high resolution screen they came out too small to read.
+
 ## [2.0.1] - 2026-11-13
 
 ### Added
