@@ -296,7 +296,8 @@ data class MapCamera(val lon: Double, val lat: Double, val zoom: Double, val bea
 
     companion object {
         const val MIN_ZOOM = 0.8
-        const val MAX_ZOOM = 90.0
+        /** Close enough to see a plant's model: about 6 km across a phone, 10 km across a desktop map. */
+        const val MAX_ZOOM = 2400.0
         const val FLAT_START = 2.4
         const val FLAT_END = 6.0
 

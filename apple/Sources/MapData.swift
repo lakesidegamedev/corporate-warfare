@@ -445,7 +445,8 @@ struct MapCamera: Equatable {
     var bearing: Double = 0
 
     static let minZoom = 0.8
-    static let maxZoom = 90.0
+    /// Close enough on a phone to see a plant's model: about 6 km across a portrait iPhone.
+    static let maxZoom = 2400.0
     /// The globe flattens between these zooms.
     static let flatStart = 2.4
     static let flatEnd = 6.0
