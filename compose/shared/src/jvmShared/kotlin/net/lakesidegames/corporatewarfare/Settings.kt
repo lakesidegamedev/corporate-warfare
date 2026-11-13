@@ -599,6 +599,15 @@ private fun settingRows(store: GameStore, settings: AppSettings, desktop: Boolea
     }
     rows += SettingRow(SettingsSection.Data, "Where your saves are kept", store.saveFolder.path + ". Back this folder up to keep your careers safe. Load can export and import single saves.", "folder backup files")
 
+    val lakesideName = updater?.auth?.name
+    if (updater != null && lakesideName != null) rows += SettingRow(
+        SettingsSection.Data, "Signed in to Lakeside as $lakesideName",
+        "Used only to download updates of Corporate Warfare. Your game works the same without it. Signing out removes it from this computer.",
+        "lakeside account sign out token login",
+    ) {
+        TextButton(onClick = { updater.signOut() }) { Text("Sign out", color = Palette.gold) }
+    }
+
     if (updater != null) rows += SettingRow(SettingsSection.Updates, "Updates", "", "version release preview channel check install", below = true) {
         UpdatesSection(settings, updater)
     }
@@ -766,7 +775,7 @@ fun UpdatePanel(updater: Updater, compact: Boolean = false) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val label = when {
                         Versions.isDowngrade(status.release.version, updater.current) -> "Go back to ${status.release.version}"
-                        status.release.installer != null -> "Update now"
+                        status.release.installer != null || updater.signInUpdates -> "Update now"
                         else -> "Get the update"
                     }
                     GoldButton(label) { updater.choose(status.release) }
@@ -824,6 +833,47 @@ fun UpdatePanel(updater: Updater, compact: Boolean = false) {
                     TextButton(onClick = { updater.openPage(status.release) }) { Text("What's new", color = Palette.secondary) }
                     TextButton(onClick = { updater.cancel() }) { Text("Done", color = Palette.gold) }
                 }
+            }
+            is UpdateStatus.SignInNeeded -> {
+                Text("Sign in to Lakeside to download version ${status.release.version}", color = Palette.gold, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Corporate Warfare is downloaded through your Lakeside account. Your game works the same without signing in.",
+                    color = Palette.secondary, fontSize = 12.sp,
+                )
+                status.freeAccess?.let { Text(it, color = Palette.positive, fontSize = 12.sp) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    GoldButton("Sign in") { updater.signIn(status.release, LakesideAuth.PROVIDER_AHD) }
+                    TextButton(onClick = { updater.signIn(status.release, LakesideAuth.PROVIDER_DISCORD) }) { Text("Continue with Discord", color = Palette.gold) }
+                }
+                Row {
+                    TextButton(onClick = { updater.openStore() }) { Text("Get it", color = Palette.secondary) }
+                    TextButton(onClick = { updater.cancel() }) { Text("Not now", color = Palette.secondary) }
+                }
+            }
+            is UpdateStatus.SigningIn -> {
+                Text("Finish signing in to Lakeside in your browser…", color = Palette.primaryText, fontSize = 12.sp)
+                TextButton(onClick = { updater.cancel() }) { Text("Cancel", color = Palette.gold) }
+            }
+            is UpdateStatus.NotEntitled -> {
+                Text("This account does not include Corporate Warfare", color = Palette.warning, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    GoldButton("Buy") { updater.openStore() }
+                    TextButton(onClick = { updater.signOut(); updater.update(status.release) }) { Text("Sign in with another account", color = Palette.secondary) }
+                    TextButton(onClick = { updater.cancel() }) { Text("Done", color = Palette.secondary) }
+                }
+            }
+            is UpdateStatus.Unavailable -> {
+                Text(status.reason, color = Palette.warning, fontSize = 12.sp)
+                Row {
+                    TextButton(onClick = { updater.update(status.release) }) { Text("Try again", color = Palette.gold) }
+                    TextButton(onClick = { updater.openStore() }) { Text("Get it", color = Palette.secondary) }
+                    TextButton(onClick = { updater.cancel() }) { Text("Done", color = Palette.secondary) }
+                }
+            }
+            is UpdateStatus.Saved -> {
+                Text("Version ${status.release.version} is downloaded and checked.", color = Palette.positive, fontSize = 12.sp)
+                Text(status.note, color = Palette.primaryText, fontSize = 12.sp)
+                TextButton(onClick = { updater.cancel() }) { Text("Done", color = Palette.gold) }
             }
             is UpdateStatus.Downloading -> {
                 Text("Downloading ${status.release.version}… ${(status.fraction * 100).toInt()}%", color = Palette.primaryText, fontSize = 12.sp)
