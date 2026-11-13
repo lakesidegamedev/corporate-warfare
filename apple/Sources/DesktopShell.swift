@@ -342,7 +342,16 @@ private struct DesktopStatusBar: View {
 
 /// The CEO Office beside the company's results.
 private struct DesktopOffice: View {
+    /// The office itself, or the plant and statement tables.
+    private enum Mode: String, CaseIterable, Identifiable {
+        case office = "Office"
+        case plants = "Plants"
+        case finance = "Finance"
+        var id: String { rawValue }
+    }
+
     @Environment(AppStore.self) private var store
+    @State private var mode = Mode.office
 
     var body: some View {
         if store.selectedFirmDto == nil && store.controlledFirms.isEmpty {
@@ -353,11 +362,27 @@ private struct DesktopOffice: View {
                     .frame(maxWidth: .infinity)
             }
         } else {
-            HStack(spacing: 0) {
-                CEOOfficeView()
-                Rectangle().fill(Theme.stroke).frame(width: 1)
-                NavigationStack { StatsView() }
-                    .frame(width: 460)
+            VStack(spacing: 0) {
+                HStack {
+                    Spacer()
+                    PixelChoices(options: Mode.allCases.map { ($0, $0.rawValue) }, selection: $mode, label: "View")
+                        .frame(width: 300)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                switch mode {
+                case .office:
+                    HStack(spacing: 0) {
+                        CEOOfficeView()
+                        Rectangle().fill(Theme.stroke).frame(width: 1)
+                        NavigationStack { StatsView() }
+                            .frame(width: 460)
+                    }
+                case .plants:
+                    PlantsGridScreen()
+                case .finance:
+                    FinanceGridScreen()
+                }
             }
         }
     }
@@ -368,7 +393,10 @@ private struct DesktopOffice: View {
 private struct DesktopMarkets: View {
     private enum Mode: String, CaseIterable, Identifiable {
         case exchange = "Exchange"
+        case goods = "Goods"
+        case rivals = "Rivals"
         case regions = "Regions"
+        case boards = "Boards"
         case structure = "Structure"
         var id: String { rawValue }
     }
@@ -388,8 +416,7 @@ private struct DesktopMarkets: View {
                     .foregroundStyle(Theme.secondary)
                 Spacer()
                 PixelChoices(options: Mode.allCases.map { ($0, $0.rawValue) }, selection: $mode, label: "View")
-                    .frame(maxWidth: 260)
-                .frame(width: 330)
+                    .frame(width: 560)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -409,7 +436,13 @@ private struct DesktopMarkets: View {
                         .frame(maxWidth: 900)
                         .frame(maxWidth: .infinity)
                 }
+            case .goods:
+                GoodsGridScreen()
+            case .rivals:
+                LeagueGridScreen()
             case .regions:
+                RegionsGridScreen()
+            case .boards:
                 ScrollView {
                     RegionMarketsSection()
                         .padding(16)
