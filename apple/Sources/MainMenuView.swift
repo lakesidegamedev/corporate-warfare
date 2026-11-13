@@ -546,6 +546,9 @@ struct StartView: View {
                         }
                         MenuButton(title: "Scenario editor") { showingEditor = true }
                         MenuButton(title: "Settings") { showingSettings = true }
+                        #if targetEnvironment(macCatalyst)
+                        if MacUpdater.enabled { MacUpdateBanner() }
+                        #endif
                         if let issue = store.recoveryIssue {
                             RecoveryCard(issue: issue) { export = store.makeDiagnostics() }
                                 .environment(store)
