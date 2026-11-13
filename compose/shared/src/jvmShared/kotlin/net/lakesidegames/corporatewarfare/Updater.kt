@@ -441,7 +441,7 @@ class Updater(
             cacheDir.mkdirs()
             val saved = downloadPaid(token, Asset(file.name, accountBase + file.url, file.size, sha)) { status = UpdateStatus.Downloading(shown, it) }
             // Saves are copied aside first, as for going back a version. The installer never touches them.
-            if (saveDir != null) runCatching { SaveBackup.copy(saveDir, SaveBackup.target(saveDir, current)) }
+            saveDir?.let { dir -> runCatching { SaveBackup.copy(dir, SaveBackup.target(dir, current)) } }
             val note = platform.installPaid(saved, key, version)
             if (note != null) status = UpdateStatus.Saved(shown, note)
         } catch (e: ChecksumMismatch) {
