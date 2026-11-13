@@ -1,6 +1,7 @@
 name: Preview release
 # Builds a tester preview (Windows installer, Linux package, Android debug APK) from a branch and
-# publishes it as a GitHub pre-release tagged v<version>-preview.<n>. Preview builds follow
+# publishes it as a GitHub pre-release tagged v<version>-preview.<n> (notes only; the installers
+# stay workflow artifacts because the game is paid). Preview builds follow
 # pre-releases in their updater, so each preview offers the next one, and the final release.
 on:
   workflow_dispatch:
@@ -145,5 +146,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$TAG" assets/* --prerelease --target "$(git rev-parse HEAD)" \
+          # Corporate Warfare is paid: preview installers stay workflow artifacts (fetched into the
+          # Lakeside signed-in download), never public release assets. The pre-release keeps the
+          # tag and notes, which the iPhone TestFlight build is cut from.
+          (cd assets && sha256sum * > ../SHA256SUMS.txt) && cat SHA256SUMS.txt
+          gh release create "$TAG" --prerelease --target "$(git rev-parse HEAD)" \
             --title "Corporate Warfare ${{ inputs.version }} preview ${{ inputs.preview }}" --notes-file body.md
