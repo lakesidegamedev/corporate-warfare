@@ -40,7 +40,9 @@ final class LaunchWarmupTests: XCTestCase {
         let art = try XCTUnwrap(OfficeRoomArt.file)
         let again = Date.timeIntervalSinceReferenceDate
         XCTAssertNotNil(PixelIcons.bitmap(key: "office|room", rows: art.room.rows, palette: art.room.palette))
-        XCTAssertLessThan(Date.timeIntervalSinceReferenceDate - again, 0.05, "the room bitmap is already cached")
+        // A cached lookup is far under this; the 3D map (on by default) may be building its scene on
+        // another thread at the same time on a slow simulator, so the bound allows for that.
+        XCTAssertLessThan(Date.timeIntervalSinceReferenceDate - again, 0.15, "the room bitmap is already cached")
     }
 
     /// Opening a career with the GPU map on builds its scene ahead, and the map tab picks that
@@ -52,6 +54,9 @@ final class LaunchWarmupTests: XCTestCase {
             UserDefaults.standard.removeObject(forKey: GraphicsKeys.newMap)
             GpuMapSession.discardParked()
         }
+        // The 3D map is on by default since 2.0, so the app may already have parked a session
+        // for this scenario at launch; start from none so this career open is the one measured.
+        GpuMapSession.discardParked()
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CorporateWarfareWarmup-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
