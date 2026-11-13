@@ -19,6 +19,10 @@ heading.
 
 - On a phone or tablet, plant models on the 3D map are drawn at the same size in points as on a desktop screen. On a high resolution screen they came out too small to read.
 
+### Store listing
+
+- Added the Google Play listing copy, a feature graphic built from the game's own art, and a manual workflow that plays the App Store career on an Android emulator and saves phone and tablet screenshots. Nothing changes in the game itself.
+
 ## [2.0.1] - 2026-11-13
 
 ### Added
