@@ -813,8 +813,14 @@ fun UpdatePanel(updater: Updater, compact: Boolean = false) {
                 }
             }
             is UpdateStatus.NoInstaller -> {
-                Text("Version ${status.release.version} is delivered through the Lakeside launcher or your store, not as a download here.", color = Palette.primaryText, fontSize = 12.sp)
+                Text(
+                    "Version ${status.release.version} is out. Download it from your Lakeside library (owners and Supporter+ " +
+                        "or Champion members), or update through the Lakeside launcher. Your saves are kept.",
+                    color = Palette.primaryText, fontSize = 12.sp,
+                )
+                val uri = androidx.compose.ui.platform.LocalUriHandler.current
                 Row {
+                    TextButton(onClick = { runCatching { uri.openUri(STORE_PAGE) } }) { Text("Get it", color = Palette.gold) }
                     TextButton(onClick = { updater.openPage(status.release) }) { Text("What's new", color = Palette.secondary) }
                     TextButton(onClick = { updater.cancel() }) { Text("Done", color = Palette.gold) }
                 }
@@ -840,4 +846,5 @@ fun CurrencyChoices(store: GameStore, fx: uniffi.cw_ffi.FxDto) {
     }
 }
 
-
+/** Where owners and members download a version the in-game updater cannot fetch (paid builds are not public). */
+internal const val STORE_PAGE = "https://lakesidegames.net/store/corporate-warfare/"
