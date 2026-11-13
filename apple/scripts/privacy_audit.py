@@ -32,6 +32,20 @@ APPROVED_COLLECTION = {
     "NSPrivacyCollectedDataTypeTracking": False,
     "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAnalytics"],
 }
+# The Mac game's Lakeside sign-in and in-game update (owner, 2026-11-13). Each file may reach only
+# these addresses; every call site is behind targetEnvironment(macCatalyst), so iPhone and iPad never
+# sign in or download.
+LAKESIDE_FILES = {
+    "LakesideAuth.swift": {
+        "http://127.0.0.1",
+        "https://lakesidegames.net",
+        "https://lakesidegames.net/account/launcher/handoff/redeem",
+    },
+    "MacUpdate.swift": {
+        "https://api.github.com/repos/lakesidegamedev/corporate-warfare/releases/latest",
+        "https://lakesidegames.net/store/corporate-warfare/",
+    },
+}
 SDK_PATTERN = r"\b(Firebase\w*|Sentry\w*|Amplitude\w*|Mixpanel\w*|Crashlytics|FBSDK\w*|AppsFlyer\w*|Adjust\w*|Segment\w*|GoogleAnalytics\w*)\b"
 SDK_IMPORT = r"^\s*import\s+(Firebase|Sentry|Amplitude|Mixpanel|Crashlytics|FBSDK|AppsFlyer|Adjust|Segment|GoogleAnalytics|AppTrackingTransparency|AdSupport)"
 
@@ -67,6 +81,9 @@ def main() -> int:
         if path.name == TELEMETRY_FILE:
             if urls - {TELEMETRY_ENDPOINT}:
                 problems.append(f"telemetry reaches an unapproved address: {sorted(urls - {TELEMETRY_ENDPOINT})}")
+        elif path.name in LAKESIDE_FILES:
+            if urls - LAKESIDE_FILES[path.name]:
+                problems.append(f"{path.name} reaches an unapproved address: {sorted(urls - LAKESIDE_FILES[path.name])}")
         elif urls or uses_network:
             problems.append(f"network use in {path.relative_to(ROOT)}; only {TELEMETRY_FILE} may call out")
     for path, body in text.items():

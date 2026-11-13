@@ -85,14 +85,14 @@ the desktop game (Windows and Linux x86-64) updates through a Lakeside sign-in. 
 - Swapping to a Keycloak flow later means replacing `LakesideSignIn` only; the updater uses the
   `LakesideAuth` interface (`signIn`, `token`, `signOut`).
 
-**Mac (Swift, not built here) needs the same:** a loopback listener on a port in 47832 to 47841 and
+**Mac (Swift, `apple/Sources/LakesideAuth.swift` and `MacUpdate.swift`, Mac Catalyst only, tests in `MacUpdateTests`) does the same:** a loopback listener on a port in 47832 to 47841 and
 `/account/launcher/start?provider=ahd&port=&state=` in the default browser; exchange the code with
 one POST; keep the token in the Keychain (memory only if that fails); the downloads API with the
 Bearer header, the `macos-universal` file (a dmg, unsigned), follow the 302 without the header,
 verify SHA-256 before opening it; the same messages for 401, 403, 404 and offline; and
 "Signed in to Lakeside as <name>" with Sign out in Settings.
 
-## What the Mac app needs (Swift, not built here)
+## What the Mac app does (Swift, `LauncherSession` in `LakesideAuth.swift`)
 
 The Mac app is a store or disk-image app, not started by the launcher on desktop in this version.
 When the launcher installs and starts it on macOS, it needs the same, in `apple/`:
