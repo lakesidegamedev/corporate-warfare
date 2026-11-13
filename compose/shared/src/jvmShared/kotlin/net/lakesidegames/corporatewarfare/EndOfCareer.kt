@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -88,6 +91,7 @@ fun EndOfCareerHost(store: GameStore, onNewCareer: () -> Unit, onMainMenu: () ->
     LaunchedEffect(ended) { if (ended && !dismissed) store.playAt(0) }
     if (!(ended && !dismissed) && !EndOfCareer.requested) return
     val summary = rememberEngine(store, store.overview?.tick, ended) { h -> h.careerSummary() }?.takeIf { it.ended } ?: return
+    BackAction { EndOfCareer.requested = false; dismissed = true }
     EndOfCareerScreen(
         summary,
         onKeepPlaying = { dismissed = true; EndOfCareer.requested = false },
@@ -99,7 +103,7 @@ fun EndOfCareerHost(store: GameStore, onNewCareer: () -> Unit, onMainMenu: () ->
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EndOfCareerScreen(summary: CareerSummaryDto, onKeepPlaying: () -> Unit, onNewCareer: () -> Unit, onMainMenu: () -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink).clickable(enabled = false) {}) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink).clickable(enabled = false) {}.windowInsetsPadding(WindowInsets.safeDrawing)) {
         val wide = maxWidth >= 760.dp
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = if (wide) 28.dp else 14.dp, vertical = 20.dp),

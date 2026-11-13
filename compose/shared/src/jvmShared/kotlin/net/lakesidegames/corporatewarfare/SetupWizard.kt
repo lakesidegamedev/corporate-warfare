@@ -254,6 +254,8 @@ fun SetupWizard(
     val draft = remember { SetupDraft.from(settings) }
     var touched by remember { mutableStateOf(false) }
     val step = steps[index]
+    // System back steps back through the wizard; on the first step it cancels a re-run and, on a first launch, leaves the app.
+    BackAction(enabled = index > 0 || !firstRun) { if (index > 0) index-- else onDone() }
 
     fun finish(apply: Boolean) {
         if (apply) draft.commit(settings, includeChannel = updater != null) else if (firstRun) settings.finishSetup()

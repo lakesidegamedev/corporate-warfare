@@ -155,8 +155,10 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                 when {
                     rerunSetup || settings.setupState == SetupState.Fresh ->
                         SetupWizard(settings, updater, saveFolder, firstRun = settings.setupState == SetupState.Fresh && !rerunSetup, onDone = { rerunSetup = false }, onNewCareer = { if (!store.ready) store.openNewGame = true })
-                    settings.setupState == SetupState.Upgrade ->
+                    settings.setupState == SetupState.Upgrade -> {
+                        BackAction { settings.finishSetup() }
                         WhatsNewScreen(onRunSetup = { rerunSetup = true }, onContinue = { settings.finishSetup() })
+                    }
                     showSettings -> Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                         BackAction { showSettings = false }
                         SettingsScreen(store, settings, desktop = onQuit != null, updater = updater, onSetupAgain = { showSettings = false; rerunSetup = true }) { showSettings = false }
@@ -164,6 +166,8 @@ fun CorporateWarfareApp(store: GameStore, settings: AppSettings, updater: Update
                     loadInGame && store.ready -> LoadGameScreen(store) { loadInGame = false }
                     store.ready -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
                         if (maxWidth >= DesktopBreakpoint) {
+                            // Android tablets: with nothing open, back opens the game menu instead of leaving the game.
+                            BackAction(enabled = onQuit == null && !gameMenu) { openGameMenu() }
                             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                                 if (NewShell.enabled(settings)) TycoonShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
                                 else DesktopShell(store, onSettings = { showSettings = true }, onMenu = { openGameMenu() })
