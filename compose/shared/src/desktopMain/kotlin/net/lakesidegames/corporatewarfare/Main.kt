@@ -78,6 +78,46 @@ private object DesktopUpdates : UpdatePlatform {
     override fun open(url: String) {
         runCatching { Desktop.getDesktop().browse(URI(url)) }
     }
+
+    private val os = System.getProperty("os.name").lowercase()
+    private val x64 = System.getProperty("os.arch").lowercase().let { it == "amd64" || it == "x86_64" }
+
+    /** The Lakeside download kinds this computer installs. The Mac app is not built here, so a Mac keeps the old route. */
+    override val paidKeys: List<String> = when {
+        !x64 -> emptyList()
+        windows -> listOf("windows-x86_64")
+        os.contains("linux") -> if (System.getenv("APPIMAGE") != null) listOf("linux-x86_64", "linux-x86_64-deb") else listOf("linux-x86_64-deb", "linux-x86_64")
+        else -> emptyList()
+    }
+
+    /**
+     * Windows runs the setup program exactly as for a public installer. Linux cannot close and
+     * reopen itself, so the AppImage replaces the running AppImage file (it takes effect at the
+     * next start) and a .deb is left in the updates folder with the command to install it.
+     */
+    override fun installPaid(file: File, key: String, version: String): String? {
+        if (windows) {
+            install(file, version)
+            return null
+        }
+        val running = System.getenv("APPIMAGE")?.let(::File)
+        if (key == "linux-x86_64" && running != null && running.isFile) {
+            try {
+                val next = File(running.parentFile, running.name + ".new")
+                file.copyTo(next, overwrite = true)
+                next.setExecutable(true, false)
+                java.nio.file.Files.move(next.toPath(), running.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+                return "Version $version replaced ${running.name}. Close the game and start it again to use it. Your saves are kept."
+            } catch (e: Exception) {
+                return "Version $version is saved as ${file.absolutePath}. Close the game, make it executable (chmod +x) and run it."
+            }
+        }
+        return if (key.endsWith("-deb")) {
+            "Version $version is saved as ${file.absolutePath}. Close the game and install it with: sudo apt install ./${file.name}"
+        } else {
+            "Version $version is saved as ${file.absolutePath}. Close the game, make it executable (chmod +x) and run it."
+        }
+    }
 }
 
 /** The game window, once open, so a second launch can bring it to the front. */
@@ -223,8 +263,13 @@ private fun game() = application {
         val launcher = LauncherSession.current
         val updater = remember {
             if (launcher.managed) null
-            else Updater(DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel })
+            else Updater(
+                DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel },
+                auth = LakesideSignIn(openBrowser = DesktopUpdates::open, store = desktopTokenStore()),
+            )
         }
+        // A sign-in kept from an earlier run is read off the main thread (the secure store can be slow).
+        LaunchedEffect(updater) { withContext(Dispatchers.IO) { updater?.auth?.restore() } }
         // The handoff is redeemed off the main thread; the menu never waits for it and a failure shows nothing.
         LaunchedEffect(Unit) { withContext(Dispatchers.IO) { launcher.redeemOnce() } }
         CorporateWarfareApp(store, settings, updater, onQuit = ::exitApplication, saveFolder = saveDirectory().path)

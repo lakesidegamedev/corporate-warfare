@@ -11,6 +11,20 @@ heading.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-11-13
+
+### Added
+
+- Update the paid game from inside the game. When a new version is out and its installer is not a public download, Update now asks you to sign in to Lakeside in your browser (with your A House Divided login or Discord), then downloads the new version through your Lakeside library, checks it is the exact file Lakeside published, backs up your saves and installs it. If your account does not include Corporate Warfare it says so and offers Buy; if Lakeside cannot be reached it says so and keeps the Get it button, and the game keeps working as before. On Windows the new version installs and the game reopens; on Linux the AppImage is replaced for the next start (or the .deb is saved with its install command). The sign-in is kept in Windows Credential Manager or the Linux Secret Service (only for the session if neither is available), never in a file or in your saves, and lasts 30 days. Settings, Data and privacy shows "Signed in to Lakeside as <name>" with Sign out once you are signed in. Started from the Lakeside launcher, nothing changes: the launcher updates the game.
+
+### Fixed
+
+- When a new version is out but is not a public download, the updater now says where to get it and has a Get it button that opens the Corporate Warfare page in your Lakeside library, instead of only saying it is delivered elsewhere.
+
+### Changed
+
+- Tester previews no longer put their installers on the public GitHub page; testers get them through the Lakeside signed-in download, like the full game.
+
 ## [2.0.0] - 2026-11-13
 
 ### Fixed
@@ -2001,7 +2015,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.9.0...v2.0.0
 [1.9.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.7.1...v1.8.0
