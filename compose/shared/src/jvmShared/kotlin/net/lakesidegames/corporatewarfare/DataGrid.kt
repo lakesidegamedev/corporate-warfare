@@ -452,7 +452,7 @@ fun <T> DataGrid(
                 val rowHold: ((T) -> Unit)? = if (views != null) { r -> toggleMark(marked, key(r)) } else null
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), state = list) {
                     if (group == null) {
-                        items(shown.size, key = { i -> key(shown[i]) }) { i ->
+                        items(shown.size, key = { i -> lazyKey(key(shown[i])) }) { i ->
                             val r = shown[i]
                             GridRow(i, r, firstCol, firstWidth, rest, widths, restWidth, hScroll, key(r) == selected, rowHeight, cellMenu,
                                 onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { rowClick(r) }, onOpen = onOpen?.let { o -> { o(r) } }, watch = watchKey?.invoke(r),
@@ -463,7 +463,7 @@ fun <T> DataGrid(
                             item(key = "group:$name") {
                                 GroupRow(name, members, firstWidth, rest, widths, restWidth, hScroll, name in collapsed, byId) { if (name in collapsed) collapsed.remove(name) else collapsed.add(name) }
                             }
-                            if (name !in collapsed) items(members.size, key = { i -> key(members[i]) }) { i ->
+                            if (name !in collapsed) items(members.size, key = { i -> lazyKey(key(members[i])) }) { i ->
                                 val r = members[i]
                                 GridRow(i, r, firstCol, firstWidth, rest, widths, restWidth, hScroll, key(r) == selected, rowHeight, cellMenu,
                                     onHover = { hovered = if (it) key(r) else if (hovered == key(r)) null else hovered }, onClick = { rowClick(r) }, onOpen = onOpen?.let { o -> { o(r) } }, watch = watchKey?.invoke(r),
@@ -809,7 +809,7 @@ private fun <T> TwoLineRows(
             return@Column
         }
         LazyColumn(Modifier.fillMaxSize()) {
-            items(shown.size, key = { i -> key(shown[i]) }) { i ->
+            items(shown.size, key = { i -> lazyKey(key(shown[i])) }) { i ->
                 val r = shown[i]
                 val picked = key(r) == selected
                 Column(
@@ -854,4 +854,15 @@ fun GridButton(text: String, on: Boolean, size: TextUnit = 10.sp, onClick: () ->
         modifier = Modifier.background(if (on) Palette.gold else Palette.panel).border(1.dp, if (on) Palette.gold else Palette.stroke)
             .pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick).padding(horizontal = 7.dp, vertical = 3.dp),
     )
+}
+
+/**
+ * A row key Android can keep in its saved state. Lazy lists save each row's state in a Bundle, which
+ * takes strings and plain numbers but not Kotlin's unsigned numbers (engine handles and weeks are
+ * UInt or ULong), and the app crashed on the first table it opened. Strings and plain numbers pass
+ * through; anything else becomes its text, which stays unique within one table.
+ */
+internal fun lazyKey(key: Any): Any = when (key) {
+    is String, is Int, is Long -> key
+    else -> "k:$key"
 }
