@@ -33,4 +33,32 @@ final class MapRotationTests: XCTestCase {
         XCTAssertEqual(half.bearing, 355, accuracy: 1e-9)
         XCTAssertEqual(MapCamera(lon: 0, lat: 0, zoom: 1).rotated(by: -30).bearing, 330, accuracy: 1e-9)
     }
+
+    /// A double-tap zooms about 3x on the tapped ground: the ground under the finger stays under
+    /// it, and the zoom is applied once.
+    func testZoomAroundAPointKeepsTheGroundUnderTheFinger() {
+        let size = CGSize(width: 1200, height: 800)
+        let camera = MapCamera(lon: -85, lat: 40, zoom: 100)
+        let ground = GeoPoint(lonDegrees: -84.9, latDegrees: 40.08)
+        let tap = MapProjection(camera: camera, size: size, tilt: 0).project(ground).0
+        let zoomed = camera.zoomed(by: 3, around: tap, in: size)
+        XCTAssertEqual(zoomed.zoom, 300, accuracy: 1e-9)
+        let after = MapProjection(camera: zoomed, size: size, tilt: 0).project(ground).0
+        XCTAssertEqual(after.x, tap.x, accuracy: 4)
+        XCTAssertEqual(after.y, tap.y, accuracy: 4)
+    }
+
+    /// The zoom stops at the maximum without a hard stop before it, and the pan follows the factor
+    /// that was actually applied.
+    func testZoomAroundAPointReachesTheMaximum() {
+        let size = CGSize(width: 400, height: 800)
+        let near = MapCamera(lon: -85, lat: 40, zoom: 1000)
+        let zoomed = near.zoomed(by: 3, around: CGPoint(x: 300, y: 200), in: size)
+        XCTAssertEqual(zoomed.zoom, MapCamera.maxZoom, accuracy: 1e-9)
+        XCTAssertGreaterThanOrEqual(MapCamera.maxZoom, MapCamera.modelZoom)
+        let atMax = MapCamera(lon: -85, lat: 40, zoom: MapCamera.maxZoom)
+        let same = atMax.zoomed(by: 3, around: CGPoint(x: 300, y: 200), in: size)
+        XCTAssertEqual(same.lon, atMax.lon, accuracy: 1e-12)
+        XCTAssertEqual(same.lat, atMax.lat, accuracy: 1e-12)
+    }
 }

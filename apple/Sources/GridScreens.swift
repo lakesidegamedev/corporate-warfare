@@ -434,7 +434,7 @@ struct RegionsGridScreen: View {
 
 // MARK: - Finance statements
 
-struct StatementLine {
+struct GridStatementLine {
     enum Kind { case money, pct, times, count, price }
     let group: String
     let title: String
@@ -463,44 +463,44 @@ struct StatementLine {
 }
 
 enum FinanceGrid {
-    static let lines: [StatementLine] = [
-        StatementLine("Income statement", "Revenue") { $0.revenueCents },
-        StatementLine("Income statement", "Cost of goods") { -$0.costOfGoodsCents },
-        StatementLine("Income statement", "Gross profit", total: true) { $0.grossProfitCents },
-        StatementLine("Income statement", "Wages") { -$0.wagesCents },
-        StatementLine("Income statement", "Operating costs") { -$0.operatingExpenseCents },
-        StatementLine("Income statement", "Other income") { $0.otherCents },
-        StatementLine("Income statement", "Depreciation") { -$0.depreciationCents },
-        StatementLine("Income statement", "Operating profit", total: true) { $0.ebitCents },
-        StatementLine("Income statement", "Interest paid") { -$0.interestExpenseCents },
-        StatementLine("Income statement", "Interest earned") { $0.interestIncomeCents },
-        StatementLine("Income statement", "Tax") { -$0.taxCents },
-        StatementLine("Income statement", "Net income", total: true) { $0.netIncomeCents },
-        StatementLine("Balance sheet", "Cash") { $0.cashCents },
-        StatementLine("Balance sheet", "Inventory") { $0.inventoryCents },
-        StatementLine("Balance sheet", "Current assets", total: true) { $0.currentAssetsCents },
-        StatementLine("Balance sheet", "Plant and construction") { $0.fixedAssetsCents },
-        StatementLine("Balance sheet", "Total assets", total: true) { $0.assetsCents },
-        StatementLine("Balance sheet", "Current liabilities") { $0.currentLiabilitiesCents },
-        StatementLine("Balance sheet", "Debt") { $0.debtCents },
-        StatementLine("Balance sheet", "Total liabilities", total: true) { $0.liabilitiesCents },
-        StatementLine("Balance sheet", "Equity", total: true) { $0.equityCents },
-        StatementLine("Balance sheet", "Shares issued", kind: .count) { $0.sharesIssued },
-        StatementLine("Balance sheet", "Share price", kind: .price) { $0.sharePriceCents },
-        StatementLine("Cash flow", "Opening cash") { $0.cashOpeningCents },
-        StatementLine("Cash flow", "Operating") { $0.cashOperatingCents },
-        StatementLine("Cash flow", "Investing") { $0.cashInvestingCents },
-        StatementLine("Cash flow", "Financing") { $0.cashFinancingCents },
-        StatementLine("Cash flow", "Tax paid") { $0.cashTaxCents },
-        StatementLine("Cash flow", "Closing cash", total: true) { $0.cashClosingCents },
-        StatementLine("Ratios", "Gross margin", kind: .pct) { $0.grossMarginBps },
-        StatementLine("Ratios", "Net margin", kind: .pct) { $0.netMarginBps },
-        StatementLine("Ratios", "Return on equity", kind: .pct) { $0.roeBps },
-        StatementLine("Ratios", "Return on assets", kind: .pct) { $0.roaBps },
-        StatementLine("Ratios", "Debt to equity", kind: .times) { $0.debtToEquityBps },
-        StatementLine("Ratios", "Current ratio", kind: .times) { $0.currentRatioBps },
-        StatementLine("Ratios", "Interest cover", kind: .times) { $0.interestCoverBps },
-        StatementLine("Ratios", "Revenue growth", kind: .pct) { $0.revenueGrowthBps },
+    static let lines: [GridStatementLine] = [
+        GridStatementLine("Income statement", "Revenue") { $0.revenueCents },
+        GridStatementLine("Income statement", "Cost of goods") { -$0.costOfGoodsCents },
+        GridStatementLine("Income statement", "Gross profit", total: true) { $0.grossProfitCents },
+        GridStatementLine("Income statement", "Wages") { -$0.wagesCents },
+        GridStatementLine("Income statement", "Operating costs") { -$0.operatingExpenseCents },
+        GridStatementLine("Income statement", "Other income") { $0.otherCents },
+        GridStatementLine("Income statement", "Depreciation") { -$0.depreciationCents },
+        GridStatementLine("Income statement", "Operating profit", total: true) { $0.ebitCents },
+        GridStatementLine("Income statement", "Interest paid") { -$0.interestExpenseCents },
+        GridStatementLine("Income statement", "Interest earned") { $0.interestIncomeCents },
+        GridStatementLine("Income statement", "Tax") { -$0.taxCents },
+        GridStatementLine("Income statement", "Net income", total: true) { $0.netIncomeCents },
+        GridStatementLine("Balance sheet", "Cash") { $0.cashCents },
+        GridStatementLine("Balance sheet", "Inventory") { $0.inventoryCents },
+        GridStatementLine("Balance sheet", "Current assets", total: true) { $0.currentAssetsCents },
+        GridStatementLine("Balance sheet", "Plant and construction") { $0.fixedAssetsCents },
+        GridStatementLine("Balance sheet", "Total assets", total: true) { $0.assetsCents },
+        GridStatementLine("Balance sheet", "Current liabilities") { $0.currentLiabilitiesCents },
+        GridStatementLine("Balance sheet", "Debt") { $0.debtCents },
+        GridStatementLine("Balance sheet", "Total liabilities", total: true) { $0.liabilitiesCents },
+        GridStatementLine("Balance sheet", "Equity", total: true) { $0.equityCents },
+        GridStatementLine("Balance sheet", "Shares issued", kind: .count) { $0.sharesIssued },
+        GridStatementLine("Balance sheet", "Share price", kind: .price) { $0.sharePriceCents },
+        GridStatementLine("Cash flow", "Opening cash") { $0.cashOpeningCents },
+        GridStatementLine("Cash flow", "Operating") { $0.cashOperatingCents },
+        GridStatementLine("Cash flow", "Investing") { $0.cashInvestingCents },
+        GridStatementLine("Cash flow", "Financing") { $0.cashFinancingCents },
+        GridStatementLine("Cash flow", "Tax paid") { $0.cashTaxCents },
+        GridStatementLine("Cash flow", "Closing cash", total: true) { $0.cashClosingCents },
+        GridStatementLine("Ratios", "Gross margin", kind: .pct) { $0.grossMarginBps },
+        GridStatementLine("Ratios", "Net margin", kind: .pct) { $0.netMarginBps },
+        GridStatementLine("Ratios", "Return on equity", kind: .pct) { $0.roeBps },
+        GridStatementLine("Ratios", "Return on assets", kind: .pct) { $0.roaBps },
+        GridStatementLine("Ratios", "Debt to equity", kind: .times) { $0.debtToEquityBps },
+        GridStatementLine("Ratios", "Current ratio", kind: .times) { $0.currentRatioBps },
+        GridStatementLine("Ratios", "Interest cover", kind: .times) { $0.interestCoverBps },
+        GridStatementLine("Ratios", "Revenue growth", kind: .pct) { $0.revenueGrowthBps },
     ]
 
     static let periods = (0..<8).map { "p\($0)" }
@@ -515,14 +515,14 @@ enum FinanceGrid {
 
     /// The newest period first; the newest carries the whole history, so its change, percent and
     /// trend follow the timeframe. [statements] are oldest first, as the engine gives them.
-    static func columns(_ statements: [StatementDto], step: Int) -> [GridColumn<StatementLine>] {
+    static func columns(_ statements: [StatementDto], step: Int) -> [GridColumn<GridStatementLine>] {
         let newest = Array(statements.reversed().prefix(8))
-        let name = GridColumn<StatementLine>("name", "Line", width: nil, numeric: false, topic: "About", text: { $0.title },
+        let name = GridColumn<GridStatementLine>("name", "Line", width: nil, numeric: false, topic: "About", text: { $0.title },
                                              tone: { $0.total ? Theme.gold : Theme.primaryText })
-        let group = GridColumn<StatementLine>("group", "Statement", width: 120, numeric: false, topic: "About", text: { $0.group }, tone: { _ in Theme.secondary })
-        let cols = newest.enumerated().map { (i, s) -> GridColumn<StatementLine> in
-            let history: ((StatementLine) -> [Int64])? = i == 0 ? { l in l.kind == .money ? statements.compactMap { l.value($0) } : [] } : nil
-            return GridColumn<StatementLine>(
+        let group = GridColumn<GridStatementLine>("group", "Statement", width: 120, numeric: false, topic: "About", text: { $0.group }, tone: { _ in Theme.secondary })
+        let cols = newest.enumerated().map { (i, s) -> GridColumn<GridStatementLine> in
+            let history: ((GridStatementLine) -> [Int64])? = i == 0 ? { l in l.kind == .money ? statements.compactMap { l.value($0) } : [] } : nil
+            return GridColumn<GridStatementLine>(
                 "p\(i)", s.label + (Int(s.weeks) < step ? " *" : ""), width: 90, topic: "Periods",
                 text: { $0.show($0.value(s)) },
                 value: { $0.value(s) },

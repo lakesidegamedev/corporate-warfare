@@ -26,6 +26,8 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -322,7 +324,7 @@ fun WorldMapView(
     }
 
     fun current(): MapCamera? = camera ?: map?.let { if (viewSize.width > 0) MapCamera.scenario(viewSize, it) else null }
-    fun fly(target: MapCamera) {
+    fun fly(target: MapCamera, frames: Int = 42) {
         val start = current() ?: return
         flight?.cancel()
         if (!graphics.animations) {
@@ -330,13 +332,30 @@ fun WorldMapView(
             return
         }
         flight = scope.launch {
-            val frames = 42
             for (frame in 1..frames) {
                 val x = frame / frames.toDouble()
                 camera = MapCamera.interpolate(start, target, x * x * (3 - 2 * x))
                 delay(16)
             }
         }
+    }
+    fun tappedRegion(tap: Offset): String? {
+        val map = map ?: return null
+        val now = current() ?: return null
+        if (gpu != null && gpuOn) return gpu.pick(gpuCamera(now, viewSize.width, viewSize.height, pitch), viewSize.width.toInt(), viewSize.height.toInt(), tap.x, tap.y)
+        return regionAt(map, geometry.of(map, now, viewSize, graphics.detail, pitch), graphics, heightsNow, tap)
+    }
+    // A double-tap zooms in about 3x on the tapped ground; on a region that is already selected it flies to the zoom where plant
+    // models are readable. A two-finger tap zooms back out.
+    fun doubleTapZoom(tap: Offset) {
+        val now = current() ?: return
+        if (now.zoom >= MapCamera.MAX_ZOOM) return
+        val factor = if (selected != null && tappedRegion(tap) == selected) max(MapCamera.MODEL_ZOOM / now.zoom, 3.0) else 3.0
+        fly(now.zoomedAround(factor, tap, viewSize, pitch), 15)
+    }
+    fun twoFingerZoomOut(centre: Offset) {
+        val now = current() ?: return
+        fly(now.zoomedAround(1.0 / 3.0, centre, viewSize, pitch), 15)
     }
     fun toggleGlobe() {
         val now = current() ?: return
@@ -453,9 +472,38 @@ fun WorldMapView(
                             }
                         }
                     }
+                    .pointerInput(Unit) {
+                        // Two fingers tapped together, neither moving, zoom out. Nothing is consumed, so pinch and twist still work.
+                        awaitEachGesture {
+                            val first = awaitFirstDown(requireUnconsumed = false)
+                            val began = first.uptimeMillis
+                            val downs = HashMap<androidx.compose.ui.input.pointer.PointerId, Offset>()
+                            downs[first.id] = first.position
+                            var moved = false
+                            var most = 1
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                for (c in event.changes) {
+                                    if (c.pressed && c.id !in downs) downs[c.id] = c.position
+                                    val from = downs[c.id]
+                                    if (from != null && (c.position - from).getDistance() > viewConfiguration.touchSlop) moved = true
+                                }
+                                most = max(most, event.changes.count { it.pressed })
+                                if (event.changes.none { it.pressed }) {
+                                    val last = event.changes.maxOf { it.uptimeMillis }
+                                    if (most == 2 && !moved && !surfaceMouse && last - began < 300 && downs.size == 2) {
+                                        val centre = downs.values.reduce { a, b -> a + b } / 2f
+                                        twoFingerZoomOut(centre)
+                                    }
+                                    break
+                                }
+                                if (event.changes.first().uptimeMillis - began > 400) break
+                            }
+                        }
+                    }
                     .pointerInput(layer, pickedLane, selected, pitch, gpu, gpuOn) {
                         detectTapGestures(
-                            onDoubleTap = { if (!surfaceMouse) toggleGlobe() },
+                            onDoubleTap = { tap -> if (!surfaceMouse) doubleTapZoom(tap) },
                             onTap = { tap -> if (!surfaceMouse) mapTap(tap) },
                         )
                     },

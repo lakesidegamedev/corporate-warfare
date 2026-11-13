@@ -52,6 +52,10 @@ pub struct Update {
     /// a negative number clears it.
     pub hover: Option<i64>,
     pub selected: Option<i64>,
+    /// Drawable pixels per point on a phone or tablet (1 to 4). A plant never draws narrower than
+    /// its minimum width in points, so the minimum is scaled by this. Desktop shells never send
+    /// it, so their numbers do not change.
+    pub ui_scale: Option<f32>,
 }
 
 /// One freight lane as the shell sends it.
@@ -313,6 +317,9 @@ impl GpuMap {
             }
             if let Some(s) = u.selected {
                 style.selected = usize::try_from(s).ok();
+            }
+            if let Some(k) = u.ui_scale {
+                style.building_min_px = Style::default().building_min_px * k.clamp(1.0, 4.0);
             }
         }
         // A hover or selection alone only touches the style: never wait for a frame in flight.
@@ -1090,6 +1097,14 @@ mod tests {
             utilisation_bps: 0,
             progress_bps: 0,
         }
+    }
+
+    #[test]
+    fn update_reads_the_phone_display_scale() {
+        let u: Update = serde_json::from_str(r#"{"ui_scale":2.0}"#).unwrap();
+        assert_eq!(u.ui_scale, Some(2.0));
+        let none: Update = serde_json::from_str("{}").unwrap();
+        assert_eq!(none.ui_scale, None);
     }
 
     #[test]
