@@ -5,9 +5,17 @@ product decisions. They intentionally settle questions the implementation agent 
 not have to invent. They are not claims that the owner individually approved every
 coefficient, or that calibrated prices are real measurements.
 
-Order: [markets and weekly settlement](MARKETS.md), [corporate state machines](CORPORATE.md),
-[finance, labour, policy and AI](FINANCE-LABOUR-AI.md), [content and pacing](CONTENT-PACING.md),
-[session/commands/phone flows](INTERFACE.md), and [exact event deck](EVENTS.md), and [visual specification](VISUAL.md). Machine-readable initial parameters:
+Order: [markets and weekly settlement](MARKETS.md), [corporate state machines](CORPORATE.md)
+(including careers), [finance, labour, policy and AI](FINANCE-LABOUR-AI.md),
+[content and pacing](CONTENT-PACING.md), [session/commands/phone flows](INTERFACE.md),
+[exact event deck](EVENTS.md), [visual specification](VISUAL.md) and [currencies](CURRENCIES.md).
+
+2.0 pages, each stating the content file its numbers live in: [capacity and openings](CAPACITY.md),
+[raids as campaigns](RAIDS.md), [plant auctions, listings and mergers](AUCTIONS.md),
+[power on a grid](POWER.md), [world prices and their weather](WORLD-PRICES.md) and
+[the 2.0 layout](LAYOUT.md) and [the Lakeside launcher handoff](LAUNCHER.md). Where an older section disagrees with a 2.0 page, the 2.0 page wins.
+
+Machine-readable initial parameters:
 [initial-balance.json](../../content/initial-balance.json). Execution checklist:
 [execution.json](../planning/execution.json).
 

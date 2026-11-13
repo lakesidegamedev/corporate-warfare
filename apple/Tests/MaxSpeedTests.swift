@@ -10,6 +10,8 @@ import XCTest
 @MainActor
 final class MaxSpeedTests: XCTestCase {
     func testNavigationAndSheetsRespondAtMaxSpeed() async throws {
+        UserDefaults.standard.set(false, forKey: GraphicsKeys.newMap)
+        defer { UserDefaults.standard.removeObject(forKey: GraphicsKeys.newMap) }
         try await runAtMaxSpeed(newMap: false)
     }
 

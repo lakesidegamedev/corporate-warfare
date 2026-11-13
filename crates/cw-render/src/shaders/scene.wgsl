@@ -20,6 +20,8 @@ struct Globals {
     ground_dim: vec4<f32>, // width, height, texels per degree, unused
     palette: array<vec4<f32>, PALETTE_LEN>,
     day: array<vec4<f32>, PALETTE_LEN>,
+    anim: vec4<f32>,       // animation clock in seconds (wrapped), cloud drift (image u, v), unused
+    grow: vec4<f32>,       // km a pixel covers at the target, a plant's minimum width in pixels, widest it may grow to in km
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
@@ -38,7 +40,17 @@ struct VIn {
     @location(2) colour: vec4<f32>,
     @location(3) local: vec3<f32>,
     @location(4) uv: vec2<f32>,
+    @location(5) anchor: vec4<f32>,
 };
+
+// A company's plant keeps a minimum width on screen: it is scaled about its base.
+fn grown(v: VIn) -> vec3<f32> {
+    if (v.anchor.w <= 0.0 || g.grow.y <= 0.0) {
+        return v.pos;
+    }
+    let k = clamp(g.grow.y * g.grow.x / v.anchor.w, 1.0, max(g.grow.z / v.anchor.w, 1.0));
+    return v.anchor.xyz + (v.pos - v.anchor.xyz) * k;
+}
 
 struct VOut {
     @builtin(position) clip: vec4<f32>,
@@ -53,8 +65,9 @@ struct VOut {
 @vertex
 fn vs_main(v: VIn) -> VOut {
     var o: VOut;
-    o.clip = g.view_proj * vec4<f32>(v.pos, 1.0);
-    o.world = v.pos;
+    let pos = grown(v);
+    o.clip = g.view_proj * vec4<f32>(pos, 1.0);
+    o.world = pos;
     o.normal = v.normal;
     o.colour = v.colour.rgb;
     o.kind = u32(round(v.colour.a * 255.0));
@@ -65,7 +78,7 @@ fn vs_main(v: VIn) -> VOut {
 
 @vertex
 fn vs_shadow(v: VIn) -> @builtin(position) vec4<f32> {
-    return g.light_vp * vec4<f32>(v.pos, 1.0);
+    return g.light_vp * vec4<f32>(grown(v), 1.0);
 }
 
 fn pal(ramp: u32, step: i32) -> vec3<f32> {
@@ -84,11 +97,36 @@ fn lonlat(xy: vec2<f32>) -> vec2<f32> {
     return vec2<f32>(g.proj.x + xy.x / g.proj.z, g.proj.y + xy.y / g.proj.w);
 }
 
+fn mask_texel(x: i32, y: i32) -> vec4<f32> {
+    let c = clamp(vec2<i32>(x, y), vec2<i32>(0, 0), vec2<i32>(i32(g.mask_dim.x) - 1, i32(g.mask_dim.y) - 1));
+    return textureLoad(mask_tex, c, 0) * 255.0;
+}
+
+fn water_kind(m: vec4<f32>) -> bool {
+    return m.b > 0.5 && m.b < 2.5;
+}
+
+// The mask at a point, with a smooth shoreline: the four texels round the point vote with eased
+// bilinear weights on water against land, and the heaviest texel of the winning side is returned.
+// So a coast is a clean rounded line at every zoom, never a staircase of mask cells, and the
+// answer is still one whole texel (region, kind) with nothing blended.
 fn mask_at(ll: vec2<f32>) -> vec4<f32> {
     let ppd = g.mask_dim.z;
-    let x = clamp(i32(floor((ll.x - g.mask_b.x) * ppd)), 0, i32(g.mask_dim.x) - 1);
-    let y = clamp(i32(floor((g.mask_b.w - ll.y) * ppd)), 0, i32(g.mask_dim.y) - 1);
-    return textureLoad(mask_tex, vec2<i32>(x, y), 0) * 255.0;
+    let p = vec2<f32>((ll.x - g.mask_b.x) * ppd, (g.mask_b.w - ll.y) * ppd) - vec2<f32>(0.5, 0.5);
+    let b = vec2<i32>(floor(p));
+    let f0 = p - floor(p);
+    let f = f0 * f0 * (3.0 - 2.0 * f0);
+    let t = array<vec4<f32>, 4>(mask_texel(b.x, b.y), mask_texel(b.x + 1, b.y), mask_texel(b.x, b.y + 1), mask_texel(b.x + 1, b.y + 1));
+    let w = array<f32, 4>((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    var wet = 0.0;
+    for (var i = 0; i < 4; i++) { if (water_kind(t[i])) { wet += w[i]; } }
+    let want = wet > 0.5;
+    var best = -1.0;
+    var out = t[0];
+    for (var i = 0; i < 4; i++) {
+        if (water_kind(t[i]) == want && w[i] > best) { best = w[i]; out = t[i]; }
+    }
+    return out;
 }
 
 fn is_water(m: vec4<f32>) -> bool {
@@ -99,8 +137,16 @@ fn earth_uv(ll: vec2<f32>) -> vec2<f32> {
     return vec2<f32>((ll.x - g.earth.x) / (g.earth.z - g.earth.x), (g.earth.w - ll.y) / (g.earth.w - g.earth.y));
 }
 
+// A coordinate folded back and forth into 0..1 (period 2), so the image is read as if mirrored
+// at its edges: the drifting clouds never meet a seam.
+fn mirror01(x: f32) -> f32 {
+    let m = x - 2.0 * floor(x * 0.5);
+    return 1.0 - abs(m - 1.0);
+}
+
 fn cloud_alpha(ll: vec2<f32>) -> f32 {
-    return textureSampleLevel(cloud_tex, linear, earth_uv(ll), 0.0).a;
+    let uv = earth_uv(ll) - g.anim.yz;
+    return textureSampleLevel(cloud_tex, linear, vec2<f32>(mirror01(uv.x), mirror01(uv.y)), 0.0).a;
 }
 
 // 1 when the point is lit by the shadow-casting light, 0 when a caster is in front of it.
@@ -129,24 +175,22 @@ fn class_at(tc: vec2<i32>) -> u32 {
 // to zero at the band edge (ordered dither), so a transition is a few pixels of stipple and
 // the middle of a patch is always one flat colour.
 fn ground_class(tcf: vec2<f32>, fw: vec2<f32>, frag: vec2<f32>, band: f32) -> u32 {
-    let tc = vec2<i32>(floor(tcf));
-    let f = tcf - floor(tcf);
-    let own = class_at(tc);
-    if (band <= 0.0) { return own; }
-    let rate = max(fw, vec2<f32>(1e-4, 1e-4));
-    var best_d = 1e9;
-    var other = own;
-    let dist = array<f32, 4>((1.0 - f.x) / rate.x, f.x / rate.x, (1.0 - f.y) / rate.y, f.y / rate.y);
-    let step = array<vec2<i32>, 4>(vec2<i32>(1, 0), vec2<i32>(-1, 0), vec2<i32>(0, 1), vec2<i32>(0, -1));
+    // The four texels round the point vote with eased bilinear weights and the heaviest class
+    // wins: a border between two kinds of ground is a clean rounded line, not a staircase.
+    let p = tcf - vec2<f32>(0.5, 0.5);
+    let b = vec2<i32>(floor(p));
+    let f0 = p - floor(p);
+    let f = f0 * f0 * (3.0 - 2.0 * f0);
+    let c = array<u32, 4>(class_at(b), class_at(b + vec2<i32>(1, 0)), class_at(b + vec2<i32>(0, 1)), class_at(b + vec2<i32>(1, 1)));
+    let w = array<f32, 4>((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    var best = -1.0;
+    var out = c[0];
     for (var i = 0; i < 4; i++) {
-        let n = class_at(tc + step[i]);
-        if (n != own && dist[i] < best_d) { best_d = dist[i]; other = n; }
+        var sum = 0.0;
+        for (var j = 0; j < 4; j++) { if (c[j] == c[i]) { sum += w[j]; } }
+        if (sum > best) { best = sum; out = c[i]; }
     }
-    if (best_d < band) {
-        let p = 0.5 * (1.0 - best_d / band);
-        if (bayer8(frag) < p) { return other; }
-    }
-    return own;
+    return out;
 }
 
 fn variant_at(tc: vec2<i32>) -> u32 {
@@ -160,8 +204,6 @@ const TILE_FOREST = array<u32, 8>(0x02200000u, 0x02210000u, 0x00110220u, 0x00000
 const TILE_ROCK = array<u32, 8>(0x00100002u, 0x00002000u, 0x10000010u, 0x00200000u, 0x00001000u, 0x02000002u, 0x00010000u, 0x00000200u);
 const TILE_SOIL = array<u32, 8>(0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u);
 const TILE_SNOW = array<u32, 8>(0x00000000u, 0x01110000u, 0x00000000u, 0x00000000u, 0x00000001u, 0x00000000u, 0x11100000u, 0x00000000u);
-const TILE_URBAN = array<u32, 8>(0x11111111u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u, 0x10000000u);
-const TILE_CORE = array<u32, 8>(0x11111111u, 0x10002221u, 0x10002221u, 0x10002221u, 0x11111111u, 0x12220001u, 0x12220001u, 0x12220001u);
 const TILE_WAVE = array<u32, 8>(0x00000000u, 0x02220000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000222u, 0x00000000u, 0x00000000u);
 
 fn nib(row: u32, tx: i32) -> u32 {
@@ -172,24 +214,175 @@ fn tile_value(t: array<u32, 8>, tx: i32, ty: i32) -> u32 {
     return nib(t[u32(ty & 7)], tx);
 }
 
-// Class texture at a world texel. Field rows run in a direction picked per patch.
+fn ihash(a: i32, b: i32) -> u32 {
+    var h = u32(a) * 0x9E3779B1u ^ u32(b) * 0x85EBCA6Bu;
+    h = h ^ (h >> 15u);
+    h = h * 0x2C1B3C6Du;
+    h = h ^ (h >> 12u);
+    h = h * 0x297A2D39u;
+    return h ^ (h >> 15u);
+}
+
+// A tile value with the tile mirrored and turned per 8x8 block of the world, so one hand drawn
+// tile gives eight looks and the repeat is not visible over kilometres.
+fn tile_oriented(t: array<u32, 8>, tx: i32, ty: i32, h: u32) -> u32 {
+    var lx = tx & 7;
+    var ly = ty & 7;
+    if ((h & 1u) != 0u) { lx = 7 - lx; }
+    if ((h & 2u) != 0u) { ly = 7 - ly; }
+    if ((h & 4u) != 0u) { let t0 = lx; lx = ly; ly = t0; }
+    return nib(t[u32(ly)], lx);
+}
+
+const TILE_FOREST2 = array<u32, 8>(0x00022000u, 0x00022100u, 0x01000110u, 0x02200000u, 0x02210002u, 0x00110022u, 0x00000021u, 0x10000001u);
+const TILE_ROCK2 = array<u32, 8>(0x00000200u, 0x01000000u, 0x00002001u, 0x00000000u, 0x20010000u, 0x00000020u, 0x00100100u, 0x02000000u);
+
+fn imod(a: i32, m: i32) -> i32 {
+    return ((a % m) + m) % m;
+}
+
+// Crop of a field patch this season: 0 plain green, 1 light (ripe, or young and pale), 2 dark
+// (ploughed, or dense), 3 pasture. The patch's own crop number picks a column, the season a
+// row. Light and dark patches come in equal numbers each season, so the mean colour of the
+// fields stays put when the crops drop out a few zoom steps further out.
+fn crop_state(variant: u32) -> u32 {
+    let c = (variant >> 2u) & 3u;
+    let season = i32(round(g.ground_dim.w));
+    if (c == 3u) { return 3u; }
+    if (season == 2) { if (c == 2u) { return 1u; } if (c == 1u) { return 2u; } return 0u; }
+    if (season == 3) { if (c == 0u) { return 1u; } if (c == 1u) { return 2u; } return 0u; }
+    if (c == 2u) { return 2u; }
+    if (c == 1u) { return 1u; }
+    return 0u;
+}
+
+fn crown(tx: i32, ty: i32) -> bool {
+    // Crowns are a 2x2 texel block, the odd rows of blocks shifted by one texel so they are not a grid.
+    let by = ty >> 1;
+    let sx = tx + select(0, 1, (by & 1) == 1);
+    return ihash(sx >> 1, by) % 16u < 5u;
+}
+
+// Class texture at a world texel: 0 the class colour, -1 one step darker, 1 one step lighter.
+// Every pattern keeps about the same share of dark and light at any texel size, so the mean
+// colour does not jump when the texel doubles as the camera pulls back.
 fn class_texel(cls: u32, variant: u32, tx: i32, ty: i32) -> i32 {
     var v = 0u;
-    if (cls == 0u) { v = tile_value(TILE_FOREST, tx, ty); }
-    else if (cls == 1u) {
-        // Survey grid fields: rows run east-west or north-south by patch, one dark row in six,
-        // and half the patches stay plain. Never diagonal.
-        if (variant == 0u) { if (((ty % 6) + 6) % 6 == 0) { v = 1u; } }
-        else if (variant == 1u) { if (((tx % 6) + 6) % 6 == 0) { v = 1u; } }
+    let h8 = ihash(tx >> 3, ty >> 3);
+    if (cls == 0u) {
+        // Canopy: crowns two texels across on a hashed lattice, each casting a one texel
+        // shadow down and to the left of the sun side.
+        if (crown(tx, ty)) { v = 2u; }
+        else if (crown(tx + 1, ty - 1)) { v = 1u; }
     }
-    else if (cls == 2u) { v = tile_value(TILE_SOIL, tx, ty); }
-    else if (cls == 3u) { v = tile_value(TILE_ROCK, tx, ty); }
-    else if (cls == 4u) { v = tile_value(TILE_SNOW, tx, ty); }
-    else if (cls == 5u) { v = tile_value(TILE_URBAN, tx, ty); }
-    else { v = tile_value(TILE_CORE, tx, ty); }
+    else if (cls == 1u) {
+        // Rows run east-west or north-south by patch (never diagonal), one dark row in four or
+        // five. Pasture is sparse speckle instead.
+        let crop = crop_state(variant);
+        let along = select(ty, tx, (variant & 1u) == 1u);
+        let period = select(4, 5, (variant & 2u) != 0u);
+        if (crop == 3u) {
+            let r = ihash(tx, ty + 311) % 24u;
+            if (r == 0u) { v = 1u; } else if (r == 1u) { v = 2u; }
+        } else if (crop == 2u) {
+            if (imod(along, 3) == 0) { v = 1u; }
+        } else {
+            if (imod(along, period) == 0) { v = 1u; }
+        }
+    }
+    else if (cls == 2u) {
+        // Scrub and desert: bare, with a sparse scatter of darker brush and pale sand.
+        let r = ihash(tx + 57, ty) % 36u;
+        if (r == 0u) { v = 1u; } else if (r == 1u) { v = 2u; }
+    }
+    else if (cls == 3u) {
+        if (((h8 >> 3u) & 1u) == 1u) { v = tile_oriented(TILE_ROCK2, tx, ty, h8); }
+        else { v = tile_oriented(TILE_ROCK, tx, ty, h8); }
+    }
+    else if (cls == 4u) {
+        v = tile_oriented(TILE_SNOW, tx, ty, h8);
+    }
+    // City ground (classes 5 and 6) is drawn by city_texel.
     if (v == 1u) { return -1; }
     if (v == 2u) { return 1; }
     return 0;
+}
+
+// ---- City ground ---------------------------------------------------------------------------
+// A city is not one repeating grid. The raster says which zone a texel is in (class 6 downtown,
+// class 5 with a zone number: 0 outer residential, 1 inner city, 2 industrial and port). Streets
+// are placed per axis from a hash of the street's own index, so every street runs unbroken
+// across tiles, while the gaps between them differ block to block. A second, wider avenue grid
+// is independent of the first, and the offsets shift every 64 texels so no 5 km piece repeats.
+
+// Position of one axis' street: x = 1 on a street texel, y = the index of the block between streets.
+fn axis_street(t: i32, band: i32, salt: i32, span: i32, lo: i32, rng: u32, width: i32) -> vec2<i32> {
+    let k = (t - imod(t, span)) / span;
+    let off = k * span + lo + i32(ihash(k + salt, band) % rng);
+    let on = select(0, 1, t >= off && t < off + width);
+    return vec2<i32>(on, select(k - 1, k, t >= off));
+}
+
+// Returns (tone, green): tone -2 avenue, -1 street, 0 block, 1 light block; green 0 none, 1 lawn,
+// 2 tree, 3 dark lawn of a park.
+fn city_texel(cls: u32, zone: u32, tx: i32, ty: i32, aw: i32, streets: bool) -> vec2<i32> {
+    var span = 8;
+    var lo = 2;
+    var rng = 4u;
+    var av = 32;
+    if (cls == 6u) { span = 6; lo = 2; rng = 2u; av = 24; }
+    else if (zone == 0u) { span = 12; lo = 3; rng = 6u; av = 48; }
+    else if (zone == 2u) { span = 20; lo = 4; rng = 10u; av = 64; }
+    // Avenues: two texels wide, continuous over the whole map.
+    let avx = imod(tx - i32(ihash(tx >> 6, 91) % 5u), av);
+    let avy = imod(ty - i32(ihash(ty >> 6, 92) % 5u), av);
+    if (avx < aw || avy < aw) { return vec2<i32>(select(-2, -1, cls == 5u && zone != 1u), 0); }
+    if (!streets) { return vec2<i32>(0, 0); }
+    let sx = axis_street(tx, ty >> 6, 11, span, lo, rng, 1);
+    let sy = axis_street(ty, tx >> 6, 23, span, lo, rng, 1);
+    if (sx.x == 1 || sy.x == 1) { return vec2<i32>(-1, 0); }
+    let bh = ihash(sx.y * 7 + 3, sy.y * 13 + 5) % 100u;
+    let th = ihash(tx + 17, ty + 29) % 100u;
+    if (cls == 6u) {
+        // Downtown: tight blocks, most of them the lightest.
+        if (bh < 72u) { return vec2<i32>(1, 0); }
+        return vec2<i32>(0, 0);
+    }
+    if (zone == 0u) {
+        // Outer residential: lawns between the houses, whole green blocks, scattered trees.
+        if (bh < 30u) { return vec2<i32>(0, select(1, 2, th < 14u)); }
+        if (bh < 38u) { return vec2<i32>(1, 0); }
+        if (th < 12u) { return vec2<i32>(0, 1); }
+        if (th < 16u) { return vec2<i32>(0, 2); }
+        return vec2<i32>(0, 0);
+    }
+    if (zone == 2u) {
+        // Industrial and port: big grey lots, now and then a lighter roof.
+        if (bh < 22u) { return vec2<i32>(1, 0); }
+        return vec2<i32>(0, 0);
+    }
+    // Inner city: medium blocks, a few light ones and the odd park.
+    if (bh < 7u) { return vec2<i32>(0, select(3, 2, th < 10u)); }
+    if (bh < 30u) { return vec2<i32>(1, 0); }
+    return vec2<i32>(0, 0);
+}
+
+// A lit pixel on city ground at night: a block texel with a lamp or a window behind it. How many
+// depends on the zone (per mille: downtown 140, inner city 70, outer residential 28, industrial and
+// port 8), times `boost` where the ground is too coarse to show blocks. Returns the step of the signal ramp, or -1 for none. A texel flickers off for a couple
+// of seconds now and then, like the windows on the buildings.
+fn city_light(cls: u32, zone: u32, tx: i32, ty: i32, boost: u32) -> i32 {
+    var per_mille = 70u;
+    if (cls == 6u) { per_mille = 140u; }
+    else if (zone == 0u) { per_mille = 28u; }
+    else if (zone == 2u) { per_mille = 8u; }
+    per_mille = per_mille * boost;
+    let h = ihash(tx * 3 + 101, ty * 5 + 7);
+    if (h % 1000u >= per_mille) { return -1; }
+    let flick = ihash(tx + 977, ty + i32(floor(g.anim.x * 0.5))) % 160u == 0u;
+    if (flick) { return -1; }
+    // One lamp in four is the warmer copper step.
+    return select(1, 3, ((h >> 12u) & 3u) == 0u);
 }
 
 fn ramp_of(cls: u32) -> u32 {
@@ -234,11 +427,17 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let tcf = ground_tc(ll);
     let fw = fwidth(tcf);
     let fuv = fwidth(in.uv);
+    let flo = fwidth(in.local);
     let n = normalize(in.normal);
     let sun = normalize(g.sun.xyz);
     let ndl = dot(n, sun);
     let night = g.sun.w > 0.5;
     let px_km = max(length(dpx.xy), length(dpy.xy));
+
+    if (in.kind == 15u) {
+        // A lamp (vehicle light, beacon): flat in its step of the signal ramp, day and night.
+        return vec4<f32>(pal(RAMP_SIGNAL, i32(round(in.colour.r * 255.0))), 1.0);
+    }
 
     if (in.kind == 4u) {
         // Cloud sheet: smooth hard-edged shapes. Sun side rim bright, body mid, a three pixel
@@ -297,17 +496,37 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
             // Shoreline: a one pixel lighter rim where the next pixel is land.
             if (!is_water(mr) || !is_water(md) || !is_water(ml) || !is_water(mu)) { w = 3; }
             else if (g.tex.y > 0.5) {
-                // Wave dashes in world space (static for now, ready to move later), only in
-                // open water away from any shore and only while the camera is close enough
-                // for a texel to be a few pixels wide.
+                // Shallows: the water within two texels of land is one step lighter, tested from
+                // the texel centre so the band's edge is a clean staircase of whole texels.
+                let q = (floor(in.world.xy / g.tex.x) + 0.5) * g.tex.x;
+                let r2 = g.tex.x * 2.0;
+                let shallow = !is_water(mask_at(lonlat(q + vec2<f32>(r2, 0.0))))
+                    || !is_water(mask_at(lonlat(q - vec2<f32>(r2, 0.0))))
+                    || !is_water(mask_at(lonlat(q + vec2<f32>(0.0, r2))))
+                    || !is_water(mask_at(lonlat(q - vec2<f32>(0.0, r2))))
+                    || !is_water(mask_at(lonlat(q + vec2<f32>(r2, r2) * 0.7)))
+                    || !is_water(mask_at(lonlat(q - vec2<f32>(r2, r2) * 0.7)))
+                    || !is_water(mask_at(lonlat(q + vec2<f32>(r2, -r2) * 0.7)))
+                    || !is_water(mask_at(lonlat(q + vec2<f32>(-r2, r2) * 0.7)));
+                if (shallow) { w = min(w + 1, 3); }
+                // Open water: a sparse static scatter of wave texels, each block of rows
+                // shifted so the dashes do not line up. Not in the shallows or near any shore.
                 let tx = i32(floor(in.world.x / g.tex.x));
                 let ty = i32(floor(in.world.y / g.tex.x));
-                let shift = i32(hash3(vec3<f32>(f32(ty >> 3), 3.0, 1.0)) * 8.0);
+                let hb = ihash(tx >> 3, ty >> 3);
+                // The swell steps along: a texel at a time, every 1.5 s at sea and every 4.5 s on
+                // a lake, each block of the world its own way, and a row now and then. The
+                // periods divide the clock wrap by a multiple of 8, so the wrap is invisible.
+                let lake = m.b > 1.5;
+                let ws = i32(floor(g.anim.x / select(1.5, 4.5, lake)));
+                let wy = i32(floor(g.anim.x / select(9.0, 18.0, lake)));
+                let shift = i32(hb & 7u) + ws * select(1, -1, ((hb >> 6u) & 1u) == 1u);
                 let far = !is_water(mask_at(lonlat(in.world.xy + dpx.xy * 8.0)))
                     || !is_water(mask_at(lonlat(in.world.xy - dpx.xy * 8.0)))
                     || !is_water(mask_at(lonlat(in.world.xy + dpy.xy * 8.0)))
                     || !is_water(mask_at(lonlat(in.world.xy - dpy.xy * 8.0)));
-                if (tile_value(TILE_WAVE, tx + shift, ty) == 2u && !far) { w = min(w + 1, 3); }
+                let wv = tile_value(TILE_WAVE, tx + shift, ty + i32((hb >> 3u) & 3u) * 2 + wy);
+                if (wv == 2u && !far && !shallow) { w = min(w + 1, 3); }
             }
             return vec4<f32>(pal(RAMP_WATER, w), 1.0);
         }
@@ -324,6 +543,12 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         if (heat) { ramp = u32(g.cloud2.w); base = clamp(i32(round(m.a)) - 2, 1, 3); }
 
         let tc = vec2<i32>(floor(tcf));
+        if (cls == 1u && !player && !heat && g.tex.y > 0.5 && g.tex.x <= 1.0) {
+            // Crops by the season, only while the texel is small: far out the fields are one green.
+            let crop = crop_state(variant_at(tc));
+            if (crop == 1u) { base = 3; }
+            if (crop == 2u) { base = 1; }
+        }
         if (in.kind == 1u) {
             // Terrace wall: one shade darker than the ground above, with a one pixel highlight
             // along its top edge. Crisp, flat.
@@ -357,12 +582,48 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         var step = base;
         if (sh < 0.5 || ndl <= 0.0) { step = step - 1; }
         step = step - shade;
+        // Far out the city is a scatter of lit texels on its flat colour, three times as many as up
+        // close where the streets and blocks take their share.
+        if (night && cls >= 5u && !heat && g.tex.y < 0.5) {
+            let lx = i32(floor(in.world.x / g.tex.x));
+            let ly = i32(floor(in.world.y / g.tex.x));
+            let lamp = city_light(cls, variant_at(tc) & 3u, lx, ly, 3u);
+            if (lamp >= 0) { return vec4<f32>(pal(RAMP_SIGNAL, lamp), 1.0); }
+        }
         // Pixel texture of the class, in world space, at a texel that is always a few screen
         // pixels wide; gone (flat class colour) once the camera is too far out.
         if (g.tex.y > 0.5 && !heat) {
             let tx = i32(floor(in.world.x / g.tex.x));
             let ty = i32(floor(in.world.y / g.tex.x));
-            let tv = class_texel(cls, variant_at(tc), tx, ty);
+            var tv = 0;
+            if (cls >= 5u) {
+                // Streets are laid out on a fixed lattice of the world (a cell is about 31 m, a
+                // block four to twenty cells), so a city block is the same piece of ground at
+                // every zoom. Streets show while a cell is at least a pixel wide; further out
+                // only the avenues, at one pixel; further still the city is its flat colour.
+                let ckm = 0.03125;
+                let cpx = ckm / max(length(dpx.xy), 1e-6);
+                var ct = vec2<i32>(0, 0);
+                let cx = i32(floor(in.world.x / ckm));
+                let cy = i32(floor(in.world.y / ckm));
+                if (cpx >= 1.0) {
+                    ct = city_texel(cls, variant_at(tc) & 3u, cx, cy, 2, true);
+                } else if (cpx >= 0.16) {
+                    ct = city_texel(cls, variant_at(tc) & 3u, cx, cy, i32(ceil(1.2 / cpx)), false);
+                }
+                tv = clamp(ct.x, -2, 1);
+                if (night && ct.y == 0 && ct.x >= 0) {
+                    let lamp = city_light(cls, variant_at(tc) & 3u, tx, ty, 1u);
+                    if (lamp >= 0) { return vec4<f32>(pal(RAMP_SIGNAL, lamp), 1.0); }
+                }
+                if (ct.y != 0 && !player) {
+                    if (ct.y == 2) { return vec4<f32>(pal(RAMP_FOREST, step - 1), 1.0); }
+                    if (ct.y == 3) { return vec4<f32>(pal(RAMP_FOREST, step), 1.0); }
+                    return vec4<f32>(pal(RAMP_FIELD, step - 1), 1.0);
+                }
+            } else {
+                tv = class_texel(cls, variant_at(tc), tx, ty);
+            }
             if (player) {
                 // Gold holdings: every other textured texel shows the land through.
                 if (tv != 0 && cls < 5u && ((tx + ty) & 1) == 0) { return vec4<f32>(pal(ramp_of(cls), 2 - shade), 1.0); }
@@ -387,16 +648,31 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let base = nearest_colour(in.colour);
     var step2 = clamp(base.y + shade - 1, 0, 3);
     var out_c = pal(u32(base.x), step2);
-    if (night && in.kind == 2u && abs(n.z) < 0.5) {
-        // Lit windows: a one voxel grid on the side faces, about half of them lit.
+    if (in.kind == 2u && abs(n.z) < 0.5) {
+        // Window rows on the side faces: a one voxel texel in every two by two cells, dark by
+        // day; at night about half of them are lit and the rest stay dark.
         var u = in.local.x;
         if (abs(n.x) > 0.5) { u = in.local.y; }
         let cell = vec3<f32>(floor(u * 0.5), floor(in.local.z * 0.5), floor(in.local.x + in.local.y));
         let inside = (fract(u * 0.5) < 0.5) && (fract(in.local.z * 0.5) > 0.5);
-        if (inside && hash3(cell) > 0.45) { out_c = pal(RAMP_SIGNAL, 1); }
+        if (inside) {
+            // A lit window flips now and then (about one in a hundred, for two seconds at a time).
+            let flick = hash3(cell + vec3<f32>(17.0, floor(g.anim.x * 0.5), 3.0)) > 0.992;
+            let lit_now = (hash3(cell) > 0.45) != flick;
+            if (night && lit_now) { out_c = pal(RAMP_SIGNAL, 1); }
+            else if (flo.z < 0.34) { out_c = pal(RAMP_INK, 2 - select(0, 1, sh < 0.5)); }
+        }
     }
-    let ex = min(in.uv.x, 1.0 - in.uv.x) / max(fuv.x, 1e-5);
-    let ey = min(in.uv.y, 1.0 - in.uv.y) / max(fuv.y, 1e-5);
+    // Countryside props (trees, farms, houses) are small and many: flat steps and hard shadows
+    // carry them, with no ink outline.
+    if (in.kind == 8u) { return vec4<f32>(out_c, 1.0); }
+    // A face under four and a half pixels across keeps no outline along that axis, so a distant
+    // downtown block stays a lit shape instead of a black blot; the neighbouring faces still
+    // carry the silhouette.
+    var ex = 9.0;
+    var ey = 9.0;
+    if (1.0 / max(fuv.x, 1e-5) >= 4.5) { ex = min(in.uv.x, 1.0 - in.uv.x) / max(fuv.x, 1e-5); }
+    if (1.0 / max(fuv.y, 1e-5) >= 4.5) { ey = min(in.uv.y, 1.0 - in.uv.y) / max(fuv.y, 1e-5); }
     if (min(ex, ey) < 1.0) { out_c = pal(RAMP_INK, 0); }
     return vec4<f32>(out_c, 1.0);
 }
@@ -418,9 +694,17 @@ fn screen_of(c: vec4<f32>) -> vec2<f32> {
     return vec2<f32>((c.x / c.w * 0.5 + 0.5) * g.tex.z, (0.5 - c.y / c.w * 0.5) * g.tex.w);
 }
 
+// River ribbon width in pixels: the interstate's width, wider up close.
+fn river_width() -> f32 {
+    return select(g.road.x, g.road.x + 4.0, g.road.x > 6.5);
+}
+
 fn road_width(cls: u32) -> f32 {
-    if (cls == 0u) { return g.road.x; }
-    if (cls == 1u) { return g.road.y; }
+    if (cls == 3u) { return river_width(); }
+    // Bridge decks (4 + the carried road's class) are as wide as their road.
+    let c = select(cls, cls - 4u, cls >= 4u);
+    if (c == 0u) { return g.road.x; }
+    if (c == 1u) { return g.road.y; }
     return g.road.z;
 }
 
@@ -434,7 +718,8 @@ fn vs_road(v: VIn) -> ROut {
     o.kind = cls;
     o.across = 0.0;
     o.along = v.local.z;
-    if (this_c.w < 1e-3 || other_c.w < 1e-3 || road_width(cls) < 0.5) {
+    let bridge_deck = cls >= 4u;
+    if (this_c.w < 1e-3 || other_c.w < 1e-3 || road_width(cls) < 0.5 || (bridge_deck && river_width() < 0.5)) {
         o.clip = vec4<f32>(2.0, 2.0, 2.0, 1.0);
         return o;
     }
@@ -446,8 +731,10 @@ fn vs_road(v: VIn) -> ROut {
     d = normalize(d);
     let nrm = vec2<f32>(-d.y, d.x);
     let ext = road_width(cls) * 0.5 + 1.0;
+    // A deck runs along its road for the river's width plus two pixels of bank each side.
+    let ext_along = select(ext, river_width() * 0.5 * v.local.z + 2.0, bridge_deck);
     let end_sign = select(-1.0, 1.0, v.local.y > 0.5);
-    let p = p_this + nrm * v.local.x * ext + d * end_sign * ext;
+    let p = p_this + nrm * v.local.x * ext + d * end_sign * ext_along;
     let ndc = vec2<f32>(p.x / g.tex.z * 2.0 - 1.0, 1.0 - p.y / g.tex.w * 2.0);
     o.clip = vec4<f32>(ndc * this_c.w, this_c.z, this_c.w);
     o.across = v.local.x * ext;
@@ -459,33 +746,104 @@ struct RFOut {
     @builtin(frag_depth) depth: f32,
 };
 
+// Narrow water between two shores, tested at about 8 km each way: a road or rail line crossing
+// it is a bridge, drawn over the water. Open lake and sea stay clear of lines.
+fn narrow_water(p: vec2<f32>) -> bool {
+    let r = 8.0;
+    let e = !is_water(mask_at(lonlat(p + vec2<f32>(r, 0.0))));
+    let w = !is_water(mask_at(lonlat(p - vec2<f32>(r, 0.0))));
+    let n = !is_water(mask_at(lonlat(p + vec2<f32>(0.0, r))));
+    let s = !is_water(mask_at(lonlat(p - vec2<f32>(0.0, r))));
+    let ne = !is_water(mask_at(lonlat(p + vec2<f32>(r, r) * 0.7)));
+    let sw = !is_water(mask_at(lonlat(p - vec2<f32>(r, r) * 0.7)));
+    let nw = !is_water(mask_at(lonlat(p + vec2<f32>(-r, r) * 0.7)));
+    let se = !is_water(mask_at(lonlat(p + vec2<f32>(r, -r) * 0.7)));
+    return (e && w) || (n && s) || (ne && sw) || (nw && se);
+}
+
 @fragment
 fn fs_road(in: ROut) -> RFOut {
+    let fwa = fwidth(in.along);
     let ll = lonlat(in.world.xy);
     let m = mask_at(ll);
     let w = road_width(in.kind);
     let hw = w * 0.5;
     let d = abs(in.across);
-    if (is_water(m) || d >= hw) { discard; }
+    var bridge = false;
+    if (in.kind == 3u) {
+        // River: water body with a lighter rim on each bank once it is wide enough; the open
+        // lake and sea keep their own water.
+        if (d >= hw || is_water(m)) { discard; }
+        var rc = pal(RAMP_WATER, 2);
+        if (w > 4.5 && d >= hw - 1.0) { rc = pal(RAMP_WATER, 3); }
+        var rout: RFOut;
+        rout.colour = vec4<f32>(rc, 1.0);
+        rout.depth = in.clip.z - 2.0e-5;
+        return rout;
+    }
+    if (in.kind >= 4u) {
+        // Bridge deck over a river: ink kerb, light deck.
+        if (d >= hw) { discard; }
+        var dc = pal(RAMP_ROCK, 3);
+        if (w > 2.5 && d >= hw - 1.0) { dc = pal(RAMP_INK, 3); }
+        var dout: RFOut;
+        dout.colour = vec4<f32>(dc, 1.0);
+        dout.depth = in.clip.z - 4.0e-4;
+        return dout;
+    }
+    if (is_water(m)) {
+        if (d >= hw || !narrow_water(in.world.xy)) { discard; }
+        bridge = true;
+    }
+    if (d >= hw) { discard; }
     var c = pal(RAMP_ROCK, 2);
     let detail = g.road.w > 0.5;
     if (in.kind == 0u) {
-        // Interstate: mid grey asphalt, a slightly darker one pixel edge and, up close, a gold
-        // dashed centre line.
-        if (w > 2.5 && d >= hw - 1.0) { c = pal(RAMP_ROCK, 1); }
-        else if (detail && w > 4.5 && d < 0.75 && fract(in.along / 7.0) < 0.5) { c = pal(RAMP_GOLD, 3); }
+        // Interstate: mid grey asphalt with a darker one pixel kerb. Up close a light edge line
+        // inside each kerb and a gold dashed centre line.
+        // A light carriageway inside a dark casing, like a road atlas: it reads on fields and
+        // on city ground alike. The gold centre dashes show only once the road is wide.
+        c = pal(RAMP_ROCK, 3);
+        if (w > 4.0 && d >= hw - 1.0) { c = pal(RAMP_INK, 3); }
+        else if (detail && w > 6.5 && d < 0.75 && fract(in.along / 7.0) < 0.5) { c = pal(RAMP_GOLD, 3); }
     } else if (in.kind == 1u) {
         // Main road: one step lighter than the ground it crosses, so it reads as a faint line.
+        // Up close it widens to a grey road with a darker kerb.
         let cls = class_at(vec2<i32>(floor(ground_tc(ll))));
         var ramp = ramp_of(cls);
         var base = 2;
         if (m.a > 1.5 && m.a < 2.5) { ramp = RAMP_GOLD; base = gold_base(cls); }
         c = pal(ramp, base + 1);
+        if (w > 1.6) { c = pal(RAMP_CLOUD, 2); }
+        if (w > 3.2 && d >= hw - 0.8) { c = pal(RAMP_ROCK, 1); }
     } else {
         // Railway: a thin light grey-brown line, with sleepers across it up close.
         c = pal(RAMP_SOIL, 3);
         if (detail && d >= 0.75) {
             if (fract(in.along / 3.5) < 0.43) { c = pal(RAMP_SOIL, 2); } else { discard; }
+        }
+    }
+    if (bridge) {
+        // Bridge deck: the kerb is ink, the deck a step lighter than the road, so it reads as a
+        // structure crossing the water.
+        if (in.kind != 2u && w > 2.5) {
+            if (d >= hw - 1.0) { c = pal(RAMP_INK, 3); } else { c = pal(RAMP_URBAN, 3); }
+        } else if (in.kind == 2u) {
+            c = pal(RAMP_URBAN, 3);
+        }
+    }
+    if (g.sun.w > 0.5 && detail && g.road.x > 6.5 && !bridge && in.kind <= 1u && w > 2.5 && d >= hw - 1.0) {
+        // Streetlights at night: one lit pixel on a kerb every so often, alternating sides.
+        // Dense in town, sparse along an interstate in the country, none on a country road.
+        let urban = class_at(vec2<i32>(floor(ground_tc(ll)))) >= 5u;
+        var spacing = 0.0;
+        if (urban) { spacing = select(0.22, 0.3, in.kind == 0u); }
+        else if (in.kind == 0u) { spacing = 2.0; }
+        if (spacing > 0.0) {
+            let idx = i32(floor(in.along / spacing));
+            if (fract(in.along / spacing) < fwa / spacing && ((idx & 1) == 0) == (in.across > 0.0)) {
+                c = pal(RAMP_SIGNAL, 1);
+            }
         }
     }
     var out: RFOut;

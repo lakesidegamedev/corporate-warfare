@@ -75,129 +75,150 @@ object Images {
     }
 }
 
-/** The main menu: a turning globe, the company's way in, and the new-game flow. */
+/** Which page of the main menu is open. */
+internal enum class MenuPage { Main, Load, NewCareer, Scenarios, Hall, Editor }
+
+/**
+ * The main menu (2.0): one column of choices on a solid panel. A returning player gets Continue with a strip of
+ * the last save (company, game date, net worth, ambition and medal, play time); a new player gets New career,
+ * whose first step has Quick start. The globe turns behind it on a desktop; a phone shows the plain panel.
+ */
 @Composable
-internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> Unit, onQuit: (() -> Unit)?) {
-    var setup by remember { mutableStateOf(false) }
-    var loading by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf(false) }
-    var careers by remember { mutableStateOf(false) }
+internal fun StartScreen(store: GameStore, updater: Updater?, onSettings: () -> Unit, onQuit: (() -> Unit)?, startPage: MenuPage = MenuPage.Main) {
+    var page by remember { mutableStateOf(if (store.openNewGame) MenuPage.NewCareer else startPage) }
+    LaunchedEffect(Unit) { store.openNewGame = false }
+    // A scenario picked on the Scenarios page opens New career on its second step.
+    var scenarioPick by remember { mutableStateOf<String?>(null) }
+    var customPick by remember { mutableStateOf<uniffi.cw_ffi.CustomScenarioDto?>(null) }
+    var editing by remember { mutableStateOf<Pair<String?, uniffi.cw_ffi.CustomScenarioDto?>>(null to null) }
     val settings = LocalAppSettings.current
-    if (careers) {
-        BackAction { careers = false }
-        CareerListScreen(settings?.careers.orEmpty()) { careers = false }
-        return
-    }
-    if (editing) {
-        ScenarioEditorScreen(store, baseId = null, existing = null, onBack = { editing = false })
-        return
-    }
-    if (loading) {
-        LoadGameScreen(store) { loading = false }
-        return
-    }
-    if (setup) {
-        NewGameScreen(store, onBack = { setup = false })
-        return
+    // What's new, once, after an update: shown when this version has not been seen, never on a first install.
+    val news = remember { settings?.takeIf { it.whatsNewDue(BuildInfo.VERSION) }?.let { WhatsNew.topChanges(BuildChangelog.text, BuildInfo.VERSION) }.orEmpty() }
+    var newsOpen by remember { mutableStateOf(news.isNotEmpty()) }
+    var changelogOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { if (news.isNotEmpty()) settings?.markWhatsNewSeen(BuildInfo.VERSION) }
+    if (changelogOpen) { BackAction { changelogOpen = false }; ChangelogScreen(BuildChangelog.text) { changelogOpen = false }; return }
+    when (page) {
+        MenuPage.Hall -> { BackAction { page = MenuPage.Main }; CareerListScreen(settings?.careers.orEmpty()) { page = MenuPage.Main }; return }
+        MenuPage.Editor -> { ScenarioEditorScreen(store, baseId = editing.first, existing = editing.second, onBack = { page = MenuPage.Scenarios }); return }
+        MenuPage.Load -> { LoadGameScreen(store) { page = MenuPage.Main }; return }
+        MenuPage.NewCareer -> {
+            NewGameScreen(
+                store, startStep = if (scenarioPick != null || customPick != null) 1 else 0, startScenario = scenarioPick, startCustom = customPick,
+                onBack = { page = MenuPage.Main; scenarioPick = null; customPick = null },
+            )
+            return
+        }
+        MenuPage.Scenarios -> {
+            ScenariosScreen(
+                store, onBack = { page = MenuPage.Main },
+                onPlay = { id -> scenarioPick = id; customPick = null; page = MenuPage.NewCareer },
+                onPlayCustom = { c -> customPick = c; scenarioPick = null; page = MenuPage.NewCareer },
+                onEdit = { base, existing -> editing = base to existing; page = MenuPage.Editor },
+            )
+            return
+        }
+        MenuPage.Main -> Unit
     }
     LaunchedEffect(Unit) { StartupTimeline.menuShown() }
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF05090E))) {
+    val slots = remember(page) { store.saveSlots() }
+    val last = slots.firstOrNull()
+    var updates by remember { mutableStateOf(false) }
+    BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
-        GlobeBackdrop(Modifier.fillMaxSize(), offsetX = if (wide) 0.22f else 0f)
-        // Shade the left side so the menu reads over the globe.
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    0f to Color(0xF205090E),
-                    (if (wide) 0.45f else 0.9f) to Color(0xB305090E),
-                    1f to Color(0x2005090E),
-                ),
-            ),
-        )
+        if (wide) GlobeBackdrop(Modifier.fillMaxSize(), offsetX = 0.22f, calm = true, focus = last?.info?.scenario?.ifEmpty { null })
         Column(
-            Modifier.fillMaxHeight().width(if (wide) 460.dp else maxWidth).windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
-                .padding(horizontal = if (wide) 48.dp else 24.dp, vertical = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier.then(if (wide) Modifier.align(Alignment.CenterStart) else Modifier.fillMaxHeight()).width(if (wide) 520.dp else maxWidth)
+                .then(if (wide) Modifier.padding(start = 56.dp, top = 32.dp, bottom = 32.dp).pixelFrame(Palette.ink, Palette.stroke, shadow = 6.dp) else Modifier)
+                .windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
+                .padding(horizontal = if (wide) 32.dp else 18.dp, vertical = if (wide) 28.dp else 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            ShiningLogo(Modifier.width(if (wide) 300.dp else 240.dp))
-            FlyingBadges(spread = if (wide) 1f else 0.45f)
-            Spacer(Modifier.height(10.dp))
-            if (store.hasAutosave) {
-                MenuButton("Continue", primary = true, enabled = !store.busy) { store.continueCareer() }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LogoArt(Modifier.width(if (wide) 190.dp else 150.dp))
+                Spacer(Modifier.width(16.dp))
+                if (wide) FlyingBadges(spread = 0.3f, count = 4)
             }
-            MenuButton("New game", primary = !store.hasAutosave) { setup = true }
-            if (store.hasAutosave) MenuButton("Load game") { loading = true }
-            if (settings?.careers?.isNotEmpty() == true) MenuButton("Hall of Careers") { careers = true }
-            MenuButton("Scenario editor") { editing = true }
-            MenuButton("Settings", onClick = onSettings)
-            if (onQuit != null) MenuButton("Quit", onClick = onQuit)
             Spacer(Modifier.height(6.dp))
+            if (last != null) ContinueCard(last.info, enabled = !store.busy) { store.continueCareer() }
+            MenuButton("New career", primary = last == null, detail = if (last == null && wide) "Quick start on the first step" else null) { page = MenuPage.NewCareer }
+            if (slots.isNotEmpty()) MenuButton("Load", detail = "${slots.size} save${if (slots.size == 1) "" else "s"}") { page = MenuPage.Load }
+            MenuButton("Scenarios", detail = "${uniffi.cw_ffi.scenarios().count { it.available }} to play, and your own") { page = MenuPage.Scenarios }
+            if (settings?.careers?.isNotEmpty() == true) MenuButton("Hall of Careers", detail = "${settings.careers.size} careers") { page = MenuPage.Hall }
+            MenuButton("Settings", onClick = onSettings)
             if (updater != null) {
-                Column(
-                    Modifier.fillMaxWidth().clip(Pixel.shape).background(Palette.panel.copy(alpha = 0.85f))
-                        .border(1.dp, Palette.stroke, Pixel.shape).padding(12.dp),
-                ) { UpdatePanel(updater) }
+                MenuButton("Updates and version", detail = updateDetail(updater)) { updates = !updates }
+                if (updates) Column(Modifier.fillMaxWidth().pixelFrame(Palette.panel, Palette.stroke).padding(12.dp)) { UpdatePanel(updater) }
             }
+            // Reserved: the Lakeside account entry (sign in, store) goes here, one row, once accounts exist.
+            AccountEntry()
+            if (onQuit != null) MenuButton("Quit", onClick = onQuit)
+            Spacer(Modifier.height(4.dp))
+            if (updater == null && LauncherSession.current.managed) Text(
+                "The Lakeside launcher keeps this copy up to date.",
+                color = Palette.secondary, fontSize = 11.sp,
+            )
+            if (updater == null) Text(
+                "Version ${BuildInfo.VERSION}" + if (BuildInfo.CHANNEL == "preview") ", tester preview" else "",
+                color = Palette.secondary, fontSize = 11.sp,
+            )
+        }
+        if (newsOpen) WhatsNewPanel(BuildInfo.VERSION, news, onClose = { newsOpen = false }, onFull = { newsOpen = false; changelogOpen = true })
+    }
+}
+
+private fun updateDetail(updater: Updater): String = when (val s = updater.status) {
+    is UpdateStatus.Available -> "${s.release.version} is out"
+    UpdateStatus.Current -> "${updater.current}, up to date"
+    UpdateStatus.Checking -> "${updater.current}, checking"
+    else -> updater.current
+}
+
+/** Continue, with the last save in one strip: who, when, how rich, how the ambition stands, how long played. */
+@Composable
+private fun ContinueCard(info: SaveInfo, enabled: Boolean, onClick: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(end = 3.dp, bottom = 3.dp).pixelFrame(Palette.gold, Color(0xFF8A6420)).clip(Pixel.shape)
+            .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("CONTINUE", color = Palette.ink, fontSize = 18.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(info.week, color = Palette.ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Text(info.title + if (info.scenario.isNotEmpty()) "  |  ${info.scenario}" else "", color = Palette.ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        if (info.detailed) {
+            val ambition = if (info.ambition.isEmpty()) "No ambition" else "${ambitionWords(info.ambition)}: ${medalWords(info.medal).lowercase()}"
             Text(
-                "Version ${BuildInfo.VERSION}" + if (BuildInfo.CHANNEL == "preview") " · tester preview" else "",
-                color = Palette.secondary.copy(alpha = 0.7f),
-                fontSize = 11.sp,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                "Net worth ${Format.compact(info.netWorthCents, info.currency)}  |  $ambition  |  ${Saves.playTime(info.playSeconds)} played",
+                color = Palette.ink, fontSize = 12.sp, maxLines = 1,
             )
         }
     }
 }
 
-/** The logo with a band of light sweeping across it every six seconds. */
 @Composable
-private fun ShiningLogo(modifier: Modifier) {
-    val graphics = LocalAppSettings.current?.graphics ?: GraphicsConfig.Default
-    val shine = graphics.animations && graphics.lighting > 0
-    val clock = rememberFrameSeconds(shine, graphics.frameRate)
-    LogoArt(
-        modifier.graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
-            .drawWithContent {
-                drawContent()
-                if (!shine) return@drawWithContent
-                val phase = ((clock.value % 6.0) / 1.3).toFloat()
-                if (phase >= 1f) return@drawWithContent
-                val band = size.width * 0.3f
-                val x = -band + phase * (size.width + band * 2)
-                drawRect(
-                    Brush.linearGradient(
-                        0f to Color.Transparent, 0.5f to Color.White.copy(alpha = 0.55f), 1f to Color.Transparent,
-                        start = androidx.compose.ui.geometry.Offset(x, 0f), end = androidx.compose.ui.geometry.Offset(x + band, size.height),
-                    ),
-                    blendMode = androidx.compose.ui.graphics.BlendMode.SrcAtop,
-                )
-            },
-    )
-}
-
-@Composable
-private fun MenuButton(title: String, primary: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
-    val shape = Pixel.shape
-    Box(
+private fun MenuButton(title: String, primary: Boolean = false, enabled: Boolean = true, detail: String? = null, onClick: () -> Unit) {
+    Row(
         Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.5f)
             .padding(end = 3.dp, bottom = 3.dp)
             .pixelFrame(if (primary) Palette.gold else Palette.panel, if (primary) Color(0xFF8A6420) else Palette.stroke)
-            .clip(shape)
+            .clip(Pixel.shape)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 15.dp),
-        contentAlignment = Alignment.Center,
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title.uppercase(), color = if (primary) Palette.ink else Palette.primaryText, fontSize = 16.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Text(title.uppercase(), color = if (primary) Palette.ink else Palette.primaryText, fontSize = 15.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
+        if (detail != null) Text(detail, color = if (primary) Palette.ink else Palette.secondary, fontSize = 12.sp, maxLines = 1)
     }
 }
 
 /**
- * The sector icons fly in from across the screen and around the globe on curved paths, one
- * after another, and settle into a row under the logo.
+ * The sector icons fly in from across the screen on curved paths, one after another, and settle into a row.
  */
 @Composable
-private fun FlyingBadges(spread: Float) {
-    val sectors = Sectors.order.take(8)
+private fun FlyingBadges(spread: Float, count: Int = 8) {
+    val sectors = Sectors.order.take(count)
     val animate = LocalAppSettings.current?.animations != false
     val progress = remember { sectors.map { androidx.compose.animation.core.Animatable(if (animate) 0f else 1f) } }
     LaunchedEffect(animate) {
@@ -212,19 +233,17 @@ private fun FlyingBadges(spread: Float) {
     val starts = remember {
         val rng = java.util.Random(31)
         sectors.indices.map {
-            // Start out over the globe to the right, spread around it, curving in.
             val angle = rng.nextDouble() * Math.PI * 2
             val distance = 420 + rng.nextDouble() * 520
             Triple((620 + kotlin.math.cos(angle) * distance).toFloat(), (kotlin.math.sin(angle) * distance * 0.6).toFloat(), (rng.nextDouble() * 720 - 360).toFloat())
         }
     }
     val density = androidx.compose.ui.platform.LocalDensity.current
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         sectors.forEachIndexed { index, sector ->
             val p = progress[index].value
             val (sx, sy, spin) = starts[index]
             val inv = 1f - p
-            // A quadratic curve: out over the globe, swinging up and round into place.
             val cx = sx * 0.3f
             val cy = sy - 260f
             val x = inv * inv * sx + 2 * inv * p * cx
@@ -234,28 +253,135 @@ private fun FlyingBadges(spread: Float) {
                     translationX = with(density) { (x * spread).dp.toPx() }
                     translationY = with(density) { (y * spread).dp.toPx() }
                     rotationZ = spin * inv
-                    scaleX = 0.6f + 0.4f * p + 0.25f * kotlin.math.sin(p * Math.PI).toFloat()
+                    scaleX = 0.6f + 0.4f * p
                     scaleY = scaleX
-                    alpha = (p * 3).coerceAtMost(1f)
                 },
             ) { SectorBadge(sector, 30) }
         }
     }
 }
 
-
-// MARK: New game
-
-private enum class Mode(val title: String, val note: String, val guided: Boolean, val fiveYear: Boolean) {
-    Guided("Take over a company", "Start running 60 percent of an established company, with the walkthrough.", true, false),
-    Founder("Found your own", "Start with cash and no company. Pick a region and a strategy and build from nothing.", false, false),
-    Scored("Five-year score", "Take over a company and be scored at the end of year five. You can play on after.", true, true),
+/** The first sentence of a piece of content, for a two-line description. */
+internal fun firstSentence(text: String): String {
+    val first = text.indexOf(". ").let { if (it < 0) text else text.substring(0, it + 1) }
+    if (first.length >= 60 || first.length == text.length) return first
+    // A short first sentence takes the next one too, so every scenario gets two lines.
+    val second = text.indexOf(". ", first.length + 1).let { if (it < 0) text else text.substring(0, it + 1) }
+    return second
 }
 
-private enum class Level(val key: String, val title: String, val note: String) {
-    Easy("easy", "Easy", "\$8 million to start. Rivals defend but never attack your markets."),
-    Standard("standard", "Standard", "\$5 million to start. Cost cutters, consolidators and vultures fight for share."),
-    Hard("hard", "Hard", "\$3 million to start. Every rival undercuts, invades and raids."),
+/**
+ * Scenarios: the four scenarios with their start year, region, currency and size, what makes each different
+ * in two lines from content, and the player's own scenarios. Each has New career here and Customize.
+ */
+@Composable
+internal fun ScenariosScreen(
+    store: GameStore,
+    onBack: () -> Unit,
+    onPlay: (String) -> Unit,
+    onPlayCustom: (uniffi.cw_ffi.CustomScenarioDto) -> Unit,
+    onEdit: (String?, uniffi.cw_ffi.CustomScenarioDto?) -> Unit,
+) {
+    BackAction(onBack = onBack)
+    val catalogue = remember { scenarios() }
+    val customs = remember { uniffi.cw_ffi.customScenarioList(store.customDir) }
+    BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink).windowInsetsPadding(WindowInsets.safeDrawing)) {
+        val wide = maxWidth >= 900.dp
+        Column(Modifier.fillMaxSize()) {
+            MenuTopBar("Scenarios", onBack)
+            Column(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(if (wide) 24.dp else 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                val columns = if (wide) 2 else 1
+                catalogue.chunked(columns).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        row.forEach { s -> ScenarioCard(s, false, wide, Modifier.weight(1f), onPick = null, onPlay = { onPlay(s.id) }, onCustomize = { onEdit(s.id, null) }) }
+                        repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+                Eyebrow("Your scenarios")
+                if (customs.isEmpty()) {
+                    Text("A custom scenario starts from one of the four and changes its difficulty, economy, capital, rivals and laws. Customize on any scenario makes one.", color = Palette.secondary, fontSize = 13.sp)
+                }
+                customs.forEach { c -> CustomRow(c, catalogue, false, wide, onPick = null, onPlay = { onPlayCustom(c) }, onEdit = { onEdit(c.baseScenarioId, c) }) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomRow(
+    custom: uniffi.cw_ffi.CustomScenarioDto, catalogue: List<ScenarioDto>, selected: Boolean, wide: Boolean,
+    onPick: (() -> Unit)?, onPlay: (() -> Unit)?, onEdit: () -> Unit,
+) {
+    val base = catalogue.firstOrNull { it.id == custom.baseScenarioId }
+    Row(
+        Modifier.fillMaxWidth().padding(end = 3.dp, bottom = 3.dp).pixelFrame(if (selected) Color(0xFF2A2A1C) else Palette.panel, if (selected) Palette.gold else Palette.stroke)
+            .clip(Pixel.shape).then(if (onPick != null) Modifier.clickable(onClick = onPick) else Modifier).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(custom.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text("Based on ${base?.name ?: custom.baseScenarioId}" + (base?.let { ", starts ${it.startYear}" } ?: "") + ", ${custom.difficulty}", color = Palette.secondary, fontSize = 12.sp)
+        }
+        MenuBarButton("Edit", onClick = onEdit)
+        if (onPlay != null) GoldButton(if (wide) "New career here" else "Play", onClick = onPlay)
+    }
+}
+
+/** One scenario: its art on a solid frame, the facts, and two lines on what makes it different. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ScenarioCard(
+    scenario: ScenarioDto, selected: Boolean, wide: Boolean, modifier: Modifier,
+    onPick: (() -> Unit)?, onPlay: (() -> Unit)?, onCustomize: (() -> Unit)?,
+) {
+    Column(
+        modifier.padding(end = 3.dp, bottom = 3.dp).pixelFrame(if (selected) Color(0xFF2A2A1C) else Palette.panel, if (selected) Palette.gold else Palette.stroke, cut = 4.dp)
+            .clip(Pixel.shape).then(if (onPick != null && scenario.available) Modifier.clickable(onClick = onPick) else Modifier),
+    ) {
+        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Images.load(scenario.image)?.let {
+                Image(
+                    it, null, Modifier.width(if (wide) 200.dp else 110.dp).aspectRatio(1200f / 640f).clip(Pixel.small).alpha(if (scenario.available) 1f else 0.45f),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(scenario.name.uppercase(), color = if (selected) Palette.gold else Palette.primaryText, fontSize = if (wide) 16.sp else 14.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
+                Text("Starts ${scenario.startYear}  |  ${scenario.region}", color = Palette.secondary, fontSize = 12.sp, maxLines = 2)
+                Text("${scenario.currency}" + if (scenario.available) "  |  ${scenario.regionCount} regions" else "  |  not yet playable", color = Palette.secondary, fontSize = 12.sp)
+            }
+        }
+        Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(scenario.tagline, color = Palette.primaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(firstSentence(scenario.summary), color = Palette.secondary, fontSize = 12.sp, maxLines = 2)
+            if (scenario.available && (onPlay != null || onCustomize != null)) {
+                // Wraps to a second line when a phone or large text leaves too little width for both.
+                FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    onPlay?.let { GoldButton("New career here", onClick = it) }
+                    onCustomize?.let { MenuBarButton("Customize", onClick = it) }
+                }
+            }
+        }
+    }
+}
+
+
+// MARK: New career
+
+private enum class Mode(val title: String, val note: String, val guided: Boolean, val fiveYear: Boolean) {
+    Guided("Take over a company", "You run 60 percent of an established company from day one, with the walkthrough.", true, false),
+    Founder("Found your own", "Cash and no company. Pick a region and a strategy and build from nothing.", false, false),
+    Scored("Five-year score", "Take over a company and be scored at the end of year five. You can play on after.", true, true),
+    Helm("At the helm", "Buy control of one of three established companies, shown below with their price.", false, false),
+}
+
+private enum class Level(val key: String, val title: String, val rivals: String) {
+    Easy("easy", "Easy", "Rivals defend but never attack your markets."),
+    Standard("standard", "Standard", "Cost cutters, consolidators and vultures fight for share."),
+    Hard("hard", "Hard", "Every rival undercuts, invades and raids."),
 }
 
 private enum class Economy(val key: String, val title: String, val note: String) {
@@ -267,23 +393,34 @@ private enum class Economy(val key: String, val title: String, val note: String)
 
 private enum class PricePath(val key: String, val title: String, val note: String) {
     Historical("historical", "Historical", "Oil, steel, grain and the rest follow the real path of the period, on the real dates."),
-    Variance("historical_variance", "Historical with variance", "The same shape as history, with the timing and depth of each swing shifted by your game's seed."),
+    Variance("historical_variance", "With variance", "The same shape as history, with the timing and depth of each swing shifted by your game's seed."),
     Random("random", "Random", "Neutral prices that drift around where they began. Busts come only from the business cycle."),
 }
 
-private fun capitalOf(level: Level) = when (level) {
-    Level.Easy -> 8_000_000.0
-    Level.Standard -> 5_000_000.0
-    Level.Hard -> 3_000_000.0
-}
+/** The steps of New career. A custom scenario carries its own world and chief, so it stops after How you start. */
+private enum class CareerStep(val title: String) { Scenario("Scenario"), Start("How you start"), Ambition("Ambition"), World("World"), Chief("Chief") }
 
-/** Scenario, then the career's terms, then start. */
+/**
+ * New career (2.0): Scenario, How you start, Ambition and length, World, Chief. Every step is one clear choice
+ * with its consequences in figures from the engine. A summary line sits at the bottom of every step, with Back,
+ * Quick start and Next always in the same place; Quick start begins at once with every choice not yet made left
+ * at its default. The less used world options (economy, capital) sit behind one disclosure.
+ */
 @Composable
-internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> Unit) {
+internal fun NewGameScreen(
+    store: GameStore,
+    startStep: Int = 0,
+    startHelm: Boolean = false,
+    startFounder: Boolean = false,
+    startAmbition: String = "",
+    startScenario: String? = null,
+    startCustom: uniffi.cw_ffi.CustomScenarioDto? = null,
+    onBack: () -> Unit,
+) {
     val catalogue = remember { scenarios() }
-    var chosen by remember { mutableStateOf(catalogue.firstOrNull { it.available }) }
+    var chosen by remember { mutableStateOf(catalogue.firstOrNull { it.id == startScenario && it.available } ?: catalogue.firstOrNull { it.available }) }
     var customs by remember { mutableStateOf(uniffi.cw_ffi.customScenarioList(store.customDir)) }
-    var chosenCustom by remember { mutableStateOf<uniffi.cw_ffi.CustomScenarioDto?>(null) }
+    var chosenCustom by remember { mutableStateOf(startCustom) }
     var customizing by remember { mutableStateOf<Pair<String, uniffi.cw_ffi.CustomScenarioDto?>?>(null) }
     customizing?.let { (base, existing) ->
         ScenarioEditorScreen(store, baseId = base, existing = existing, onBack = {
@@ -292,180 +429,188 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
         })
         return
     }
+    val steps = if (chosenCustom != null) listOf(CareerStep.Scenario, CareerStep.Start) else CareerStep.entries
     var step by remember { mutableStateOf(startStep) }
-    BackAction { if (step == 0) onBack() else step = 0 }
-    var mode by remember { mutableStateOf(Mode.Guided) }
+    val at = steps[step.coerceIn(0, steps.lastIndex)]
+    BackAction { if (step == 0) onBack() else step-- }
+    var mode by remember { mutableStateOf(if (startHelm) Mode.Helm else if (startFounder) Mode.Founder else Mode.Guided) }
+    val difficulties = remember { uniffi.cw_ffi.difficulties() }
+    fun capitalOf(level: Level) = (difficulties.firstOrNull { it.key == level.key }?.startingCapitalCents ?: 0L) / 100.0
     var level by remember { mutableStateOf(Level.Standard) }
     var economy by remember { mutableStateOf(Economy.Historic) }
     // Null means the scenario's own default.
     var pricePathPick by remember { mutableStateOf<PricePath?>(null) }
     var history by remember { mutableStateOf(ScenarioHistory.Historical) }
     var capital by remember { mutableStateOf(capitalOf(Level.Standard)) }
+    var advanced by remember { mutableStateOf(false) }
+    // One seed for the whole visit, so the companies offered at the helm are the ones the career starts with.
+    val seed = remember { (System.nanoTime() % 9_999_999).toULong() }
+    val seed0 = (seed % 8UL).toInt()
     val chiefs = remember { chiefChoices() }
     var chiefPick by remember { mutableStateOf(0) }
     var chiefName by remember { mutableStateOf("") }
+    // A founder start names the company here; the founding form opens with it. Other starts take a company that exists.
+    var companyName by remember { mutableStateOf(SuggestedNames[seed0 % SuggestedNames.size]) }
+    val companyProblem = remember(companyName) { uniffi.cw_ffi.companyNameProblem(companyName) }
+    val career = remember { CareerChoice().also { it.ambition = startAmbition } }
+    fun gameOptions(pick: ScenarioDto) = NewGameDto(
+        seed = seed,
+        scenarioId = pick.id,
+        guided = mode.guided,
+        fiveYear = mode.fiveYear,
+        difficulty = level.key,
+        economy = economy.key,
+        startingCapitalCents = (capital * 100).toLong(),
+        pricePath = pricePathPick?.key ?: "",
+        timeline = history.key,
+        chiefName = chiefName.trim(),
+        chiefPortrait = chiefs.getOrNull(chiefPick)?.id ?: "",
+        chiefTemperament = chiefs.getOrNull(chiefPick)?.temperament ?: "",
+    )
+    val helmScenario = if (chosenCustom == null && mode == Mode.Helm) chosen else null
+    // The offers are worked out off the main thread, a moment after the last change, and again when a choice that changes them changes.
+    val loaded by androidx.compose.runtime.produceState<Result<List<uniffi.cw_ffi.HelmOfferDto>>?>(null, helmScenario?.id, level, economy, capital, pricePathPick, history) {
+        value = null
+        val pick = helmScenario ?: return@produceState
+        kotlinx.coroutines.delay(250)
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { runCatching { uniffi.cw_ffi.helmOffers(gameOptions(pick)) } }
+    }
+    val offers = loaded?.getOrNull()
+    val offersError = if (loaded?.isFailure == true) "The companies on offer could not be worked out here. Found your own instead." else null
+    LaunchedEffect(offers) {
+        val list = offers ?: return@LaunchedEffect
+        if (career.helmFirm == null || list.none { it.firm == career.helmFirm }) career.helmFirm = list.firstOrNull()?.firm
+    }
+    val scenario = chosen
+    val fallbackPath = PricePath.entries.firstOrNull { it.key == scenario?.defaultPricePath } ?: PricePath.Historical
+    val founderName = chosenCustom == null && mode == Mode.Founder
+    val canStart = (scenario != null || chosenCustom != null) && !store.busy && !(founderName && companyProblem != null) && (chosenCustom != null || mode != Mode.Helm || career.helmFirm != null)
+    fun start() {
+        chosenCustom?.let { store.startCustom(it, mode.guided, mode.fiveYear); return }
+        val pick = scenario ?: return
+        val named = if (founderName) companyName.trim() else null
+        if (career.isDefault(mode == Mode.Helm)) store.startCareer(gameOptions(pick), named)
+        else store.startCareerWith(gameOptions(pick), career.options(mode == Mode.Helm), named)
+    }
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(
-                Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = { if (step == 0) onBack() else step = 0 }) { BackLabel("Back", Palette.secondary) }
-                Spacer(Modifier.width(8.dp))
-                Text("New game", color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                StepDot(1, "Scenario", step == 0)
-                Spacer(Modifier.width(14.dp))
-                StepDot(2, "Setup", step == 1)
+            MenuTopBar("New career", { if (step == 0) onBack() else step-- }) {
+                if (wide) {
+                    steps.forEachIndexed { i, s ->
+                        StepTab(i + 1, s.title, i == step) { step = i }
+                        if (i < steps.lastIndex) Spacer(Modifier.width(10.dp))
+                    }
+                } else {
+                    Text("${step + 1} OF ${steps.size}", color = Palette.gold, fontSize = 12.sp, fontFamily = Pixel.font)
+                }
             }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(if (wide) 28.dp else 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    if (step == 0) {
-                        Text("Choose a scenario", color = Palette.primaryText, fontSize = 22.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
+            Column(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(if (wide) 28.dp else 14.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                StepTitle(at.title.uppercase() + if (!wide) "" else "", when (at) {
+                    CareerStep.Scenario -> "Where and when your career happens."
+                    CareerStep.Start -> "What you hold on the first day."
+                    CareerStep.Ambition -> "What the career is scored on, what each medal takes, and how long it runs."
+                    CareerStep.World -> "How hard your rivals fight, and how the world's prices and history move."
+                    CareerStep.Chief -> "Who runs your company. Their temperament is flavour; it does not change the rules."
+                })
+                when (at) {
+                    CareerStep.Scenario -> {
                         val columns = if (wide) 2 else 1
                         catalogue.chunked(columns).forEach { row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                row.forEach { scenario ->
-                                    ScenarioTile(
-                                        scenario, selected = chosenCustom == null && chosen?.id == scenario.id, modifier = Modifier.weight(1f),
-                                        onCustomize = { customizing = scenario.id to null },
-                                    ) {
-                                        if (scenario.available) {
-                                            chosen = scenario
-                                            chosenCustom = null
-                                            pricePathPick = null
-                                        }
-                                    }
+                                row.forEach { s ->
+                                    ScenarioCard(
+                                        s, selected = chosenCustom == null && chosen?.id == s.id, wide = wide, modifier = Modifier.weight(1f),
+                                        onPick = { chosen = s; chosenCustom = null; pricePathPick = null }, onPlay = null, onCustomize = null,
+                                    )
                                 }
                                 repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                             }
                         }
                         if (customs.isNotEmpty()) {
-                            Spacer(Modifier.height(4.dp))
-                            Text("Your scenarios", color = Palette.primaryText, fontSize = 22.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                customs.forEach { custom ->
-                                    val on = chosenCustom?.id == custom.id
-                                    val shape = Pixel.shape
-                                    Column(
-                                        Modifier.width(if (wide) 380.dp else 320.dp).clip(shape)
-                                            .background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.panel)
-                                            .border(if (on) 2.dp else 1.dp, if (on) Palette.gold else Palette.stroke, shape)
-                                            .clickable { chosenCustom = custom }.padding(14.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    ) {
-                                        Text(custom.name, color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                                        val base = catalogue.firstOrNull { it.id == custom.baseScenarioId }?.name ?: custom.baseScenarioId
-                                        Text("Custom · based on $base · ${custom.difficulty}", color = Palette.secondary, fontSize = 12.sp)
-                                        TextButton(onClick = { customizing = custom.baseScenarioId to custom }) {
-                                            Text("Edit", color = Palette.gold)
-                                        }
-                                    }
-                                }
+                            Eyebrow("Your scenarios")
+                            customs.forEach { c ->
+                                CustomRow(c, catalogue, chosenCustom?.id == c.id, wide, onPick = { chosenCustom = c }, onPlay = null, onEdit = { customizing = c.baseScenarioId to c })
                             }
                         }
-                    } else if (chosenCustom != null) {
-                        val custom = chosenCustom!!
-                        Text(custom.name, color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
-                        Text(
-                            "Difficulty, economy, capital, rivals and laws come from this scenario. Open the editor to change them.",
-                            color = Palette.secondary, fontSize = 13.sp,
-                        )
-                        Section("How you start") {
-                            Options(Mode.entries, mode, { it.title }, { it.note }, wide) { mode = it }
+                    }
+                    CareerStep.Start -> {
+                        chosenCustom?.let {
+                            Text("Difficulty, economy, capital, rivals and laws come from ${it.name}. Edit the scenario to change them.", color = Palette.secondary, fontSize = 13.sp)
                         }
-                    } else {
-                        val scenario = chosen
-                        if (scenario != null) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Images.load(scenario.image)?.let {
-                                    Image(it, null, Modifier.width(160.dp).aspectRatio(1200f / 640f).clip(Pixel.shape), contentScale = ContentScale.Crop)
-                                    Spacer(Modifier.width(14.dp))
-                                }
-                                Column {
-                                    Text(scenario.name, color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
-                                    Text("${scenario.region} · starts ${scenario.startYear} · ${scenario.currency}", color = Palette.secondary, fontSize = 13.sp)
-                                }
-                            }
+                        Options(Mode.entries.filter { chosenCustom == null || it != Mode.Helm }, mode, { it.title }, { it.note }, wide) { mode = it }
+                        if (mode == Mode.Helm && chosenCustom == null) {
+                            Eyebrow("The company you take over")
+                            HelmOfferGrid(offers, offersError, career.helmFirm, wide) { career.helmFirm = it }
                         }
-                        Section("How you start") {
-                            Options(Mode.entries, mode, { it.title }, { it.note }, wide) { mode = it }
-                        }
+                    }
+                    CareerStep.Ambition -> AmbitionPicker(mode == Mode.Helm, career, wide)
+                    CareerStep.World -> {
                         Section("Difficulty") {
-                            Options(Level.entries, level, { it.title }, { it.note }, wide) {
+                            Options(Level.entries, level, { it.title }, { "${Format.compact((capitalOf(it) * 100).toLong())} to start. ${it.rivals}" }, wide) {
                                 level = it
                                 capital = capitalOf(it)
                             }
                         }
-                        Section("The economy on day one") {
-                            Options(Economy.entries, economy, { it.title }, { it.note }, wide) { economy = it }
-                        }
                         Section("World commodity prices") {
-                            val fallback = PricePath.entries.firstOrNull { it.key == scenario?.defaultPricePath } ?: PricePath.Historical
-                            val picked = pricePathPick ?: fallback
-                            Options(PricePath.entries, picked, { it.title + if (it == fallback) " (scenario default)" else "" }, { it.note }, wide) { pricePathPick = it }
+                            Options(PricePath.entries, pricePathPick ?: fallbackPath, { it.title + if (it == fallbackPath) " (scenario default)" else "" }, { it.note }, wide) { pricePathPick = it }
                         }
-                        Section("Scenario history") {
+                        Section("Timeline of real events") {
                             Options(ScenarioHistory.entries, history, { it.title }, { it.note }, wide) { history = it }
                         }
-                        Section("Your chief executive") {
-                            ChiefPicker(chiefs, chiefPick, chiefName, { chiefPick = it }, { chiefName = it.take(40) })
+                        Row(
+                            Modifier.clip(Pixel.small).clickable { advanced = !advanced }.padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text((if (advanced) "- " else "+ ") + "MORE WORLD OPTIONS", color = Palette.gold, fontSize = 13.sp, fontFamily = Pixel.font)
+                            Spacer(Modifier.width(10.dp))
+                            Text("Economy on day one: ${economy.title}. Starting capital: ${Format.compact((capital * 100).toLong())}.", color = Palette.secondary, fontSize = 12.sp)
                         }
-                        Section("Starting capital") {
-                            ValueSlider(
-                                capital, { capital = it }, 1_000_000.0..20_000_000.0, 250_000.0,
-                                modifier = Modifier.widthIn(max = 760.dp),
-                                label = { Format.compact((it * 100).toLong()) },
-                                detail = {
-                                    if (mode.guided) "Your own cash. Taking over the company uses some of it; the rest is yours to invest."
-                                    else "Your own cash to found and fund companies."
-                                },
-                                ticks = 19,
-                            )
+                        if (advanced) {
+                            Section("The economy on day one") {
+                                Options(Economy.entries, economy, { it.title }, { it.note }, wide) { economy = it }
+                            }
+                            Section("Starting capital") {
+                                ValueSlider(
+                                    capital, { capital = it }, 1_000_000.0..20_000_000.0, 250_000.0,
+                                    modifier = Modifier.widthIn(max = 760.dp),
+                                    label = { Format.compact((it * 100).toLong()) },
+                                    detail = {
+                                        if (mode.guided) "Your own cash. Taking over the company uses some of it; the rest is yours to invest."
+                                        else "Your own cash to found and fund companies. ${level.title} gives ${Format.compact((capitalOf(level) * 100).toLong())}."
+                                    },
+                                    ticks = 19,
+                                )
+                            }
                         }
+                    }
+                    CareerStep.Chief -> {
+                        if (founderName) CompanyNameField(companyName, companyProblem) { companyName = it }
+                        ChiefPicker(chiefs, chiefPick, chiefName, { chiefPick = it }, { chiefName = it.take(40) })
                     }
                 }
             }
-            Row(
-                Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val scenario = chosen
-                Text(
-                    if (step == 0) chosenCustom?.let { "${it.name}: your scenario" } ?: scenario?.let { "${it.name}: ${it.tagline}" } ?: "Pick a scenario"
-                    else if (chosenCustom != null) "${mode.title} · ${chosenCustom!!.name}"
-                    else "${mode.title} · ${level.title} · ${economy.title} economy · ${Format.compact((capital * 100).toLong())}",
-                    color = Palette.secondary,
-                    fontSize = 13.sp,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 2,
+            Box(Modifier.fillMaxWidth().height(2.dp).background(Palette.stroke))
+            // The summary and the buttons, the same on every step.
+            Column(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = if (wide) 20.dp else 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val summary = chosenCustom?.let { listOf(it.name, mode.title) } ?: listOfNotNull(
+                    scenario?.let { "${it.name}" },
+                    mode.title + if (mode == Mode.Helm) offers?.firstOrNull { it.firm == career.helmFirm }?.let { ": ${it.name}" }.orEmpty() else "",
+                    if (career.ambition.isEmpty()) "No ambition" else "${ambitionWords(career.ambition)}, ${if (career.years == 0) uniffi.cw_ffi.careerLengths().defaultYears.toInt() else career.years} years",
+                    "${level.title}, ${Format.compact((capital * 100).toLong())}",
+                    "Prices ${(pricePathPick ?: fallbackPath).title.lowercase()}",
+                    "Timeline ${history.title.lowercase()}",
                 )
-                if (step == 0) {
-                    GoldButton("Next: setup", enabled = scenario != null || chosenCustom != null) { step = 1 }
-                } else {
-                    GoldButton("Start career", enabled = (scenario != null || chosenCustom != null) && !store.busy) {
-                        chosenCustom?.let { store.startCustom(it, mode.guided, mode.fiveYear); return@GoldButton }
-                        val pick = scenario ?: return@GoldButton
-                        store.startCareer(
-                            NewGameDto(
-                                seed = (System.nanoTime() % 9_999_999).toULong(),
-                                scenarioId = pick.id,
-                                guided = mode.guided,
-                                fiveYear = mode.fiveYear,
-                                difficulty = level.key,
-                                economy = economy.key,
-                                startingCapitalCents = (capital * 100).toLong(),
-                                pricePath = pricePathPick?.key ?: "",
-                                timeline = history.key,
-                                chiefName = chiefName.trim(),
-                                chiefPortrait = chiefs.getOrNull(chiefPick)?.id ?: "",
-                                chiefTemperament = chiefs.getOrNull(chiefPick)?.temperament ?: "",
-                            ),
-                        )
-                    }
+                Text(summary.joinToString("  |  "), color = Palette.primaryText, fontSize = 13.sp, maxLines = 2)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MenuBarButton("Back") { if (step == 0) onBack() else step-- }
+                    Spacer(Modifier.weight(1f))
+                    if (step < steps.lastIndex) MenuBarButton("Quick start", enabled = canStart) { start() }
+                    if (step < steps.lastIndex) GoldButton("Next") { step++ }
+                    else GoldButton("Start career", enabled = canStart) { start() }
                 }
             }
         }
@@ -473,14 +618,22 @@ internal fun NewGameScreen(store: GameStore, startStep: Int = 0, onBack: () -> U
 }
 
 @Composable
-private fun StepDot(number: Int, label: String, active: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun StepTab(number: Int, label: String, active: Boolean, onClick: () -> Unit) {
+    Row(Modifier.clip(Pixel.small).clickable(onClick = onClick).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier.width(22.dp).height(22.dp).clip(Pixel.small).background(if (active) Palette.gold else Palette.panelRaised),
             contentAlignment = Alignment.Center,
         ) { Text("$number", color = if (active) Palette.ink else Palette.secondary, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
         Spacer(Modifier.width(6.dp))
         Text(label, color = if (active) Palette.primaryText else Palette.secondary, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun StepTitle(title: String, note: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
+        Text(note, color = Palette.secondary, fontSize = 13.sp)
     }
 }
 
@@ -498,88 +651,35 @@ private fun <T> Options(items: List<T>, selected: T, title: (T) -> String, note:
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items.forEach { item ->
             val on = item == selected
-            val shape = Pixel.shape
             Column(
-                Modifier.width(if (wide) 250.dp else 320.dp).clip(shape)
-                    .background(if (on) Palette.gold.copy(alpha = 0.14f) else Palette.panel)
-                    .border(if (on) 2.dp else 1.dp, if (on) Palette.gold else Palette.stroke, shape)
+                (if (wide) Modifier.width(270.dp) else Modifier.fillMaxWidth()).padding(end = 3.dp, bottom = 3.dp)
+                    .pixelFrame(if (on) Color(0xFF2A2A1C) else Palette.panel, if (on) Palette.gold else Palette.stroke)
+                    .clip(Pixel.shape)
                     .clickable { onPick(item) }.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(title(item), color = Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text(title(item), color = if (on) Palette.gold else Palette.primaryText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 Text(note(item), color = Palette.secondary, fontSize = 12.sp)
             }
         }
     }
 }
 
-/** One scenario: its art, name, region, year and currency, or a coming-soon card. */
+/** The founder start's company name, with the engine's plain-words reason when it cannot be used.
+ *  The engine has no company colour, so there is none to pick. */
 @Composable
-private fun ScenarioTile(scenario: ScenarioDto, selected: Boolean, modifier: Modifier, onCustomize: (() -> Unit)? = null, onClick: () -> Unit) {
-    val shape = Pixel.shape
-    Column(
-        modifier.clip(shape).background(Palette.panel)
-            .border(if (selected) 3.dp else 1.dp, if (selected) Palette.gold else Palette.stroke, shape)
-            .clickable(enabled = scenario.available, onClick = onClick),
-    ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1200f / 640f)) {
-            val art = Images.load(scenario.image)
-            if (art != null) {
-                Image(
-                    art, null, Modifier.fillMaxSize().alpha(if (scenario.available) 1f else 0.45f),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Box(Modifier.fillMaxSize().background(Palette.panelRaised))
-            }
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color(0xE60B1622)),
-                ),
-            )
-            Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
-                Text(scenario.name, color = Palette.primaryText, fontSize = 20.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold)
-                Text("${scenario.region} · ${scenario.startYear}", color = Palette.secondary, fontSize = 12.sp)
-            }
-            if (scenario.available && onCustomize != null) {
-                Text(
-                    "Customize",
-                    color = Palette.primaryText,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clip(Pixel.small)
-                        .background(Palette.panelRaised.copy(alpha = 0.9f))
-                        .clickable(onClick = onCustomize)
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                )
-            }
-            Text(
-                if (scenario.available) "Play" else "Coming soon",
-                color = if (scenario.available) Palette.ink else Palette.primaryText,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).clip(Pixel.small)
-                    .background(if (scenario.available) Palette.gold else Palette.panelRaised.copy(alpha = 0.9f))
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            )
-        }
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(scenario.tagline, color = Palette.primaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            Text(scenario.summary, color = Palette.secondary, fontSize = 12.sp)
-            Text(
-                buildString {
-                    append(scenario.country)
-                    append(" · ")
-                    append(scenario.currency)
-                    if (scenario.available) append(" · ${scenario.regionCount} regions")
-                },
-                color = Palette.secondary.copy(alpha = 0.8f),
-                fontSize = 11.sp,
-            )
-        }
-    }
+internal fun CompanyNameField(name: String, problem: String?, onName: (String) -> Unit) {
+    Text("Your company", color = Palette.gold, fontSize = 13.sp, fontFamily = Pixel.font)
+    OutlinedTextField(
+        name, { onName(it.filter { c -> !c.isISOControl() }.take(60)) },
+        label = { Text("Company name") },
+        singleLine = true,
+        isError = problem != null,
+        supportingText = { Text(problem ?: "You found it on the first turn of the career and can change it there.") },
+        modifier = Modifier.textEntry().widthIn(max = 360.dp),
+    )
+    Text("Your chief", color = Palette.gold, fontSize = 13.sp, fontFamily = Pixel.font)
 }
-
 
 /** The new-game screen's chief executive: a few portraits from the generated kit, one for each
  *  temperament, an optional name, and the temperament as a line of flavour. */

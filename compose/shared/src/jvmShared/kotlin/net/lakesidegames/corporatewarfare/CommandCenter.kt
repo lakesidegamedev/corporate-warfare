@@ -59,7 +59,7 @@ private val EngineSectors = listOf(
  * generated from the engine's catalogue, a live preview of what it would do, and Submit.
  */
 @Composable
-fun CommandCenterScreen(store: GameStore, initialQuery: String = "", onClose: (() -> Unit)? = null) {
+fun CommandCenterScreen(store: GameStore, initialQuery: String = "", onClose: (() -> Unit)? = null, initialCommand: String? = null, preset: Map<String, String> = emptyMap()) {
     var query by remember { mutableStateOf(initialQuery) }
     var category by remember { mutableStateOf<String?>(null) }
     val all = store.actions
@@ -69,11 +69,11 @@ fun CommandCenterScreen(store: GameStore, initialQuery: String = "", onClose: ((
                 listOf(action.title, action.summary, action.keywords, action.category).any { it.contains(word, ignoreCase = true) }
             })
     }
-    var chosen by remember { mutableStateOf(if (initialQuery.isNotBlank()) matches.firstOrNull() else null) }
+    var chosen by remember { mutableStateOf(initialCommand?.let { c -> all.firstOrNull { it.command == c } } ?: if (initialQuery.isNotBlank()) matches.firstOrNull() else null) }
     BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
         val wide = maxWidth >= 900.dp
         if (!wide && chosen != null) {
-            ActionForm(store, chosen!!, Modifier.fillMaxSize()) { chosen = null }
+            ActionForm(store, chosen!!, Modifier.fillMaxSize(), preset.takeIf { chosen?.command == initialCommand }.orEmpty()) { chosen = null }
             return@BoxWithConstraints
         }
         Row(Modifier.fillMaxSize().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -129,7 +129,7 @@ fun CommandCenterScreen(store: GameStore, initialQuery: String = "", onClose: ((
                     }
                 } else {
                     androidx.compose.runtime.key(action.command) {
-                        ActionForm(store, action, Modifier.weight(1f).fillMaxHeight(), onBack = null)
+                        ActionForm(store, action, Modifier.weight(1f).fillMaxHeight(), preset.takeIf { action.command == initialCommand }.orEmpty(), onBack = null)
                     }
                 }
             }
@@ -181,6 +181,8 @@ private fun picks(store: GameStore, field: FieldDto, pickers: Pickers, firm: ULo
     "vote" -> pickers.votes.filter { !it.resolved }.map { Pick("${it.id}", "${it.subject}, closes week ${it.deadline}") }
     "my_deal" -> pickers.deals.map { Pick("${it.handle}", "${it.buyer} for ${it.target} (${it.state})") }
     "bond", "my_bond", "my_venture", "open_campaign" -> pickers.extra[field.kind].orEmpty().map { Pick(it.value, it.label) }
+    "plant_lot" -> pickers.lots.filter { !it.yours }.map { Pick("${it.lot}", "${it.plantName} · ${it.regionName} · ${it.blocks} plants, ${it.weeksLeft} wk left") }
+    "my_listing" -> pickers.lots.filter { it.yours }.map { Pick("${it.lot}", "${it.plantName} · ${it.regionName} · ${it.bids.size} bids") }
     else -> emptyList()
 }.let { if (field.encoding == "optional") listOf(Pick("", "None")) + it else it }
 
@@ -225,8 +227,9 @@ private fun buildJson(action: ActionDto, values: Map<String, String>): String? {
 
 /** The generated form for one action. */
 @Composable
-private fun ActionForm(store: GameStore, action: ActionDto, modifier: Modifier, onBack: (() -> Unit)?) {
-    val values = remember(action.command) { mutableStateMapOf<String, String>().apply { action.fields.forEach { put(it.key, defaultOf(store, it)) } } }
+private fun ActionForm(store: GameStore, action: ActionDto, modifier: Modifier, preset: Map<String, String> = emptyMap(), onBack: (() -> Unit)?) {
+    // A screen that opens the form for one thing (a site on offer, a raid on you) fills those fields in.
+    val values = remember(action.command) { mutableStateMapOf<String, String>().apply { action.fields.forEach { put(it.key, preset[it.key] ?: defaultOf(store, it)) } } }
     var pickers by remember { mutableStateOf(Pickers()) }
     var preview by remember { mutableStateOf<PreviewDto?>(null) }
     var result by remember { mutableStateOf<Pair<Boolean, String>?>(null) }

@@ -79,26 +79,114 @@ fn run(seed: u64, kind: ScenarioKind, scenario: &str, weeks: u32) -> String {
 /// against real holders), so the fixture path moves from the first week. In 1.9 float trades also
 /// settle at once along a price curve (rival long plans buy this way from week one of a plan), which
 /// moves the great-lakes seeds 1 to 4 pins; the fixture path of seed 5 and the Swift pin are unchanged.
+/// In 2.0 every pin here moved when gateways began trading in volume steps (dearer imports and
+/// cheaper exports past the normal room, exports settling at one average price for every seller)
+/// and goods began pricing around the outside world's middle quote. They moved again in 2.0 when
+/// the market rules joined the content's dataset hash (so the dataset pin moves too; a save that
+/// names the pre-markets hash still loads), gateway room began following use both ways, plants
+/// began ramping five points a week and services began pricing on capacity against the demand of
+/// the regions they serve. They moved again in 2.0 when the capacity rules joined the dataset
+/// (build prices follow the price level, steel, building materials and construction; rivals build
+/// on one room-to-build signal that counts households going without, enter new sectors with idle
+/// cash, close losing plants and pay out cash they have no use for). A save that names the
+/// pre-capacity hash still loads. The worlds (not the dataset) moved again in 2.0 when home sellers
+/// began reading the average export discount, households began asking for no more than their
+/// budget buys, openings began reading the inputs a new plant could buy and rivals began sizing
+/// plants to the gap. Every pin moved again in 2.0 when households' opening demand was sized to
+/// what the named plants serve (household_cover_bps and household_unmet_bps joined the dataset
+/// hash; a save that names the round two hash still loads), and again when services were allowed
+/// up to 130 percent of reference and sellers with no import to 150 percent (the market rules
+/// are in the dataset hash). Every pin here moved again in 2.0 when raids began to be announced four
+/// weeks ahead (the warning joined the dataset hash; the world gained the list of campaigns in
+/// progress, save schema 4; rivals answer a campaign with marketing and weigh the escrow) and a
+/// company's only block became far harder to take. A save that names the pre-warning hash loads.
+/// Every pin moved again in 2.0 when the demand rules joined the dataset hash (openings count
+/// only what their room, inputs and labour allow, households turn to sellers with stock left and
+/// grow toward their budget where served, demand follows the cycle by product) and a new company began offering at least the going wage. A save that names the
+/// pre-demand hash still loads. Every pin moved again in 2.0 when world prices gained their
+/// seeded texture (variance became the default, the texture rules and the street rule joined the
+/// dataset hash), seller markets began opening near balance and shops and services began
+/// pricing on their street, and the worlds moved again when rivals began closing losing plants and
+/// paying out idle cash in live play. A save that names the pre-prices hash still loads.
+/// Every pin here moved again in 2.0 when plant auctions joined the dataset hash (four weeks for a
+/// failed company's break-up and for a listing) and a failed company's plants began going to the
+/// best bid as running plants instead of being sold off at once for scrap; a save that names the
+/// pre-auction hash loads. The founder world (seed 4) moved once more when rivals began listing
+/// plants they had kept mothballed for half a year and folding in companies they hold at 90
+/// percent.
 #[test]
 fn great_lakes_dataset_and_worlds_are_unchanged() {
     let data = cw_data::Dataset::load().unwrap();
     assert_eq!(data.scenario_id, "great-lakes-2000");
     assert_eq!(
         data.hash,
-        "91550bd7d13a66e567db06957429a6dc33e85e9902bc43fdedd50473d45fc29e"
+        "1d51f9426f808967fd905e264707b0f926270740f40fe79cde6ade3467771e8f"
     );
+    // The hash before the prices round (the plant auction round's pin) still finds this dataset.
+    let before_prices = "2ef8d9aa0b212e4fa696eda45ea59bef735c30bbf10196acc82d9edeef47ef62";
+    assert_eq!(data.pre_prices_hash(), before_prices);
+    assert_eq!(
+        cw_data::Dataset::for_hash(before_prices).unwrap().hash,
+        data.hash
+    );
+    // The hash before plant auctions joined it (and before the prices round) is the 2.0 demand
+    // round's pin.
+    let pre_auction = "3856624d8fe911499f1f62988f0f25b533c4b455404c70bfb0095aee9c5cf110";
+    assert_eq!(data.pre_auction_hash(), pre_auction);
+    assert_eq!(
+        cw_data::Dataset::for_hash(pre_auction).unwrap().hash,
+        data.hash
+    );
+    // The hash before market rules joined it (the 2.0 round one pin) still finds this dataset,
+    // so a save that names it loads.
+    let before = "91550bd7d13a66e567db06957429a6dc33e85e9902bc43fdedd50473d45fc29e";
+    assert!(data.pre_markets_hashes().iter().any(|h| h == before));
+    assert_eq!(
+        data.pre_capacity_hash(),
+        "5b3946fe5578cc79e433f5d197e498246f48917f60fe7d936d3ebacd4454a9a1"
+    );
+    // The hash before households' opening demand was sized to the playable market (the 2.0
+    // capacity round two pin) still finds this dataset.
+    let before_households = "cbe64f26652373ca72519696c3ca4c5182e6c9b386c6d3f5c7adb8c3479f076d";
+    assert_eq!(data.pre_household_hash(), before_households);
+    assert_eq!(
+        cw_data::Dataset::for_hash(before_households).unwrap().hash,
+        data.hash
+    );
+    assert_eq!(cw_data::Dataset::for_hash(before).unwrap().hash, data.hash);
+    // The hash before raids were announced ahead is the 2.0 household demand round's pin.
+    let pre_warning = "a42db33ba7e87a6e23c28d447eac307bd862b350b9b87bfd06bdc492640576d3";
+    assert_eq!(data.pre_raid_warning_hash(), pre_warning);
+    assert_eq!(
+        cw_data::Dataset::for_hash(pre_warning).unwrap().hash,
+        data.hash
+    );
+    // The hash before the demand rules joined it (the 2.0 raid warning pin) still finds this
+    // dataset.
+    let before_demand = "fd94415cce08ad029cc5de3adff229e750f2e2a89e27c606d8856e0a596f21c4";
+    assert_eq!(data.pre_demand_hash(), before_demand);
+    assert_eq!(
+        cw_data::Dataset::for_hash(before_demand).unwrap().hash,
+        data.hash
+    );
+    // The world pins moved in 2.0 when electricity began to be dispatched over a grid at its
+    // generators' asking prices, generators began to be paid for every lot they deliver and
+    // services began pricing on their business buyers' shortfall (the dataset hash is unchanged).
+    // They moved again when idle capacity netted off the room to build came to count only what
+    // sellers could run with the staff and inputs they had, and when a service plant whose buyers
+    // took all it made began to raise its plan instead of settling at its sales plus a tenth.
     let pins = [
         (
             1u64,
-            "9e2ff9a758bf1fcdaea02b2fad118c91f1e752d8870f812e868fea13e35cf007",
+            "dab2d00e6ebc48c5d1e1a064f03ada7861b1e659e8ee12aa873cf990e14e2428",
         ),
         (
             2,
-            "86e1fd48466e8018124ab5662f53e0e31ff6376a5f568888f9d6e2062dd338d9",
+            "a330b01b5a3659cb1f5ca72a725da34579a319b030facf433827d17ce09fdc78",
         ),
         (
             3,
-            "2ed035714f65fd3f1442c4cc345990f0e067b4cac207362ccd39011cbb477e2d",
+            "c7dc5c68cf7662073e89f02b13bcedd05eed38b0e391b46ad5bf7f0464529164",
         ),
     ];
     for (seed, hash) in pins {
@@ -110,12 +198,12 @@ fn great_lakes_dataset_and_worlds_are_unchanged() {
     }
     assert_eq!(
         run(4, ScenarioKind::Founder, "great-lakes-2000", 52),
-        "0903cef2c5aec63802a01bdad265aa1f89c9e207020aea1d3200c03bcc28fe66"
+        "8487ae2cadb9f3386015afad627e8429d58d7ebb8430c16e7ac18b003b53bb0a"
     );
     // No world prices and no scenario named: the engine fixture path.
     assert_eq!(
         run(5, ScenarioKind::Guided, "", 26),
-        "ad658f44de7b5e19362029eb7996a204c533a4a4ad7c19a882019007701bd204"
+        "01a1ac96d8767be7f364d888033ebfae22a01b0522b6d34d4c15c7218b75872e"
     );
     // A scenario with no content of its own plays on the default dataset.
     let unlisted = cw_data::Dataset::load_scenario("atlantis-2050").unwrap();
@@ -151,6 +239,33 @@ fn texas_has_its_own_geography_lanes_firms_and_balance() {
     assert_eq!(texas.products.len(), lakes.products.len());
     assert_eq!(texas.player_region, "TX-PMB");
     assert_eq!(texas.player_recipe, "oil_wells");
+}
+
+/// The 2.0 balance pass opens Texas rivals at 70 percent of their authored size (the roster
+/// carried half as much capacity again as Great Lakes for the same corridor workforce). The
+/// figure joins the hash only where a scenario sets it, so every other scenario keeps its hash,
+/// and a Texas save written before the pass names the old hash and still finds Texas.
+#[test]
+fn texas_rivals_open_smaller_and_the_old_texas_hash_still_loads() {
+    let texas = cw_data::Dataset::load_scenario("texas-1981").unwrap();
+    assert_eq!(texas.rival_blocks_bps, 7_000);
+    assert_eq!(texas.opening_blocks(10), 7);
+    assert_eq!(texas.opening_blocks(1), 1);
+    let before = texas.pre_balance_hash();
+    assert_eq!(
+        before,
+        "449e603a3e7b9c636f7e6147defbf3e31380c865fbf14c1d3695dfea8057c7f3"
+    );
+    assert_ne!(before, texas.hash);
+    assert_eq!(
+        cw_data::Dataset::for_hash(&before).unwrap().scenario_id,
+        "texas-1981"
+    );
+    for id in ["great-lakes-2000", "silicon-valley-1995", "ruhr-rhine-1991"] {
+        let data = cw_data::Dataset::load_scenario(id).unwrap();
+        assert_eq!(data.rival_blocks_bps, 10_000);
+        assert_eq!(data.pre_balance_hash(), data.hash, "{id}");
+    }
 }
 
 #[test]
@@ -303,18 +418,21 @@ fn silicon_valley_opens_the_bakersfield_pipelines() {
 
 #[test]
 fn silicon_valley_electronics_prices_follow_the_chip_cycle() {
-    // Components are in the scenario's own family; Great Lakes and Texas have no such family.
+    // Components follow the chip cycle in Silicon Valley; since the prices round Great Lakes and
+    // Texas hold them on a flat path with only the world's texture.
     let valley = run_answering(3, "silicon-valley-1995", 1);
-    let family = |s: &Session| {
+    let anchors = |s: &Session| {
         s.world
             .world_prices
             .families
             .iter()
-            .any(|f| f.key == "electronics")
+            .find(|f| f.key == "electronics")
+            .map(|f| f.anchors.len())
+            .unwrap_or(0)
     };
-    assert!(family(&valley));
-    assert!(!family(&run_answering(3, "great-lakes-2000", 1)));
-    assert!(!family(&run_answering(3, "texas-1981", 1)));
+    assert!(anchors(&valley) > 1);
+    assert_eq!(anchors(&run_answering(3, "great-lakes-2000", 1)), 1);
+    assert_eq!(anchors(&run_answering(3, "texas-1981", 1)), 1);
 }
 
 #[test]

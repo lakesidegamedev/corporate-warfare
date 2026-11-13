@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import uniffi.cw_ffi.PreviewDto
 
-private val SuggestedNames = listOf(
+internal val SuggestedNames = listOf(
     "Lakeshore Industries", "Keystone Holdings", "Prairie Works", "Iron Valley Group", "Northgate Enterprises",
     "Riverbend Company", "Summit Manufacturing", "Harbor Point Holdings",
 )
@@ -47,7 +47,9 @@ private val SuggestedNames = listOf(
 @Composable
 fun FoundCompanyPanel(store: GameStore, scroll: Boolean = true) {
     val cash = store.overview?.investorCashCents ?: 0
-    var name by remember { mutableStateOf(SuggestedNames[(cash % SuggestedNames.size).toInt().coerceAtLeast(0)]) }
+    var name by remember { mutableStateOf(store.foundingName ?: SuggestedNames[(cash % SuggestedNames.size).toInt().coerceAtLeast(0)]) }
+    // The name picked on the new career screen is used once.
+    LaunchedEffect(Unit) { store.foundingName = null }
     var region by remember { mutableStateOf(store.boards.maxByOrNull { b -> b.room.sumOf { it.importLots * it.importPriceCents } }?.index) }
     var sector by remember { mutableStateOf(store.strategyCatalogue.firstOrNull()?.industry ?: "agriculture") }
     var recipe by remember { mutableStateOf(store.strategyCatalogue.firstOrNull { it.industry == sector }?.index) }

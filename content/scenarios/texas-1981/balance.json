@@ -1,5 +1,6 @@
 {
-  "classification": "authored engineering calibration for the January 1981 start; NOT real observations. Wages are 92 percent of the Great Lakes 2000 level in engine units (1981 real pay against 2000), and prices move against the 2000 base the way 1981 did: crude oil, natural gas and refined fuels dear, power and farm output somewhat dearer, services and manufactures unchanged.",
+  "classification": "authored engineering calibration for the January 1981 start; NOT real observations. Wages are 92 percent of the Great Lakes 2000 level in engine units (1981 real pay against 2000), and prices move against the 2000 base the way 1981 did: crude oil, natural gas and refined fuels dear, power and farm output somewhat dearer, services and manufactures unchanged. Rivals open at 70 percent of their authored size (rival_blocks_bps): the roster carries half as much capacity again as Great Lakes for the same corridor workforce, which left a new company no room to sell (2.0 balance pass).",
+  "rival_blocks_bps": 7000,
   "baseline_weekly_wage_cents": [
     36800,
     73600,

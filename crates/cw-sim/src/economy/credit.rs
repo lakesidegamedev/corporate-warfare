@@ -96,6 +96,15 @@ pub fn service(world: &mut World, dataset: &Dataset) {
             continue;
         }
         let borrower = loan.borrower;
+        // A company in liquidation pays nothing on its own: its estate, plant auction proceeds
+        // included, settles the loan by seniority when the liquidation ends.
+        if world
+            .firms
+            .get(borrower)
+            .is_some_and(|firm| firm.status == crate::state::FirmStatus::Liquidating)
+        {
+            continue;
+        }
         let (interest, carry_next) = accrued_interest(&loan);
         // Arrears first, then this week's instalment; the final week clears everything.
         let principal = if loan.remaining_weeks <= 1 {

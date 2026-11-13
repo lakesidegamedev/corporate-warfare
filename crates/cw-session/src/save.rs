@@ -74,6 +74,17 @@ const POLITICS_MAGIC: &[u8; 4] = b"POLI";
 /// running and the migration references are taken on the next week. The reader accepts it in any
 /// order after the systems trailer.
 const PLANS_MAGIC: &[u8; 4] = b"PLAN";
+/// Marks the career trailer (2.0): the start, ambition, length, the facts the career summary
+/// reads and the ending. Future-affecting, so `canonical_hash` folds it in while it is set;
+/// outside the postcard payload so the schema does not move. A save without it has no career
+/// (sandbox or five-year as before). The reader accepts it in any order after the systems trailer.
+const CAREER_MAGIC: &[u8; 4] = b"CARE";
+/// Marks the plant auction trailer (2.0): plants on offer from failed companies and from owners
+/// who listed them, the bids put to owners and the auction log. Future-affecting, so
+/// `canonical_hash` folds it in while it is not empty; outside the postcard payload so the schema
+/// does not move. A save without it loads with no plant on offer. The reader accepts it in any
+/// order after the systems trailer.
+const AUCTIONS_MAGIC: &[u8; 4] = b"AUCT";
 
 /// Payload size of the most recent save in this process.
 static LAST_PAYLOAD: AtomicUsize = AtomicUsize::new(0);
@@ -248,6 +259,21 @@ pub fn encode_with(
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
     }
+    if !world.auctions.is_empty() {
+        let bytes =
+            postcard::to_allocvec(&world.auctions).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(AUCTIONS_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
     if let Some(chief) = &world.player_chief {
         let bytes = postcard::to_allocvec(chief).map_err(|_| DomainError::InvalidSave {
             detail: SaveFault::MalformedPayload,
@@ -258,6 +284,20 @@ pub fn encode_with(
             });
         }
         out.extend_from_slice(CHIEF_MAGIC);
+        out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
+        out.extend_from_slice(&bytes);
+    }
+    if let Some(career) = &world.career {
+        let bytes = postcard::to_allocvec(career).map_err(|_| DomainError::InvalidSave {
+            detail: SaveFault::MalformedPayload,
+        })?;
+        if out.len() + bytes.len() > MAX_BYTES {
+            return Err(DomainError::InvalidSave {
+                detail: SaveFault::Oversize,
+            });
+        }
+        out.extend_from_slice(CAREER_MAGIC);
         out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         out.extend_from_slice(&digest(DOMAIN_SAVE, &bytes));
         out.extend_from_slice(&bytes);
@@ -461,9 +501,24 @@ pub fn decode_with(
                 detail: SaveFault::MalformedPayload,
             })?;
             rest = &rest[40 + body.len()..];
+        } else if magic == AUCTIONS_MAGIC {
+            let body = trailer_body(rest)?;
+            world.auctions = postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                detail: SaveFault::MalformedPayload,
+            })?;
+            rest = &rest[40 + body.len()..];
         } else if magic == CHIEF_MAGIC {
             let body = trailer_body(rest)?;
             world.player_chief =
+                Some(
+                    postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
+                        detail: SaveFault::MalformedPayload,
+                    })?,
+                );
+            rest = &rest[40 + body.len()..];
+        } else if magic == CAREER_MAGIC {
+            let body = trailer_body(rest)?;
+            world.career =
                 Some(
                     postcard::from_bytes(body).map_err(|_| DomainError::InvalidSave {
                         detail: SaveFault::MalformedPayload,
@@ -618,6 +673,38 @@ mod tests {
         world.player_chief = None;
         let (old, _) = decode(&encode(&world, 9).unwrap()).unwrap();
         assert_eq!(old.player_chief, None);
+        assert_eq!(cw_sim::state::canonical_hash(&old), plain);
+    }
+
+    #[test]
+    fn plants_on_offer_survive_a_save_and_move_the_hash() {
+        let dataset = Dataset::load().unwrap();
+        let mut world = world();
+        let plain = cw_sim::state::canonical_hash(&world);
+        let plant = world
+            .facilities
+            .iter()
+            .find(|(handle, _)| cw_sim::economy::disposal::offerable(&world, *handle))
+            .map(|(handle, _)| handle)
+            .expect("a running plant");
+        let id = cw_sim::economy::auctions::list(&mut world, &dataset, plant).unwrap();
+        let player = world.investor.primary_group.unwrap();
+        if world.facilities.get(plant).unwrap().firm != player {
+            cw_sim::economy::auctions::bid(&mut world, player, id, 1).unwrap();
+        }
+        let hash = cw_sim::state::canonical_hash(&world);
+        assert_ne!(hash, plain, "a plant on offer is part of the state");
+        let bytes = encode(&world, 9).unwrap();
+        assert!(bytes.windows(4).any(|w| w == AUCTIONS_MAGIC));
+        let (restored, _) = decode(&bytes).unwrap();
+        assert_eq!(restored.auctions, world.auctions);
+        assert_eq!(cw_sim::state::canonical_hash(&restored), hash);
+        // A save from before plant auctions has no trailer and loads with nothing on offer.
+        world.auctions = Default::default();
+        let bytes = encode(&world, 9).unwrap();
+        assert!(!bytes.windows(4).any(|w| w == AUCTIONS_MAGIC));
+        let (old, _) = decode(&bytes).unwrap();
+        assert!(old.auctions.is_empty());
         assert_eq!(cw_sim::state::canonical_hash(&old), plain);
     }
 

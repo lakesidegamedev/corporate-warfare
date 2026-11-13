@@ -923,10 +923,10 @@ fn an_unreleased_schema_is_rejected_rather_than_guessed() {
     // build has no migration for it. The documented rule is to accept only schemas the engine
     // can read and to migrate older released ones explicitly; with the first release at schema
     // 1, anything below 1 is an unknown format and is rejected instead of being parsed as v1.
-    // Schema 2 (1.8 preview 3) migrates schema 1 saves and schema 3 (1.9) migrates schema 2; see
-    // tests/save_compat.rs.
+    // Schema 2 (1.8 preview 3) migrates schema 1 saves, schema 3 (1.9) migrates schema 2 and
+    // schema 4 (2.0, raid campaigns) migrates schema 3; see tests/save_compat.rs.
     assert_eq!(MIN_SCHEMA_VERSION, 1);
-    assert_eq!(SCHEMA_VERSION, 3);
+    assert_eq!(SCHEMA_VERSION, 4);
 
     let mut session = session(0x5C4E_0001, ScenarioKind::Founder);
     session.advance(2);
@@ -1002,8 +1002,9 @@ fn long_careers_keep_history_bounded_and_lifetime_figures_consistent() {
     // catches an accidental removal of compaction.
     // The steel firm now opens with six plants in four regions (1.7 preview 2) and its postings
     // per week grow with its plants, so the bound moved to 3,600; unpruned it still passes ten
-    // thousand.
-    const JOURNAL_ENVELOPE: usize = 3_600;
+    // thousand. Under the 2.0 capacity rules rivals build, so the largest firms run more plants
+    // and post more each week; the bound moved to 7,200 (measured peak 5,906).
+    const JOURNAL_ENVELOPE: usize = 7_200;
 
     let mut session = session(0x00C0_5A7E, ScenarioKind::Founder);
     let mut totals: BTreeMap<u64, (i64, i64)> = BTreeMap::new();
@@ -1161,8 +1162,9 @@ fn long_careers_keep_history_bounded_and_lifetime_figures_consistent() {
         // The corridor keeps forty-plus renewable supply contracts and thirteen weeks of sales
         // history per firm, so the observed envelope is larger than the original empty-world
         // fixture. The real bound is that it stays far below the 64 MB import cap and does not
-        // grow with career length.
-        envelope < 2 * 1024 * 1024,
+        // grow with career length. Under the 2.0 capacity rules rivals build, so there are more
+        // plants and postings to keep: 3 MB (measured 2.29 MB at 110 weeks).
+        envelope < 3 * 1024 * 1024,
         "compacted save grew to {envelope} bytes"
     );
     let restored = Session::import_save(&bytes).expect("import after compaction");

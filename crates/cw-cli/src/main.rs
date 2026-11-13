@@ -3,7 +3,9 @@
 //! This binary is a developer and evidence tool. It never touches a network, a live game
 //! database or the host's AHD simulation services.
 
+mod arc;
 mod policy;
+mod trace;
 
 use std::collections::BTreeMap;
 use std::env;
@@ -23,6 +25,14 @@ fn main() {
         Some("diagnose") => diagnose(&arguments[1..]),
         Some("report") => report(&arguments[1..]),
         Some("bench") => bench(&arguments[1..]),
+        Some("arc") => arc::run(&arguments[1..]),
+        Some("market-trace") => trace::run(&arguments[1..]),
+        Some("probe") => policy::skilled::probe_all(&arguments[1..]),
+        Some("entry") => policy::skilled::entry_all(&arguments[1..]),
+        Some("helm") => arc::helm(&arguments[1..]),
+        Some("story") => policy::skilled::story(&arguments[1..]),
+        Some("opps") => policy::skilled::explore(&arguments[1..]),
+        Some("openings") => openings(&arguments[1..]),
         _ => {
             eprintln!(
                 "Usage: cw-cli <doctor|run|sweep|replay|diagnose|report>\n\
@@ -33,7 +43,10 @@ fn main() {
                  [--json PATH] [--verbose]\n\
                  replay --file PATH\n\
                  diagnose --weeks N [--seed N] [--guided|--founder]\n\
-                 report --weeks N [--seed N]"
+                 report --weeks N [--seed N]\n\
+                 arc    --seeds N [--from N] --weeks N --scenario-id ID --policy \
+                 none|conservative|growth|acquirer|expander|passive|reckless \
+                 [--difficulty easy|standard|hard] [--none-json PATH] [--gates PATH] --json PATH"
             );
             std::process::exit(2);
         }
@@ -147,12 +160,14 @@ fn prices_flag(arguments: &[String]) -> cw_session::PriceSetup {
     }
 }
 
-fn policy_flag(arguments: &[String]) -> ReferencePolicy {
+pub(crate) fn policy_flag(arguments: &[String]) -> ReferencePolicy {
     let name = flag(arguments, "--policy").unwrap_or_else(|| "none".to_owned());
     match ReferencePolicy::parse(&name) {
         Some(policy) => policy,
         None => {
-            eprintln!("unknown policy {name}; use none, conservative, growth or acquirer");
+            eprintln!(
+                "unknown policy {name}; use none, conservative, growth, acquirer, expander, passive, reckless, skilled, skilled-organic, noise or noise-macro"
+            );
             std::process::exit(2);
         }
     }
@@ -162,7 +177,19 @@ fn policy_flag(arguments: &[String]) -> ReferencePolicy {
 /// outcome-neutral (see `batching_does_not_change_the_result`), but policy decisions need the
 /// intervening revisions.
 fn drive(session: &mut Session, weeks: u32, runner: &mut PolicyRunner) -> (u32, Option<String>) {
+    drive_with(session, weeks, runner, &mut |_, _| {})
+}
+
+/// `drive` with an observer: called once after the opening policy turn (`false`) and once after
+/// every simulated week (`true`), before the policy acts on that week. It never changes the run.
+pub(crate) fn drive_with(
+    session: &mut Session,
+    weeks: u32,
+    runner: &mut PolicyRunner,
+    observer: &mut dyn FnMut(&Session, bool),
+) -> (u32, Option<String>) {
     runner.act(session);
+    observer(session, false);
     let mut advanced = 0;
     let mut paused = None;
     while advanced < weeks {
@@ -211,6 +238,7 @@ fn drive(session: &mut Session, weeks: u32, runner: &mut PolicyRunner) -> (u32, 
         if result.weeks_advanced == 0 {
             break;
         }
+        observer(session, true);
         runner.act(session);
     }
     (advanced, paused)
@@ -1174,5 +1202,178 @@ fn replay(arguments: &[String]) {
             eprintln!("replay failed: {:?}", error);
             std::process::exit(1);
         }
+    }
+}
+
+/// Household demand per product over the whole corridor last week: lots wanted, lots the
+/// corridor's operating plants make at full capacity and what is left of that for households,
+/// gateway imports, the share wanted that found no seller, and spending against the budget.
+fn demand_summary(world: &cw_sim::World, dataset: &cw_data::Dataset) {
+    println!(
+        "{:<12} {:>8} {:>8} {:>8} {:>8} {:>6} {:>12} {:>12} {:>6}",
+        "product", "wanted", "made", "for_hh", "imported", "unmet%", "spent$", "budget$", "spend%"
+    );
+    let mut totals: std::collections::BTreeMap<u16, [i64; 4]> = Default::default();
+    for state in &world.regions {
+        let h = &state.households;
+        let budget = h.last_income_cents.max(0) * 90 / 100;
+        for (product, weight) in &h.weights {
+            let t = totals.entry(*product).or_default();
+            t[0] += h.wanted_milli.get(product).copied().unwrap_or(0);
+            t[1] += h.unmet_milli.get(product).copied().unwrap_or(0);
+            t[2] += h.spend_cents.get(product).copied().unwrap_or(0);
+            t[3] += budget * weight / 10_000;
+        }
+    }
+    for (product, [wanted, unmet, spent, budget]) in totals {
+        let id = dataset.products[product as usize].id.as_str();
+        let made: i64 = world
+            .facilities
+            .iter()
+            .filter(|(_, f)| f.status == cw_sim::state::FacilityStatus::Operating)
+            .map(|(_, f)| dataset.recipes[f.recipe as usize].lots_of(id) * f.blocks as i64)
+            .sum();
+        let imported: i64 = world
+            .gateways
+            .iter()
+            .filter(|g| g.product == product)
+            .map(|g| g.last_import_lots)
+            .sum();
+        println!(
+            "{:<12} {:>8} {:>8} {:>8} {:>8} {:>6.1} {:>12} {:>12} {:>6.1}",
+            id,
+            wanted / 1_000,
+            made,
+            cw_sim::economy::seed::household_supply_by_region(world, dataset, product)
+                .iter()
+                .sum::<i64>(),
+            imported,
+            unmet as f64 * 100.0 / wanted.max(1) as f64,
+            spent / 100,
+            budget / 100,
+            spent as f64 * 100.0 / budget.max(1) as f64
+        );
+    }
+}
+
+/// `openings --scenario-id ID [--seed N] [--weeks W] [--limit N] [--all]`: play W weeks with no
+/// player and print the room-to-build signal the rivals read (`Session::capacity_openings`).
+/// With `--all`, every strategy and state, paying or not.
+fn openings(arguments: &[String]) {
+    let scenario = flag(arguments, "--scenario-id").unwrap_or_else(|| "great-lakes-2000".into());
+    let seed: u64 = flag(arguments, "--seed")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1);
+    let weeks: u32 = flag(arguments, "--weeks")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(52);
+    let limit: usize = flag(arguments, "--limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(40);
+    let mut session = cw_session::Session::create(arc::arc_config_pub(seed, &scenario)).unwrap();
+    let mut runner = PolicyRunner::new(ReferencePolicy::None, false);
+    let _ = drive_with(&mut session, weeks, &mut runner, &mut |_, _| {});
+    println!(
+        "week {} build price {} bps of catalogue",
+        session.world.tick.0,
+        cw_sim::economy::sectors::build_price_bps(&session.world, &session.dataset)
+    );
+    if arguments.iter().any(|a| a == "--demand") {
+        // What households asked for against what their budget for it could pay for at the
+        // price they last paid (or the public price where nobody sold), region by region.
+        let world = &session.world;
+        let dataset = &session.dataset;
+        if arguments.iter().any(|a| a == "--summary") {
+            demand_summary(world, dataset);
+            return;
+        }
+        for (region, state) in world.regions.iter().enumerate() {
+            let h = &state.households;
+            let budget = h.last_income_cents.max(0) * 90 / 100;
+            for (product, weight) in &h.weights {
+                let wanted = h.wanted_milli.get(product).copied().unwrap_or(0) / 1_000;
+                if wanted <= 0 {
+                    continue;
+                }
+                let unmet = h.unmet_milli.get(product).copied().unwrap_or(0) / 1_000;
+                let category = budget * weight / 10_000;
+                let price = h
+                    .last_sale_price_cents
+                    .get(product)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        cw_sim::economy::capacity::public_price(
+                            world,
+                            dataset,
+                            *product,
+                            region as u8,
+                        )
+                    });
+                let spent = h.spend_cents.get(product).copied().unwrap_or(0);
+                println!(
+                    "DEMAND {:<6} {:<12} wanted={:>6} unmet={:>6} budget=${:>9} price=${:>7} affordable={:>6} spent=${:>9}",
+                    dataset.regions[region].code,
+                    dataset.products[*product as usize].id,
+                    wanted,
+                    unmet,
+                    category / 100,
+                    price / 100,
+                    category / price.max(1),
+                    spent / 100
+                );
+            }
+        }
+        return;
+    }
+    if arguments.iter().any(|a| a == "--all") {
+        let world = &session.world;
+        let dataset = &session.dataset;
+        let rooms = cw_sim::economy::capacity::input_rooms(world, dataset);
+        for (index, recipe) in dataset.recipes.iter().enumerate() {
+            for region in 0..world.regions.len() as u8 {
+                if let Some(o) = cw_sim::economy::capacity::opening_with(
+                    world,
+                    dataset,
+                    &rooms,
+                    region,
+                    index as u16,
+                    region,
+                ) && (o.room_lots > 0 || o.unmet_lots > 0)
+                {
+                    println!(
+                        "ALL {} {} room={} fill={} block={} unmet={}/{} price={} vs_ref={} weekly={} cost={} payback={:?}",
+                        recipe.id,
+                        dataset.regions[region as usize].code,
+                        o.room_lots,
+                        o.input_fill_bps,
+                        o.block_lots,
+                        o.unmet_lots,
+                        o.wanted_lots,
+                        o.price_cents,
+                        o.price_vs_reference_bps,
+                        o.weekly_contribution_cents,
+                        o.build_cost_cents,
+                        o.payback_weeks
+                    );
+                }
+            }
+        }
+        return;
+    }
+    for o in session.capacity_openings(limit) {
+        println!(
+            "{:<28} {:<8} traded={} room={:>6} block={:>5} unmet={}/{} price_vs_ref={:>5} weekly=${:>8} cost=${:>9} payback={:?}w",
+            o.recipe_id,
+            o.region_code,
+            o.traded as u8,
+            o.room_lots,
+            o.block_lots,
+            o.unmet_lots,
+            o.wanted_lots,
+            o.price_vs_reference_bps,
+            o.weekly_contribution_cents / 100,
+            o.build_cost_cents / 100,
+            o.payback_weeks
+        );
     }
 }

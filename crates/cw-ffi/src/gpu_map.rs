@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::ffi::{CStr, CString, c_char};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 
@@ -43,6 +43,28 @@ pub struct Update {
     pub clouds: Option<u8>,
     /// Week of the year (1 to 52) for the snow, from the game's calendar.
     pub week: Option<u32>,
+    /// Net migration over the year by region code, in basis points of its people: the
+    /// suburban houses thin out where people leave and fill in where they arrive.
+    pub migration: Option<HashMap<String, i32>>,
+    /// This week's freight lanes: vehicles run along them between the regions.
+    pub lanes: Option<Vec<LaneIn>>,
+    /// The building (index into the placed buildings) under the pointer and the selected one;
+    /// a negative number clears it.
+    pub hover: Option<i64>,
+    pub selected: Option<i64>,
+}
+
+/// One freight lane as the shell sends it.
+#[derive(Deserialize, Clone)]
+pub struct LaneIn {
+    pub from: String,
+    pub to: String,
+    pub mode: String,
+    /// How busy the lane is, 0 to 1 of the busiest lane.
+    #[serde(default)]
+    pub volume: f32,
+    #[serde(default)]
+    pub goods: String,
 }
 
 #[derive(Deserialize, Clone)]
@@ -53,6 +75,11 @@ pub struct PlantIn {
     pub blocks: u32,
     pub player: bool,
     pub status: String,
+    /// How hard the plant ran last week and how far a site has got, in basis points.
+    #[serde(default)]
+    pub utilisation_bps: i32,
+    #[serde(default)]
+    pub progress_bps: i32,
 }
 
 impl From<&MapPlantDto> for PlantIn {
@@ -64,6 +91,8 @@ impl From<&MapPlantDto> for PlantIn {
             blocks: p.blocks,
             player: p.player,
             status: p.status.clone(),
+            utilisation_bps: p.utilisation_bps,
+            progress_bps: p.progress_bps,
         }
     }
 }
@@ -106,9 +135,21 @@ pub fn sites_of(plants: &[PlantIn]) -> Vec<PlantSite> {
                 plants: items.len() as u32,
                 player: items.iter().any(|p| p.player),
                 status,
+                utilisation: mean_bps(items.iter().map(|p| p.utilisation_bps)),
+                progress: mean_bps(items.iter().map(|p| p.progress_bps)),
             }
         })
         .collect()
+}
+
+/// The mean of basis point values as a 0 to 1 share.
+fn mean_bps(values: impl Iterator<Item = i32>) -> f32 {
+    let (sum, n) = values.fold((0i64, 0i64), |(s, n), v| (s + v as i64, n + 1));
+    if n == 0 {
+        0.0
+    } else {
+        (sum as f32 / n as f32 / 10_000.0).clamp(0.0, 1.0)
+    }
 }
 
 /// The scenario's terrain, regions, roads and cities with no game state in it yet.
@@ -123,6 +164,35 @@ pub fn build_scene(assets: &Path, scenario: &str) -> Result<Scene, String> {
         spec,
         &SceneOptions::default(),
     )
+}
+
+/// The last scenario built, as it came from its files, so a second map view (the docked map beside a page, or the map opened
+/// again) starts from a copy instead of rebuilding the scene, which takes seconds. Not kept on a phone, where memory is short.
+#[cfg(not(target_os = "ios"))]
+static BUILT: Mutex<Option<(std::path::PathBuf, String, Arc<Scene>)>> = Mutex::new(None);
+
+/// The scenario's scene: a copy of the one built last when it is the same scenario, else a fresh build (kept for next time).
+fn scene_for(assets: &Path, scenario: &str) -> Result<Scene, String> {
+    #[cfg(not(target_os = "ios"))]
+    {
+        // Held through a build, so two views opening at once build it once.
+        let mut built = BUILT.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((a, s, scene)) = built.as_ref()
+            && a == assets
+            && s == scenario
+        {
+            return Ok(Scene::clone(scene));
+        }
+        let scene = build_scene(assets, scenario)?;
+        *built = Some((
+            assets.to_path_buf(),
+            scenario.to_string(),
+            Arc::new(scene.clone()),
+        ));
+        Ok(scene)
+    }
+    #[cfg(target_os = "ios")]
+    build_scene(assets, scenario)
 }
 
 pub struct AdapterInfo {
@@ -155,6 +225,12 @@ pub struct GpuMap {
     /// Which division each plant building stands for, in the order `layout_plants` placed them
     /// (the buildings after the scenery).
     sites: Mutex<Vec<Option<PlantSite>>>,
+    /// The animation clock the shell last set, in seconds (f64 bits), and whether map animations
+    /// are on.
+    clock_bits: AtomicU64,
+    animate: AtomicBool,
+    /// True once the first plant list has arrived: later plants appear by growing.
+    seeded: AtomicBool,
 }
 
 impl GpuMap {
@@ -186,7 +262,7 @@ impl GpuMap {
         scenario: &str,
         renderer: impl FnOnce() -> Result<Renderer, String>,
     ) -> Result<GpuMap, String> {
-        let scene = build_scene(assets, scenario)?;
+        let scene = scene_for(assets, scenario)?;
         let renderer = renderer()?;
         let a = renderer.adapter().clone();
         let renderer_surface = renderer.surface_summary();
@@ -205,6 +281,9 @@ impl GpuMap {
             holdings: Mutex::new(Vec::new()),
             heat: Mutex::new(HashMap::new()),
             sites: Mutex::new(Vec::new()),
+            clock_bits: AtomicU64::new(0f64.to_bits()),
+            animate: AtomicBool::new(false),
+            seeded: AtomicBool::new(false),
         })
     }
 
@@ -229,6 +308,21 @@ impl GpuMap {
             if let Some(r) = &u.heat_ramp {
                 style.heat_ramp = ramp_by_name(r);
             }
+            if let Some(h) = u.hover {
+                style.hover = usize::try_from(h).ok();
+            }
+            if let Some(s) = u.selected {
+                style.selected = usize::try_from(s).ok();
+            }
+        }
+        // A hover or selection alone only touches the style: never wait for a frame in flight.
+        if u.week.is_none()
+            && u.plants.is_none()
+            && u.lanes.is_none()
+            && u.holdings.is_none()
+            && u.heat.is_none()
+        {
+            return;
         }
         let mut scene = self.scene.write().unwrap();
         if let Some(week) = u.week {
@@ -237,10 +331,28 @@ impl GpuMap {
         if let Some(plants) = &u.plants {
             let mut all = self.base_buildings.clone();
             let sites = sites_of(plants);
-            let placed = layout_plants(&scene, &sites);
+            let mut placed = layout_plants(&scene, &sites);
+            self.mark_new(&scene, &mut placed);
             *self.sites.lock().unwrap() = identify_sites(&scene, &sites, &placed);
             all.extend(placed);
             scene.set_buildings(all);
+        }
+        if let Some(m) = &u.migration {
+            scene.set_region_trends(m);
+        }
+        if let Some(lanes) = &u.lanes {
+            scene.set_lanes(
+                lanes
+                    .iter()
+                    .map(|l| cw_render::Lane {
+                        from: l.from.clone(),
+                        to: l.to.clone(),
+                        mode: l.mode.clone(),
+                        volume: l.volume,
+                        goods: l.goods.clone(),
+                    })
+                    .collect(),
+            );
         }
         let mut tints_changed = false;
         if let Some(h) = &u.holdings {
@@ -261,6 +373,55 @@ impl GpuMap {
         }
     }
 
+    /// Set the animation clock (seconds, any origin) and whether map animations are on. Returns 1
+    /// when frames must keep coming every refresh at `width_km`, 0 when the picture is still.
+    pub fn set_clock(&self, seconds: f64, animate: bool, width_km: f64) -> i32 {
+        self.clock_bits.store(seconds.to_bits(), Ordering::Relaxed);
+        self.animate.store(animate, Ordering::Relaxed);
+        let scene = self.scene.read().unwrap();
+        let t = cw_render::anim_clock(seconds, animate);
+        (animate
+            && width_km <= cw_render::ANIM_MAX_KM as f64 * 1.3
+            && cw_render::scene_animates(&scene, t)) as i32
+    }
+
+    fn clock(&self) -> (f64, bool) {
+        (
+            f64::from_bits(self.clock_bits.load(Ordering::Relaxed)),
+            self.animate.load(Ordering::Relaxed),
+        )
+    }
+
+    /// Buildings that were not standing before this update start to grow now (never the first
+    /// list of a session, and never with animations off). A building that was already growing
+    /// keeps its start.
+    fn mark_new(&self, scene: &Scene, placed: &mut [Placement]) {
+        let (seconds, animate) = self.clock();
+        let seeded = self.seeded.swap(true, Ordering::Relaxed);
+        let now = cw_render::anim_clock(seconds, true);
+        let key = |p: &Placement| {
+            (
+                p.model.clone(),
+                p.lon.to_bits(),
+                p.lat.to_bits(),
+                p.owner as u8,
+            )
+        };
+        let before: HashMap<_, _> = scene
+            .buildings
+            .iter()
+            .skip(self.base_buildings.len())
+            .map(|p| (key(p), p.activity.born))
+            .collect();
+        for p in placed.iter_mut() {
+            match before.get(&key(p)) {
+                Some(born) => p.activity.born = *born,
+                None if seeded && animate => p.activity.born = Some(now),
+                None => {}
+            }
+        }
+    }
+
     /// Render into `out` (tightly packed RGBA8, `(width / scale) * (height / scale) * 4`
     /// bytes). `cam` is lon, lat, width in km, tilt, heading, field of view.
     pub fn render(
@@ -273,6 +434,7 @@ impl GpuMap {
     ) -> FrameTiming {
         let scene = self.scene.read().unwrap();
         let mut style = self.style.read().unwrap().clone();
+        (style.time_s, style.animate) = self.clock();
         style.pixel_scale = scale.max(1);
         let mut renderer = self.renderer.lock().unwrap();
         let t0 = Instant::now();
@@ -292,7 +454,8 @@ impl GpuMap {
     /// `draw_calls` is 0 for a skipped frame (the window could not take one).
     pub fn render_to_surface(&self, cam: [f64; 6], width: u32, height: u32) -> (FrameTiming, bool) {
         let scene = self.scene.read().unwrap();
-        let style = self.style.read().unwrap().clone();
+        let mut style = self.style.read().unwrap().clone();
+        (style.time_s, style.animate) = self.clock();
         let mut renderer = self.renderer.lock().unwrap();
         let t0 = Instant::now();
         let stats = renderer.render_to_surface(&scene, &camera(cam), &style, width, height);
@@ -742,6 +905,17 @@ pub unsafe extern "C" fn cw_gpu_update(id: u64, json: *const c_char) -> i32 {
     })
 }
 
+/// Set the animation clock in seconds and whether map animations are on. Call before each frame.
+/// Returns 1 when the shell should keep drawing every display refresh (something is moving at
+/// this zoom, `width_km` is the camera's width), 0 when the picture can rest, negative on error.
+#[unsafe(no_mangle)]
+pub extern "C" fn cw_gpu_set_clock(id: u64, seconds: f64, animate: i32, width_km: f64) -> i32 {
+    guarded(-1, || {
+        let m = get(id).ok_or("no such map")?;
+        Ok(m.set_clock(seconds, animate != 0, width_km))
+    })
+}
+
 /// Render a frame into `out` (`out_len` bytes). `cam` points at six doubles (lon, lat, width
 /// km, tilt, heading, fov); `timing` at six doubles that receive render ms, copy ms, width,
 /// height, draw calls and a spare. The image is `width / scale` by `height / scale`.
@@ -913,6 +1087,8 @@ mod tests {
             blocks: 1,
             player,
             status: status.into(),
+            utilisation_bps: 0,
+            progress_bps: 0,
         }
     }
 
@@ -943,7 +1119,15 @@ mod tests {
 
     /// The scenario folder, assembled the way the desktop build does: the shared images and models
     /// from the Apple resources, the baked terrain from the renderer's assets.
+    /// The map's asset files copied into one folder, once per test run. Tests run in parallel
+    /// threads, and copying in every test let one test read a heightmap while another was
+    /// rewriting it (a flaky "heightmap size mismatch").
     fn assets() -> std::path::PathBuf {
+        static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+        DIR.get_or_init(copy_assets).clone()
+    }
+
+    fn copy_assets() -> std::path::PathBuf {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let dir = std::env::temp_dir().join(format!("cw-gpu-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

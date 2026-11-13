@@ -99,6 +99,8 @@ final class GpuMapSession: @unchecked Sendable {
     private var handle: UInt64 = 0
     private var request: Request?
     private var wantedGeneration = 0
+    /// Map animations on and the map showing: frames keep coming while the engine says something moves.
+    private var animating = false
     private var renderedGeneration = 0
     private var appActive = true
     private var closed = false
@@ -159,7 +161,7 @@ final class GpuMapSession: @unchecked Sendable {
 
     /// Starts building the scene for a career in the background while the GPU map is switched on.
     @MainActor static func prewarm(scenario: String?) {
-        guard UserDefaults.standard.bool(forKey: GraphicsKeys.newMap), let scenario, !scenario.isEmpty else { return }
+        guard GraphicsKeys.newMapOn, let scenario, !scenario.isEmpty else { return }
         if let kept = parked, kept.scenario == scenario, kept.failure == nil { return }
         parked?.close()
         parked = GpuMapSession(scenario: scenario)
@@ -219,6 +221,18 @@ final class GpuMapSession: @unchecked Sendable {
         let new = Request(camera: camera, size: size, scale: scale)
         if request == nil || request!.camera != camera || request!.size != size || request!.scale != scale {
             request = new
+            wantedGeneration += 1
+            cond.broadcast()
+        }
+        cond.unlock()
+    }
+
+    /// Turns the map's animations (smoke, cranes, blinking lights, vehicles) on or off. Drawn only while
+    /// the map is on screen and the app is active, like every frame.
+    func setAnimation(_ on: Bool) {
+        cond.lock()
+        if animating != on {
+            animating = on
             wantedGeneration += 1
             cond.broadcast()
         }
@@ -363,6 +377,8 @@ final class GpuMapSession: @unchecked Sendable {
             let width = UInt32(max((job.size.width * job.scale).rounded(), 1))
             let height = UInt32(max((job.size.height * job.scale).rounded(), 1))
             let cam = job.camera.values
+            let wantsAnimation = locked { animating }
+            let moving = cw_gpu_set_clock(id, Date.timeIntervalSinceReferenceDate, wantsAnimation ? 1 : 0, job.camera.widthKm) == 1
             let code = cw_gpu_render_layer(id, cam, width, height, &timing)
             locked { rendering = false; cond.broadcast() }
             if code < 0 { return fail(Self.lastError() ?? "the graphics card stopped drawing") }
@@ -374,6 +390,8 @@ final class GpuMapSession: @unchecked Sendable {
             let now = Date.timeIntervalSinceReferenceDate
             cond.lock()
             renderedGeneration = generation
+            // Something moves: the next frame follows at once; presenting waits for the display, which paces it.
+            if moving { wantedGeneration += 1 }
             _renderMs = timing[0]
             _shown = (job.camera, job.size)
             _frames += 1

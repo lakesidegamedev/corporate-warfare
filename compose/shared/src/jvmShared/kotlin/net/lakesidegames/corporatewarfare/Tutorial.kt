@@ -39,10 +39,12 @@ data class TutorialStep(
     val visit: String? = null,
     val commands: Set<String> = emptySet(),
     val playWeek: Boolean = false,
+    /** Only shown in the 2.0 layout, whose screens the step names (Career, Raids). */
+    val newLayoutOnly: Boolean = false,
 )
 
 /**
- * The guided tutorial: eight steps that tick off when the player actually does them. Screens
+ * The guided tutorial: ten steps in the 2.0 layout (eight in the classic one and on phones) that tick off when the player actually does them. Screens
  * report visits with [visited]; the store reports every command it submits with [sent]; shells
  * open the page a step asks for through [requestedPage].
  */
@@ -53,6 +55,12 @@ object Tutorial {
             "Open the CEO Office.",
             "It is your company's dashboard: cash, profit, what you make, what it costs and where you sell.",
             page = "office", visit = "office",
+        ),
+        TutorialStep(
+            "goal", "Know your goal",
+            "Open Career.",
+            "It shows what you are playing for: your ambition, your medal and rank so far, what the next medal needs and any warning from the board. A game started without an ambition is a sandbox with no goal and no ending.",
+            page = "career", visit = "career", newLayoutOnly = true,
         ),
         TutorialStep(
             "week", "Play a week",
@@ -96,13 +104,45 @@ object Tutorial {
             "Watch whether each move paid off. Cash running low is the first thing that sinks a company.",
             page = "stats", visit = "stats",
         ),
+        TutorialStep(
+            "raids", "Answer a raid warning",
+            "When an alert says a rival has announced a raid, open Raids, pick it and press Defend.",
+            "A raid is decided four weeks after it is announced, against the marketing you have on that day. Raising your weekly marketing in the meantime cuts the raider's chance; the alert says what it costs and what it buys.",
+            page = "raids", visit = "raids", newLayoutOnly = true,
+        ),
     )
+
+    /** The steps on screen: the 2.0 layout adds the ones that name its screens. */
+    val active: List<TutorialStep> get() = steps.filter { !it.newLayoutOnly || newLayout }
 
     var settings: AppSettings? = null
     var done by mutableStateOf(setOf<String>())
         private set
     var hidden by mutableStateOf(false)
     var requestedPage by mutableStateOf<String?>(null)
+
+    /** True while the 2.0 desktop layout is on screen: the steps then name its places, not the 1.x pages. */
+    var newLayout by mutableStateOf(false)
+
+    private val newLayoutWhat = mapOf(
+        "office" to "Open Overview.",
+        "price" to "Under Product lines on Overview, open a product and slide its price against the market.",
+        "actions" to "Press Ctrl K and search for something, like IPO or loan.",
+        "research" to "On the Research screen, set a modest weekly research budget.",
+        "economy" to "Open Economy and look at the phase and the central bank rate.",
+        "build" to "Open Openings, pick one that pays back soon and press Build here.",
+        "stats" to "Open Finance to see revenue, profit and the balance sheet over time.",
+    )
+
+    private val newLayoutWhy = mapOf(
+        "build" to "Openings lists where demand outruns what is built, with the weeks a plant there would take to pay back. Rivals read the same list, so the best ones go fast. A new plant takes a few weeks to open and its price is fixed when you order it.",
+    )
+
+    /** Why the step matters, in the words of the layout on screen. */
+    fun why(step: TutorialStep): String = if (newLayout) newLayoutWhy[step.id] ?: step.why else step.why
+
+    /** What the step asks the player to do, in the words of the layout on screen. */
+    fun what(step: TutorialStep): String = if (newLayout) newLayoutWhat[step.id] ?: step.what else step.what
     private var startTick: UInt? = null
 
     fun load(settings: AppSettings) {
@@ -125,7 +165,7 @@ object Tutorial {
             "and quality from ${research.qualityBps / 100} to ${research.nextQualityBps / 100}."
     }
 
-    val current: TutorialStep? get() = steps.firstOrNull { it.id !in done }
+    val current: TutorialStep? get() = active.firstOrNull { it.id !in done }
     val finished: Boolean get() = current == null
 
     private fun complete(step: TutorialStep) {
@@ -169,7 +209,7 @@ object Tutorial {
 fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier, researchHint: String? = null) {
     val step = Tutorial.current ?: return
     if (Tutorial.hidden) return
-    val number = Tutorial.steps.indexOf(step) + 1
+    val number = Tutorial.active.indexOf(step) + 1
     if (compact) {
         Row(
             modifier.background(Palette.panelRaised).padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
@@ -182,7 +222,7 @@ fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier, researchHint:
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(step.title, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
-                Text(step.what, color = Palette.secondary, fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(Tutorial.what(step), color = Palette.secondary, fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             Text(
                 "Show me", color = Palette.ink, fontWeight = FontWeight.Bold, fontSize = 12.sp,
@@ -205,13 +245,13 @@ fun TutorialPanel(compact: Boolean, modifier: Modifier = Modifier, researchHint:
             }
             Spacer(Modifier.width(8.dp))
             Text(step.title, color = Palette.primaryText, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            Text("$number of ${Tutorial.steps.size}", color = Palette.secondary, fontSize = 11.sp)
+            Text("$number of ${Tutorial.active.size}", color = Palette.secondary, fontSize = 11.sp)
         }
-        Text(step.what, color = Palette.primaryText, fontSize = 13.sp)
-        Text(step.why, color = Palette.secondary, fontSize = 12.sp)
+        Text(Tutorial.what(step), color = Palette.primaryText, fontSize = 13.sp)
+        Text(Tutorial.why(step), color = Palette.secondary, fontSize = 12.sp)
         if (step.id == "research" && researchHint != null) Text(researchHint, color = Palette.gold, fontSize = 12.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Tutorial.steps.forEach { s ->
+            Tutorial.active.forEach { s ->
                 Box(
                     Modifier.padding(end = 4.dp).size(7.dp).clip(Pixel.small)
                         .background(if (s.id in Tutorial.done) Palette.positive else if (s == step) Palette.gold else Palette.stroke),

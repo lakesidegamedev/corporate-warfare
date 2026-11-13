@@ -124,6 +124,19 @@ fun main() {
 private fun game() = application {
     Images.decode = { bytes -> org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }
     GpuMapHost.opener = ::openDesktopGpuMap
+    // Load's Export and Import use the system file dialog.
+    SaveTransfer.chooseExport = { suggested ->
+        val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Export a save", java.awt.FileDialog.SAVE).apply { file = suggested; isVisible = true }
+        dialog.file?.let { java.io.File(dialog.directory, if (it.endsWith(".cwsave")) it else "$it.cwsave") }
+    }
+    SaveTransfer.chooseImport = {
+        val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Import saves", java.awt.FileDialog.LOAD).apply {
+            isMultipleMode = true
+            setFilenameFilter { _, name -> name.endsWith(".cwsave") }
+            isVisible = true
+        }
+        dialog.files.toList()
+    }
     installDirectSurface()
     MeshCanvas.draw = desktopMeshDraw
     MapBake.enabled = true
@@ -206,9 +219,14 @@ private fun game() = application {
             val pixels = window.width * (scale?.scaleX ?: 1.0) * window.height * (scale?.scaleY ?: 1.0)
             settings.suggestGraphics(pixels.toLong(), RenderInfo.software)
         }
+        // Started from the Lakeside launcher: the launcher owns updates, so the built-in updater is off.
+        val launcher = LauncherSession.current
         val updater = remember {
-            Updater(DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel })
+            if (launcher.managed) null
+            else Updater(DesktopUpdates, scope, File(saveDirectory(), "updates"), saveDirectory(), channel = { settings.updateChannel })
         }
+        // The handoff is redeemed off the main thread; the menu never waits for it and a failure shows nothing.
+        LaunchedEffect(Unit) { withContext(Dispatchers.IO) { launcher.redeemOnce() } }
         CorporateWarfareApp(store, settings, updater, onQuit = ::exitApplication, saveFolder = saveDirectory().path)
     }
 }

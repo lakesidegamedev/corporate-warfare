@@ -214,7 +214,23 @@ fn opening_stock(world: &World) -> BTreeMap<(Handle, u16, u8), i64> {
     stock
 }
 
+/// The grid an electricity buyer or generator in `region` belongs to: its currency area (see
+/// `markets::grid_regions`), keyed by the area's lowest region.
+fn grid_key(dataset: &Dataset, region: u8) -> u8 {
+    crate::economy::markets::supply_regions(dataset, region, dataset.product_index["electricity"])
+        .iter()
+        .copied()
+        .min()
+        .unwrap_or(region)
+}
+
 /// Electricity produced this week and the share each facility receives, in basis points.
+///
+/// Power is pooled over a grid (a currency area), not a single region: every generator on the
+/// grid feeds every plant on it. When the grid is short, every plant that asked gets the same
+/// share of what it planned to draw, whoever it belongs to and however new it is. Buyers pay the
+/// grid's going price, the generators' asking prices weighted by what each made, so a short
+/// grid's price rises as its generators' asks rise instead of holding at the catalogue price.
 fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle, i32> {
     let electricity = dataset.product_index["electricity"];
     let power_recipe: Vec<Handle> = world
@@ -227,109 +243,171 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
         .map(|(handle, _)| handle)
         .collect();
 
-    let price = dataset.reference_price(electricity);
+    let reference = crate::economy::pricing::price_reference(world, dataset, electricity).max(1);
     // Generators produce from opening fuel and staff, without needing their own output.
-    let mut supply_by_region: BTreeMap<u8, Vec<(Handle, MilliLots)>> = BTreeMap::new();
+    // By grid: (owning firm, generator region, lots made, firm's asking price).
+    let mut supply_by_grid: BTreeMap<u8, Vec<(Handle, u8, MilliLots, i64)>> = BTreeMap::new();
     for handle in power_recipe {
         let produced = run_facility(world, dataset, handle, 10_000, &BTreeMap::new(), true, None);
         if produced.is_positive() {
             let facility = world.facilities.get(handle).expect("facility");
             // Payment must reach the owning firm; facility and firm handles are separate
             // slabs and their numeric values overlap.
-            supply_by_region
-                .entry(facility.region)
+            let ask = world
+                .firms
+                .get(facility.firm)
+                .and_then(|firm| firm.policies.prices.get(&electricity).copied())
+                .unwrap_or(reference)
+                .max(1);
+            supply_by_grid
+                .entry(grid_key(dataset, facility.region))
                 .or_default()
-                .push((facility.firm, produced));
+                .push((facility.firm, facility.region, produced, ask));
         }
     }
 
-    // Gateway imports augment local supply, finite per week.
-    let mut gateway_supply: BTreeMap<u8, i64> = BTreeMap::new();
-    for gateway in &world.gateways {
-        if gateway.product == electricity {
-            *gateway_supply.entry(gateway.region).or_default() += gateway.capacity_lots * 1_000;
+    // Gateway imports augment the grid's supply, finite per week, at the gateway's import price.
+    // By grid: (gateway index, milli-lots of room, import price).
+    let mut gateway_supply: BTreeMap<u8, Vec<(usize, i64, i64)>> = BTreeMap::new();
+    for (index, gateway) in world.gateways.iter().enumerate() {
+        if gateway.product == electricity && gateway.sell_price_cents > 0 {
+            gateway_supply
+                .entry(grid_key(dataset, gateway.region))
+                .or_default()
+                .push((
+                    index,
+                    gateway.capacity_lots.max(0) * 1_000,
+                    gateway.sell_price_cents,
+                ));
+        }
+    }
+
+    // Buyers by grid: (plant, owning firm, milli-lots requested).
+    let mut demand_by_grid: BTreeMap<u8, Vec<(Handle, Handle, i64)>> = BTreeMap::new();
+    let mut prices: BTreeMap<u8, i64> = BTreeMap::new();
+    for (handle, facility) in world.facilities.iter() {
+        if facility.status != FacilityStatus::Operating {
+            continue;
+        }
+        let recipe = &dataset.recipes[facility.recipe as usize];
+        if recipe.output == "electricity" {
+            continue;
+        }
+        let need = recipe
+            .weekly_inputs_lots
+            .get("electricity")
+            .copied()
+            .unwrap_or(0);
+        if need == 0 {
+            continue;
+        }
+        let firm = match world.firms.get(facility.firm) {
+            Some(firm) if firm.operative() => firm,
+            _ => continue,
+        };
+        // Planned demand in milli-lots, like every other physical quantity in the trade.
+        let planned = MilliLots::from_lots(need * facility.blocks as i64)
+            .scale_bps(facility.target_bps)
+            .0;
+        if planned <= 0 {
+            continue;
+        }
+        let grid = grid_key(dataset, facility.region);
+        let price = *prices.entry(grid).or_insert_with(|| {
+            let list = supply_by_grid.get(&grid);
+            let made: i128 = list
+                .map(|l| l.iter().map(|(_, _, qty, _)| qty.0 as i128).sum())
+                .unwrap_or(0);
+            if made <= 0 {
+                reference
+            } else {
+                let value: i128 = list
+                    .map(|l| {
+                        l.iter()
+                            .map(|(_, _, qty, ask)| qty.0 as i128 * *ask as i128)
+                            .sum()
+                    })
+                    .unwrap_or(0);
+                ((value / made) as i64).max(1)
+            }
+        });
+        // A buyer can only reserve what it actually holds in free cash.
+        let affordable = firm.book.cash().max(0) / price;
+        let requested = planned.min(affordable.saturating_mul(1_000)).max(0);
+        if requested > 0 {
+            demand_by_grid
+                .entry(grid)
+                .or_default()
+                .push((handle, facility.firm, requested));
         }
     }
 
     let mut result = BTreeMap::new();
-    let regions = world.regions.len();
-    for region_index in 0..regions {
-        let mut demand_entries: Vec<(Handle, Handle, i64, i64)> = Vec::new();
-        for (handle, facility) in world.facilities.iter() {
-            if facility.region as usize != region_index {
-                continue;
-            }
-            if facility.status != FacilityStatus::Operating {
-                continue;
-            }
-            let recipe = &dataset.recipes[facility.recipe as usize];
-            if recipe.output == "electricity" {
-                continue;
-            }
-            let need = recipe
-                .weekly_inputs_lots
-                .get("electricity")
-                .copied()
-                .unwrap_or(0);
-            if need == 0 {
-                continue;
-            }
-            let firm = match world.firms.get(facility.firm) {
-                Some(firm) if firm.operative() => firm,
-                _ => continue,
-            };
-            // Planned demand in milli-lots, like every other physical quantity in the trade.
-            let planned = MilliLots::from_lots(need * facility.blocks as i64)
-                .scale_bps(facility.target_bps)
-                .0;
-            if planned <= 0 {
-                continue;
-            }
-            // A buyer can only reserve what it actually holds in free cash.
-            let affordable = if price > 0 {
-                firm.book.cash().max(0) / price
-            } else {
-                planned
-            };
-            let requested = planned.min(affordable.saturating_mul(1_000)).max(0);
-            if requested > 0 {
-                demand_entries.push((handle, facility.firm, requested, price));
-            }
-        }
-        demand_entries.sort_by_key(|(handle, _, _, _)| *handle);
-        let total_local_supply: i64 = supply_by_region
-            .get(&(region_index as u8))
-            .map(|entries| entries.iter().map(|(_, qty)| qty.0).sum())
-            .unwrap_or(0)
-            + gateway_supply
-                .get(&(region_index as u8))
-                .copied()
-                .unwrap_or(0);
-        let total_demand: i64 = demand_entries.iter().map(|(_, _, qty, _)| *qty).sum();
+    for (grid, mut demand_entries) in demand_by_grid {
+        demand_entries.sort_by_key(|(handle, _, _)| *handle);
+        let home_price = prices.get(&grid).copied().unwrap_or(reference);
+        let local_supply = supply_by_grid.get(&grid).cloned().unwrap_or_default();
+        let gateways = gateway_supply.get(&grid).cloned().unwrap_or_default();
+        let local_total: i64 = local_supply.iter().map(|(_, _, qty, _)| qty.0).sum();
+        let import_room: i64 = gateways.iter().map(|(_, room, _)| *room).sum();
+        let total_local_supply = local_total + import_room;
+        let total_demand: i64 = demand_entries.iter().map(|(_, _, qty)| *qty).sum();
         if total_demand == 0 {
             continue;
         }
+        // Home generators supply first; imports cover the rest up to the gateways' room. The
+        // grid's price is the blend: home power at the generators' asks, imported power at the
+        // gateways' import prices.
+        let delivered_home = local_total.min(total_demand);
+        let imported = import_room.min(total_demand - delivered_home).max(0);
+        let import_split: Vec<(u64, MilliLots)> = if imported > 0 {
+            MilliLots::allocate(
+                MilliLots(imported),
+                &gateways
+                    .iter()
+                    .map(|(index, room, _)| (*index as u64, *room))
+                    .collect::<Vec<_>>(),
+            )
+        } else {
+            Vec::new()
+        };
+        let home_value = delivered_home as i128 * home_price as i128;
+        let import_value: i128 = import_split
+            .iter()
+            .zip(&gateways)
+            .map(|((_, qty), (_, _, ask))| qty.0 as i128 * *ask as i128)
+            .sum();
+        let price = if delivered_home + imported > 0 {
+            ((home_value + import_value) / (delivered_home + imported) as i128) as i64
+        } else {
+            home_price
+        }
+        .max(1);
+        for ((index, qty), _) in import_split.iter().zip(&gateways) {
+            if let Some(gateway) = world.gateways.get_mut(*index as usize) {
+                gateway.last_import_lots += qty.lots();
+            }
+        }
         let supplied = total_local_supply.min(total_demand);
         if supplied <= 0 {
-            for (handle, _, _, _) in &demand_entries {
+            for (handle, _, _) in &demand_entries {
                 result.insert(*handle, 0);
             }
             continue;
         }
         let weights: Vec<(u64, i64)> = demand_entries
             .iter()
-            .map(|(handle, _, qty, _)| (handle.0, *qty))
+            .map(|(handle, _, qty)| (handle.0, *qty))
             .collect();
         let allocation = allocate_cents(Cents(supplied), &weights);
         let total_granted: i64 = allocation.iter().map(|(_, qty)| qty.0).sum();
-        // Local generators are paid in proportion to their share of local supply.
-        let local_supply = supply_by_region
-            .get(&(region_index as u8))
-            .cloned()
-            .unwrap_or_default();
-        let mut local_remaining: i64 = local_supply.iter().map(|(_, qty)| qty.0).sum();
-        let mut paid_local = 0i64;
-        for (index, (handle, _, requested, unit_price)) in demand_entries.iter().enumerate() {
+        // Every buyer pays for what it was granted; the generators are then paid the grid's
+        // takings in proportion to what each delivered, and the part the gateway supplied goes
+        // abroad. (The earlier loop paid the generators out of the first buyer's bill only: every
+        // later buyer's payment left the economy, so a generator with many customers was paid
+        // by one of them and closed for losses while its grid went short.)
+        let mut takings = 0i64;
+        for (index, (handle, buyer_firm, requested)) in demand_entries.iter().enumerate() {
             let granted = allocation[index].1.0.min(*requested).max(0);
             let ratio = if *requested > 0 {
                 (granted * 10_000 / *requested) as i32
@@ -340,19 +418,15 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
             if granted == 0 {
                 continue;
             }
-            let cost = round_even_div(*unit_price as i128 * granted as i128, 1_000) as i64;
-            let buyer_firm = match world.facilities.get(*handle) {
-                Some(facility) => facility.firm,
-                None => continue,
-            };
+            let cost = round_even_div(price as i128 * granted as i128, 1_000) as i64;
             let cash = world
                 .firms
-                .get(buyer_firm)
+                .get(*buyer_firm)
                 .map(|f| f.book.cash())
                 .unwrap_or(0);
             let paid = cost.min(cash.max(0));
             if paid > 0 {
-                let _ = world.firms.get_mut(buyer_firm).unwrap().book.commit(
+                let _ = world.firms.get_mut(*buyer_firm).unwrap().book.commit(
                     world.tick,
                     Txn::new().credit(Account::Cash, paid, "electricity").debit(
                         Account::CostOfGoods,
@@ -360,19 +434,33 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
                         "electricity",
                     ),
                 );
+                takings += paid;
             }
-            let mut remaining_payment = paid;
-            for (seller, qty) in &local_supply {
-                if remaining_payment <= 0 || local_remaining <= 0 {
-                    break;
-                }
-                let share = round_even_div(
-                    remaining_payment as i128 * qty.0.min(local_remaining) as i128,
-                    local_remaining as i128,
-                ) as i64;
-                let share = share.min(remaining_payment);
-                if share > 0 {
-                    if let Some(firm) = world.firms.get_mut(*seller) {
+        }
+        let delivered = total_granted.min(local_total).max(0);
+        let to_generators = if home_value + import_value > 0 {
+            (takings as i128 * home_value / (home_value + import_value)) as i64
+        } else {
+            0
+        }
+        .min(takings);
+        if delivered > 0 && !local_supply.is_empty() {
+            let weights: Vec<(u64, i64)> = local_supply
+                .iter()
+                .enumerate()
+                .map(|(index, (_, _, qty, _))| (index as u64, qty.0))
+                .collect();
+            let split = MilliLots::allocate(MilliLots(delivered), &weights);
+            let pay_weights: Vec<(u64, i64)> = split
+                .iter()
+                .map(|(index, qty)| (*index, qty.0.max(0)))
+                .collect();
+            let pay = allocate_cents(Cents(to_generators), &pay_weights);
+            for (index, (seller, region, _, _)) in local_supply.iter().enumerate() {
+                let qty = split[index].1;
+                let share = pay[index].1.0;
+                if let Some(firm) = world.firms.get_mut(*seller) {
+                    if share > 0 {
                         let _ = firm.book.commit(
                             world.tick,
                             Txn::new().debit(Account::Cash, share, "power sale").credit(
@@ -382,32 +470,26 @@ fn dispatch_electricity(world: &mut World, dataset: &Dataset) -> BTreeMap<Handle
                             ),
                         );
                     }
-                    paid_local += share;
-                    remaining_payment -= share;
+                    if qty.0 > 0 {
+                        // Remove exactly the power consumers bought from producer stock. What is
+                        // left is the week's surplus, which the gateway may export instead of
+                        // expiring unsold. Power dispatched to the grid is a sale, for planning
+                        // and the board.
+                        firm.issue_stock(electricity, *region, qty);
+                        firm.record_sale(*region, electricity, qty);
+                    }
                 }
-                local_remaining -= qty.0.min(local_remaining);
             }
         }
-        let _ = paid_local;
-        // Remove exactly the power consumers bought from producer stock. What is left is the
-        // week's surplus, which the gateway may export instead of expiring unsold.
-        if total_granted > 0 && !local_supply.is_empty() {
-            let weights: Vec<(u64, i64)> = local_supply
-                .iter()
-                .map(|(handle, qty)| (handle.0, qty.0))
-                .collect();
-            let split = MilliLots::allocate(MilliLots(total_granted), &weights);
-            for (index, (seller, _)) in local_supply.iter().enumerate() {
-                let qty = split[index].1;
-                if qty.0 <= 0 {
-                    continue;
-                }
-                if let Some(firm) = world.firms.get_mut(*seller) {
-                    firm.issue_stock(electricity, region_index as u8, qty);
-                    // Power dispatched to the grid is a sale, for planning and the board.
-                    firm.record_sale(region_index as u8, electricity, qty);
-                }
-            }
+        let abroad =
+            crate::economy::fx::region_to_numeraire(world, dataset, grid, takings - to_generators);
+        if abroad > 0 {
+            let _ = world.outside.gateway_book.commit(
+                world.tick,
+                Txn::new()
+                    .debit(Account::Cash, abroad, "electricity import")
+                    .credit(Account::Revenue, abroad, "electricity import"),
+            );
         }
     }
     result
@@ -543,11 +625,11 @@ fn run_facility(
     let focus_bps = crate::economy::operations::input_bps(world, dataset, handle);
     // Input limits, excluding electricity which is a service allocated above.
     let mut input_limit = ratio;
-    for (product_id, weekly) in &recipe.weekly_inputs_lots {
-        if product_id == "electricity" {
+    for (code, weekly) in dataset.recipe_tables.inputs(facility.recipe) {
+        let (code, weekly) = (*code, weekly);
+        if dataset.products[code as usize].id == "electricity" {
             continue;
         }
-        let code = dataset.product_index[product_id];
         if dataset.products[code as usize].kind.is_service() {
             // Services cannot be stockpiled: they expire each week and markets clear after
             // production, so a non-electric service input is bought in the week it is used
@@ -619,11 +701,11 @@ fn run_facility(
 
     // Consume inputs once, carrying their actual moving-average cost.
     let mut material_cost = 0i64;
-    for (product_id, weekly) in &recipe.weekly_inputs_lots {
-        if product_id == "electricity" {
+    for (code, weekly) in dataset.recipe_tables.inputs(facility.recipe) {
+        let (code, weekly) = (*code, weekly);
+        if dataset.products[code as usize].id == "electricity" {
             continue;
         }
-        let code = dataset.product_index[product_id];
         // Recipe quantities are whole lots; one lot is 1000 milli-lots. Availability and
         // consumption must use the same unit or the plant consumes a thousandth of its recipe.
         let need = MilliLots::from_lots(weekly * facility.blocks as i64)

@@ -1732,7 +1732,7 @@ struct WorldMapView: View {
     @AppStorage(GraphicsKeys.interstates) private var interstates = true
     @AppStorage(GraphicsKeys.seasons) private var seasons = true
     @AppStorage(GraphicsKeys.labels) private var labels = 2
-    @AppStorage(GraphicsKeys.newMap) private var newMap = false
+    @AppStorage(GraphicsKeys.newMap) private var newMap = true
     let shading: [String: Double]
     let layer: MapLayer
     let divisions: [DivisionMarker]
@@ -1816,7 +1816,7 @@ struct WorldMapView: View {
             let gpuOn = newMap && layer != .freight && current.zoom >= MapCamera.flatEnd && (gpu?.isReady ?? false)
             ZStack(alignment: .topLeading) {
                 if gpuOn, let gpu {
-                    GpuMapSurface(session: gpu, camera: current, size: size, tilt: GraphicsSettings.pitch(forTilt: tiltSetting))
+                    GpuMapSurface(session: gpu, camera: current, size: size, tilt: GraphicsSettings.pitch(forTilt: tiltSetting), animate: animate)
                         .allowsHitTesting(false)
                     GpuLabels(session: gpu, map: map, divisions: divisions, labels: look.labels, planner: labelPlanner, version: gpuTick)
                 } else {
@@ -2065,12 +2065,14 @@ struct WorldMapView: View {
         var shading: [String: Double]
         var clouds: Int
         var week: Int
+        var settlement: [String: Int]
     }
 
     private var gpuReady: Bool { gpuTick >= 0 && (gpu?.isReady ?? false) }
 
     private var gpuInputs: GpuInputs {
-        GpuInputs(plants: plants, divisions: divisions, layer: layer, shading: shading, clouds: clouds, week: seasonWeek)
+        GpuInputs(plants: plants, divisions: divisions, layer: layer, shading: shading, clouds: clouds, week: seasonWeek,
+                  settlement: settlement)
     }
 
     /// Opens the GPU map for the scenario while the setting is on, closes it when it is not.
@@ -2107,7 +2109,7 @@ struct WorldMapView: View {
         guard let gpu else { return }
         let night = gpuNight()
         gpu.update(GpuMapUpdate.json(plants: plants, divisions: divisions, layer: layer, shading: shading,
-                                     night: night, clouds: clouds, week: seasonWeek))
+                                     night: night, clouds: clouds, week: seasonWeek, settlement: settlement))
     }
 
     private func gpuLine(on: Bool) -> String {

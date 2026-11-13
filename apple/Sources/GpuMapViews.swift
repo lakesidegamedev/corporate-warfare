@@ -8,10 +8,13 @@ struct GpuMapSurface: UIViewRepresentable {
     let size: CGSize
     /// The player's tilt setting, in radians.
     let tilt: Double
+    /// Map animations on (the player's setting, and not reduced motion).
+    var animate: Bool = true
 
     func makeUIView(context: Context) -> GpuMetalView { session.view }
 
     func updateUIView(_ view: GpuMetalView, context: Context) {
+        session.setAnimation(animate)
         session.request(camera: GpuCamera(camera, size: size, tilt: tilt), size: size)
     }
 }
@@ -19,11 +22,12 @@ struct GpuMapSurface: UIViewRepresentable {
 /// Game state as the GPU map's update JSON: the same fields the desktop shell sends.
 enum GpuMapUpdate {
     static func json(plants: [MapPlantDto], divisions: [DivisionMarker], layer: MapLayer, shading: [String: Double],
-                     night: Bool, clouds: Int, week: Int) -> String {
+                     night: Bool, clouds: Int, week: Int, settlement: [String: Int] = [:]) -> String {
         var object: [String: Any] = [:]
         object["plants"] = plants.map { p -> [String: Any] in
             ["region": p.region, "industry": p.industry, "firm": p.firm, "blocks": p.blocks,
-             "player": p.player, "status": p.status.lowercased()]
+             "player": p.player, "status": p.status.lowercased(),
+             "utilisation_bps": p.utilisationBps, "progress_bps": p.progressBps]
         }
         var seen = Set<String>()
         object["holdings"] = divisions.map(\.region).filter { seen.insert($0).inserted }
@@ -36,6 +40,8 @@ enum GpuMapUpdate {
         object["night"] = night
         object["clouds"] = min(max(clouds, 0), 3)
         object["week"] = week
+        // Net migration by region (basis points of its people): the suburban houses follow it.
+        object["migration"] = settlement
         let data = (try? JSONSerialization.data(withJSONObject: object)) ?? Data("{}".utf8)
         return String(decoding: data, as: UTF8.self)
     }

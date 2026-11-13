@@ -60,6 +60,7 @@ pub struct Bounds {
 }
 
 /// Elevation in metres on a regular lon/lat grid, north row first.
+#[derive(Clone)]
 pub struct Heightmap {
     pub w: usize,
     pub h: usize,
@@ -121,6 +122,7 @@ impl Heightmap {
 }
 
 /// A raster of the map's own data: RGBA8, R region, G state, B water kind, A tint class.
+#[derive(Clone)]
 pub struct Mask {
     pub w: usize,
     pub h: usize,
@@ -172,6 +174,7 @@ impl Mask {
 }
 
 /// An RGBA8 image that covers a geographic box (rows north first).
+#[derive(Clone)]
 pub struct GeoImage {
     pub w: u32,
     pub h: u32,
@@ -187,6 +190,66 @@ pub struct VoxelBox {
     pub colour: Rgb,
     /// Roof or trim that takes the player's firm colour (gold) when the building is theirs.
     pub trim: bool,
+    /// Window rows on the side faces, by day and lit at night. `None` leaves it to the mesh's
+    /// size rule (the classic models); the GPU map's plant models always say.
+    pub windows: Option<bool>,
+    /// The solid drawn inside the box (a plain box unless the model says otherwise).
+    pub shape: Shape,
+}
+
+/// The solids a model is built from. Each fills the box it is given; round ones are twelve
+/// sided, so every face stays flat and hard edged.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Shape {
+    #[default]
+    Box,
+    /// Upright and round. `bottom` and `top` are the radius at each end as a share of the box
+    /// (1, 1 a tank; 1, 0 a cone; 1, 0.65 a tapering stack).
+    Round {
+        bottom: f32,
+        top: f32,
+    },
+    /// A round tank or pipe lying along x or along y.
+    RoundX,
+    RoundY,
+    /// A pitched roof with its ridge along x or along y.
+    GableX,
+    GableY,
+    /// Four sloping sides meeting at a point.
+    Pyramid,
+}
+
+impl Shape {
+    pub fn parse(name: &str) -> Shape {
+        match name {
+            "cyl" => Shape::Round {
+                bottom: 1.0,
+                top: 1.0,
+            },
+            "cone" => Shape::Round {
+                bottom: 1.0,
+                top: 0.0,
+            },
+            "taper" => Shape::Round {
+                bottom: 1.0,
+                top: 0.62,
+            },
+            "flare" => Shape::Round {
+                bottom: 0.72,
+                top: 1.0,
+            },
+            "dome" => Shape::Round {
+                bottom: 1.0,
+                top: 0.45,
+            },
+            "cylx" => Shape::RoundX,
+            "cyly" => Shape::RoundY,
+            "gablex" => Shape::GableX,
+            "gabley" => Shape::GableY,
+            "pyr" => Shape::Pyramid,
+            _ => Shape::Box,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -205,8 +268,22 @@ pub enum Owner {
     Rival,
 }
 
+/// What a building is doing, for the animated layer (smoke, construction, growth). Scenery has
+/// no status. All of it is plain data from the game; none of it changes what the building is.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct Activity {
+    pub status: Option<crate::game::SiteStatus>,
+    /// How hard the plant runs, 0 to 1.
+    pub utilisation: f32,
+    /// How far a construction site has got, 0 to 1.
+    pub progress: f32,
+    /// Animation clock (seconds) at which the building appeared, for the growth; None for a
+    /// building that was always there.
+    pub born: Option<f32>,
+}
+
 /// A building placed on the map. `yaw` turns it in degrees (0 faces south).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Placement {
     pub model: String,
     pub lon: f32,
@@ -216,6 +293,16 @@ pub struct Placement {
     /// (`Placement::sized`), so a building is the same size on the ground at every zoom.
     pub scale: f32,
     pub owner: Owner,
+    pub activity: Activity,
+    pub look: Look,
+}
+
+/// How a placed building is dressed beyond its owner: a rival's firm colour on the roofs and
+/// trim, and whether the plant stands idle (mothballed, drawn grey and dark).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Look {
+    pub firm: Option<Rgb>,
+    pub idle: bool,
 }
 
 impl Placement {
@@ -229,6 +316,8 @@ impl Placement {
 pub const LINE_INTERSTATE: u8 = 0;
 pub const LINE_MAIN: u8 = 1;
 pub const LINE_RAIL: u8 = 2;
+/// Major rivers of the map's own data, drawn as water ribbons under the roads.
+pub const LINE_RIVER: u8 = 3;
 
 /// A polyline of the map's own road and railway data, in degrees.
 #[derive(Clone, Debug)]
@@ -245,6 +334,19 @@ pub struct City {
     pub population: u64,
 }
 
+/// One freight lane of the game this week, for the vehicles: two regions, how the goods move,
+/// how much (0 to 1 of the busiest lane) and what they are.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Lane {
+    pub from: String,
+    pub to: String,
+    /// "truck" (or "road"), "rail", "sea", "river" or "pipeline".
+    pub mode: String,
+    pub volume: f32,
+    pub goods: String,
+}
+
+#[derive(Clone)]
 pub struct Scene {
     pub projection: Projection,
     pub heightmap: Heightmap,
@@ -277,10 +379,17 @@ pub struct Scene {
     /// The scenario's regions in mask order: region `i` is painted `i + 1` in the mask's red
     /// channel. Hub positions are where a region's own buildings stand.
     pub regions: Vec<RegionInfo>,
+    /// Net migration of each region over the year in basis points of its people (region order
+    /// like `regions`; empty means steady everywhere). More houses stand where people arrive.
+    pub region_trend_bps: Vec<i32>,
     /// Bumped when the mask tints or the building placements change, so the renderer re-uploads
     /// only what moved.
     pub mask_rev: u64,
     pub buildings_rev: u64,
+    /// The freight lanes that vehicles run along (empty before the game sends any).
+    pub lanes: Vec<Lane>,
+    /// Bumped when something the props stand on changes (the migration trends).
+    pub props_rev: u64,
 }
 
 /// One playable region of a scenario.
@@ -310,6 +419,20 @@ impl Scene {
         self.mask_rev += 1;
     }
 
+    /// Set each region's net migration over the year (region code to basis points of its
+    /// people). Codes not listed count as steady. Houses in the suburbs follow it.
+    pub fn set_region_trends(&mut self, trends: &HashMap<String, i32>) {
+        let bps: Vec<i32> = self
+            .regions
+            .iter()
+            .map(|r| trends.get(&r.code).copied().unwrap_or(0))
+            .collect();
+        if bps != self.region_trend_bps {
+            self.region_trend_bps = bps;
+            self.props_rev += 1;
+        }
+    }
+
     /// Set the season: snow follows the week of the year, by latitude and height.
     pub fn set_week(&mut self, week: u32) {
         let week = week.clamp(1, 52);
@@ -321,6 +444,14 @@ impl Scene {
     }
 
     /// Replace the placed buildings and mark them for upload.
+    /// Replace the freight lanes; the vehicle routes are laid again from them.
+    pub fn set_lanes(&mut self, lanes: Vec<Lane>) {
+        if self.lanes != lanes {
+            self.lanes = lanes;
+            self.buildings_rev += 1;
+        }
+    }
+
     pub fn set_buildings(&mut self, buildings: Vec<Placement>) {
         self.buildings = buildings;
         self.buildings_rev += 1;
@@ -383,6 +514,8 @@ struct RawMap {
     interstates: Vec<RawLines>,
     #[serde(default)]
     railroads: Vec<RawLines>,
+    #[serde(default)]
+    rivers: Vec<RawLines>,
 }
 #[derive(Deserialize)]
 struct RawLines {
@@ -439,6 +572,8 @@ fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
     #[derive(Deserialize)]
     #[serde(untagged)]
     enum RawBox {
+        Shaped(f32, f32, f32, f32, f32, f32, String, bool, bool, String),
+        Full(f32, f32, f32, f32, f32, f32, String, bool, bool),
         Trim(f32, f32, f32, f32, f32, f32, String, bool),
         Plain(f32, f32, f32, f32, f32, f32, String),
     }
@@ -455,12 +590,22 @@ fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
                 .boxes
                 .iter()
                 .map(|b| {
-                    let (v, colour, trim) = match b {
+                    let (v, colour, trim, windows, shape) = match b {
+                        RawBox::Shaped(a, b, c, d, e, f, col, t, w, sh) => (
+                            [*a, *b, *c, *d, *e, *f],
+                            col,
+                            *t,
+                            Some(*w),
+                            Shape::parse(sh),
+                        ),
+                        RawBox::Full(a, b, c, d, e, f, col, t, w) => {
+                            ([*a, *b, *c, *d, *e, *f], col, *t, Some(*w), Shape::Box)
+                        }
                         RawBox::Trim(a, b, c, d, e, f, col, t) => {
-                            ([*a, *b, *c, *d, *e, *f], col, *t)
+                            ([*a, *b, *c, *d, *e, *f], col, *t, None, Shape::Box)
                         }
                         RawBox::Plain(a, b, c, d, e, f, col) => {
-                            ([*a, *b, *c, *d, *e, *f], col, false)
+                            ([*a, *b, *c, *d, *e, *f], col, false, None, Shape::Box)
                         }
                     };
                     VoxelBox {
@@ -468,6 +613,8 @@ fn parse_models(json: &str) -> Result<HashMap<String, VoxelModel>, String> {
                         max: [v[3], v[4], v[5]],
                         colour: hex(colour),
                         trim,
+                        windows,
+                        shape,
                     }
                 })
                 .collect();
@@ -744,6 +891,7 @@ fn collect_lines(map: &RawMap, scenario: &str, b: &Bounds) -> Vec<Line> {
     for (class, set) in [
         (LINE_INTERSTATE, &map.interstates),
         (LINE_RAIL, &map.railroads),
+        (LINE_RIVER, &map.rivers),
     ] {
         for g in set {
             if g.scenario.as_deref().is_none_or(|s| s == scenario) {
@@ -757,7 +905,18 @@ fn collect_lines(map: &RawMap, scenario: &str, b: &Bounds) -> Vec<Line> {
 }
 
 /// Footprint of one downtown block in kilometres: a real city block cluster, not a district.
-const BLOCK_KM: f32 = 0.55;
+const BLOCK_KM: f32 = 0.6;
+
+/// How tall a city's downtown core stands, 0 (a small city) to 3 (a metropolis): the tallest
+/// towers belong to the biggest cities only.
+pub fn downtown_tier(population: u64) -> usize {
+    match population {
+        0..=799_999 => 0,
+        800_000..=1_499_999 => 1,
+        1_500_000..=2_999_999 => 2,
+        _ => 3,
+    }
+}
 
 /// A few small voxel blocks round the centre of every big city: more blocks for bigger cities,
 /// each picked and turned from the city's own position so the same map always builds the same
@@ -769,22 +928,15 @@ fn downtown_blocks(
     lat: f32,
     voxel_km: f32,
 ) -> Vec<Placement> {
-    const KINDS: [&str; 6] = [
-        "financial/1",
-        "city/1",
-        "real_estate/2",
-        "technology/1",
-        "city/2",
-        "telecommunications/1",
-    ];
     let kx = KM_PER_DEG_LON_EQ * lat.to_radians().cos();
     let mut out = Vec::new();
-    for c in cities.iter().filter(|c| c.population >= 600_000) {
-        let n = (2.0 + (c.population as f32 / 1.0e6).sqrt()).min(7.0) as usize;
+    for c in cities.iter().filter(|c| c.population >= 250_000) {
+        let n = (2.0 + 1.6 * (c.population as f32 / 1.0e6).sqrt()).min(9.0) as usize;
         let reach = 2.0 + 3.2 * (c.population as f32 / 1.0e6).sqrt();
         let seed = ((c.lon * 977.0 + c.lat * 313.0).sin() * 43758.5)
             .fract()
             .abs();
+        let core = downtown_tier(c.population);
         for i in 0..n {
             let a = (seed + i as f32 / n as f32) * std::f32::consts::TAU;
             let ring = if i == 0 {
@@ -792,17 +944,31 @@ fn downtown_blocks(
             } else {
                 reach * (0.3 + 0.12 * ((i * 7) % 5) as f32)
             };
-            let kind = KINDS[((seed * 97.0) as usize + i * 5) % KINDS.len()];
-            let Some(model) = models.get(kind) else {
+            // The tallest block stands at the centre; the blocks round it step down, and the
+            // outermost are suburbs.
+            let tier = match i {
+                0 => core,
+                1 | 2 => core.saturating_sub(1),
+                _ => core.saturating_sub(2),
+            };
+            let variant = if (seed * 97.0) as usize % 2 == (i % 2) {
+                'a'
+            } else {
+                'b'
+            };
+            let kind = format!("downtown/t{tier}{variant}");
+            let Some(model) = models.get(&kind) else {
                 continue;
             };
             out.push(Placement {
-                model: kind.into(),
+                model: kind,
                 lon: c.lon + a.cos() * ring / kx,
                 lat: c.lat + a.sin() * ring / KM_PER_DEG_LAT,
                 yaw: (((seed * 31.0) as usize + i) % 4) as f32 * 90.0,
-                scale: Placement::scale_for_km(voxel_km, model, BLOCK_KM),
+                scale: Placement::scale_for_km(voxel_km, model, BLOCK_KM + 0.06 * tier as f32),
                 owner: Owner::Scenery,
+                activity: Activity::default(),
+                look: Look::default(),
             });
         }
     }
@@ -977,6 +1143,8 @@ impl Scene {
                             .get(model)
                             .map_or(1.0, |m| Placement::scale_for_km(VOXEL_KM, m, 1.2)),
                         owner: Owner::Rival,
+                        activity: Activity::default(),
+                        look: Look::default(),
                     }
                 })
                 .filter(|b| {
@@ -1055,8 +1223,11 @@ impl Scene {
             week: 28,
             season_rev: 0,
             regions,
+            region_trend_bps: Vec::new(),
             mask_rev: 0,
             buildings_rev: 0,
+            lanes: Vec::new(),
+            props_rev: 0,
         }
         .finish())
     }
@@ -1107,12 +1278,16 @@ impl Scene {
                         max: [3.0, 3.0, 1.0],
                         colour: [0x6F, 0xA8, 0x3B],
                         trim: false,
+                        windows: None,
+                        shape: crate::data::Shape::Box,
                     },
                     VoxelBox {
                         min: [-2.0, -2.0, 1.0],
                         max: [2.0, 2.0, 6.0],
                         colour: [0xB2, 0x3A, 0x2E],
                         trim: false,
+                        windows: None,
+                        shape: crate::data::Shape::Box,
                     },
                 ],
                 footprint: [6.0, 6.0],
@@ -1141,6 +1316,8 @@ impl Scene {
                 yaw: 0.0,
                 scale: 1.0,
                 owner: Owner::Rival,
+                activity: Activity::default(),
+                look: Look::default(),
             }],
             lines: vec![
                 // An interstate across the ridge and its terrace walls, a main road and a railway.
@@ -1187,8 +1364,11 @@ impl Scene {
                     lat: 41.0,
                 },
             ],
+            region_trend_bps: Vec::new(),
             mask_rev: 0,
             buildings_rev: 0,
+            lanes: Vec::new(),
+            props_rev: 0,
         }
         .finish()
     }

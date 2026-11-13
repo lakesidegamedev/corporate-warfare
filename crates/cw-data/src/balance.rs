@@ -258,6 +258,295 @@ pub struct Balance {
     pub financial_businesses: Vec<String>,
     pub maintenance_annual_bps: i32,
     pub fixture_land_rent_cents_weekly: i64,
+    /// How gateways and sellers respond to trade volume (2.0). Absent in older content files,
+    /// which then get the defaults.
+    #[serde(default)]
+    pub markets: MarketRules,
+    /// How building costs follow prices, when rivals build and close, how idle cash is paid out
+    /// and how raids are announced (2.0). Absent in older content files, which then get the
+    /// defaults (the rules before 2.0).
+    #[serde(default)]
+    pub capacity: CapacityRules,
+    /// How household and business demand grows as it is served, swings with the business cycle,
+    /// and what a new seller is promised (2.0). Absent in older content files, which then get
+    /// the defaults (the rules before it).
+    #[serde(default)]
+    pub demand: DemandRules,
+    /// The world price's weekly texture on top of the authored price paths (2.0). Absent in
+    /// older content files, which then get the defaults (smooth paths, the rule before it).
+    #[serde(default)]
+    pub texture: TextureRules,
+    /// Rivals open at this share of their authored size (blocks, basis points; 10000 is as
+    /// authored). Absent in older content files, which then get 10000 (2.0 balance pass).
+    #[serde(default = "full_size_bps")]
+    pub rival_blocks_bps: i64,
+}
+
+fn full_size_bps() -> i64 {
+    10_000
+}
+
+/// How the outside world's prices stray from their authored paths week to week in a game that
+/// plays history with variance. Each price family strays by a seeded, mean-reverting
+/// disturbance drawn from the game's seed and the week alone (no saved state), so the dated
+/// history still shows through and a loaded game continues exactly. Plain historical games keep
+/// the smooth authored path.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TextureRules {
+    /// One entry per price family; a family not listed keeps its smooth path.
+    pub families: Vec<FamilyTexture>,
+    /// A disturbance at least this far from the path, in basis points, is a named world event
+    /// the price reason prints. Zero names none.
+    pub named_bps: i64,
+}
+
+/// One price family's texture.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FamilyTexture {
+    pub family: String,
+    /// How far the world price typically strays from the path: one standard deviation, in basis
+    /// points of the path.
+    pub swing_bps: i64,
+    /// Weeks for a disturbance to fade by half.
+    pub half_life_weeks: i64,
+    /// Causes printed when the price is pushed up or down past `named_bps`, lower case, each a
+    /// whole clause such as "a cold winter lifts natural gas".
+    pub causes_up: Vec<String>,
+    pub causes_down: Vec<String>,
+}
+
+/// Demand as a frontier: what a new seller can count on selling, how households move spending
+/// from the background economy to named sellers that serve them well, and how much each product
+/// swings with the business cycle. Shared by every scenario.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DemandRules {
+    /// Whether an opening for a product sold where it is made (a service, a shop) counts only
+    /// the lots its room holds as sold. Off: a new block is valued at its full output, however
+    /// small the room (the rule before it).
+    pub sell_within_room: bool,
+    /// How fast households in a well served market move spending to named sellers: the share
+    /// their asked-for lots grow a quarter, basis points, toward what their category budget
+    /// buys. Zero: households ask for the same lots for ever, apart from price and the cycle.
+    pub latent_growth_bps: i64,
+    /// A market is well served while the share of what households ask for that finds no seller
+    /// is under this, basis points. Only then does it grow.
+    pub latent_content_bps: i64,
+    /// How much each product's demand moves with the business cycle: percent of demand per
+    /// percent of output gap, in basis points of one (12,000 moves demand 1.2 percent for a
+    /// 1 percent gap). Products not listed use `cycle_default_bps`.
+    pub cycle_elasticity: Vec<(String, i64)>,
+    pub cycle_default_bps: i64,
+    /// Products bought to invest (plant, buildings, machines), whose demand also follows credit:
+    /// basis points of demand per basis point of credit conditions (credit built up less debt
+    /// being paid off, against its usual level).
+    pub investment_goods: Vec<String>,
+    pub credit_elasticity_bps: i64,
+    /// Whether a shop's price reads households going without and local competition the way a
+    /// service's does, not only its own shelf cover.
+    pub retail_reads_street: bool,
+    /// The street rule (2.0 prices round): a seller of a service, or a shop under
+    /// `retail_reads_street`, asks reference in a balanced market, lifts its price only by the
+    /// share of households going without in its regions beyond this many basis points, and cuts
+    /// only by its own idle capacity while a rival in its regions also has capacity to spare.
+    /// Zero: the rule before it (a seller reads its own use plus every household going without).
+    pub street_short_bps: i64,
+}
+
+impl Default for DemandRules {
+    fn default() -> Self {
+        DemandRules {
+            sell_within_room: false,
+            latent_growth_bps: 0,
+            latent_content_bps: 0,
+            cycle_elasticity: Vec::new(),
+            cycle_default_bps: 12_000,
+            investment_goods: Vec::new(),
+            credit_elasticity_bps: 0,
+            retail_reads_street: false,
+            street_short_bps: 0,
+        }
+    }
+}
+
+/// Capacity as the contest: what a new plant costs today, when a company adds or closes one, and
+/// what it does with cash it has no use for. Shared by every scenario and by the player and the
+/// rivals alike; a scenario supplies prices and plants, never its own rules.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CapacityRules {
+    /// Weight of the general price index in a plant's build price, in basis points. The weights
+    /// of the index and of `build_inputs` add to 10,000 when build prices follow prices; all
+    /// zero means a plant costs its catalogue price for ever (the rule before 2.0).
+    pub build_price_level_bps: i64,
+    /// Goods and services a plant is built from, each with its weight in the build price, in
+    /// basis points. Each counts at last week's closing corridor price against its catalogue
+    /// price, so a steel boom makes new mills dearer for everyone who orders one.
+    pub build_inputs: Vec<(String, i64)>,
+    /// The least and most the build price may be, in basis points of the catalogue price.
+    pub build_price_min_bps: i64,
+    pub build_price_max_bps: i64,
+    /// Whether households going without a service or retail good count as room to build, and
+    /// such products are valued at last week's closing price rather than the catalogue's.
+    pub local_room: bool,
+    /// Weeks of a block's output the opening must absorb, in tenths of a block, before a firm
+    /// that waits for proof (a cautious temperament) builds. A keen builder needs less.
+    pub opening_patient_tenths: i64,
+    pub opening_keen_tenths: i64,
+    /// Room, in tenths of a block, an opening outside a firm's own sectors must hold before a
+    /// builder with idle cash enters it as a new business. Zero: firms keep to their sectors.
+    pub opening_entry_tenths: i64,
+    /// Plants a company may run before each further one must pay back faster: the payback a
+    /// build must beat shortens by this many weeks for every plant already run. A smooth cost
+    /// of size in place of a hard cap on plants.
+    pub span_plants: i64,
+    pub span_weeks_per_plant: i64,
+    /// Weeks a plant must have run before a rival losing money over the quarter mothballs it for
+    /// losing money at its own figures. Zero: rivals never close a plant for losses.
+    pub close_after_loss_weeks: u32,
+    /// Weeks of mandatory outflow a firm keeps as a prudence buffer on top of its plans before
+    /// it counts cash as idle. Zero turns payouts off.
+    pub payout_buffer_weeks: i64,
+    /// Share of idle cash paid out each quarter, in basis points.
+    pub payout_share_bps: i64,
+    /// Weeks between a raid being announced and its resolution. Zero resolves a raid at once.
+    pub raid_warning_weeks: u32,
+    /// How households' opening demand for what they buy is sized to the playable market, in basis
+    /// points. Household income is the whole scaled regional economy, but only the named firms
+    /// sell to households. Where named sellers stand, households ask for what those sellers make
+    /// for them over `household_cover_bps`; elsewhere they ask for an even slice of their budget,
+    /// sized so the whole corridor opens with `household_unmet_bps` of what households ask for
+    /// finding no seller. What households no longer ask for stays in savings. Zero cover:
+    /// households ask for their whole category budget (the rule before 2.0).
+    pub household_cover_bps: i64,
+    pub household_unmet_bps: i64,
+    /// Weeks a plant on offer stays open for bids: a failed company's plants in its break-up
+    /// auction, and a plant its owner lists for sale. Zero: a failed company's plants are sold
+    /// off at once for scrap and no plant can be listed (the rule before 2.0).
+    pub plant_auction_weeks: u32,
+}
+
+impl Default for CapacityRules {
+    fn default() -> Self {
+        CapacityRules {
+            build_price_level_bps: 0,
+            build_inputs: Vec::new(),
+            build_price_min_bps: 10_000,
+            build_price_max_bps: 10_000,
+            local_room: false,
+            opening_patient_tenths: 0,
+            opening_keen_tenths: 0,
+            opening_entry_tenths: 0,
+            span_plants: 0,
+            span_weeks_per_plant: 0,
+            close_after_loss_weeks: 0,
+            payout_buffer_weeks: 0,
+            payout_share_bps: 0,
+            raid_warning_weeks: 0,
+            household_cover_bps: 0,
+            household_unmet_bps: 0,
+            plant_auction_weeks: 0,
+        }
+    }
+}
+
+/// How the outside world's gateways and the corridor's sellers respond to trade volume. Shared by
+/// every scenario: a scenario supplies its own gateways, prices and plants, never its own rules.
+///
+/// A gateway's weekly room is split into steps. The first step trades at the gateway's quote;
+/// each further step costs more to import and pays less to export, so a large shortage or glut
+/// moves the price paid at the margin instead of hitting a hard pin. Sellers read last week's
+/// marginal step: imports in the dear steps mean the corridor is short and home prices rise,
+/// exports in the cheap steps mean it is glutted and home prices fall.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MarketRules {
+    /// The first import step, traded at the quote, as a share of a gateway's weekly room, in
+    /// basis points.
+    pub import_first_step_bps: i64,
+    /// The first export step, paid at the quote, as a share of a gateway's weekly room. A
+    /// gateway's room grows to what the corridor exports, so this is normally all of it.
+    pub export_first_step_bps: i64,
+    /// Every further step's size as a share of a gateway's weekly room, in basis points.
+    pub gateway_step_bps: i64,
+    /// Steps a gateway trades in a week, each way. Volume beyond the last step is not traded.
+    pub gateway_steps: i64,
+    /// How much dearer each further import step is than the quote, in basis points of it.
+    pub import_step_premium_bps: i64,
+    /// How much less each further export step pays than the quote, in basis points of it.
+    pub export_step_discount_bps: i64,
+    /// The least an export step pays, in basis points of the quote.
+    pub export_floor_bps: i64,
+    /// Share of last week's marginal import premium or export discount a home seller passes into
+    /// the price it wants, in basis points.
+    pub trade_pressure_pass_bps: i64,
+    /// Whether a good is priced against the outside world's middle quote (halfway between the
+    /// gateway's import and export prices) rather than its fixed opening catalogue price, so home
+    /// prices follow world prices and inflation the way the gateways do.
+    pub anchor_to_outside: bool,
+    /// Share of the outside middle quote's move away from the catalogue price that the anchor
+    /// follows, in basis points (10,000 follows it fully). Plant building costs do not follow
+    /// world prices, so a full pass-through turned a world boom into a windfall for whoever
+    /// built new plants in it, and a bust into a loss.
+    pub anchor_pass_bps: i64,
+    /// Room a gateway adds in a week its trade ran past the first step (exports filled it, or
+    /// imports reached the dear steps), in basis points of its room. Ports and rail are extended
+    /// slowly, so a glut or shortage lasts months, not weeks.
+    pub room_growth_bps: i64,
+    /// Room a gateway gives up in a week its busier direction used less than
+    /// `room_shrink_below_bps` of it, in basis points of its room. A gateway that moved nothing
+    /// keeps its room: there is no use to read.
+    pub room_shrink_bps: i64,
+    /// Use below this share of a gateway's room, in basis points, lets the room shrink.
+    pub room_shrink_below_bps: i64,
+    /// Points of capacity, in basis points, a plant's run rate moves in a week toward what its
+    /// good sells. A slow ramp keeps a new plant's surplus, or a closed plant's gap, in the
+    /// market for months.
+    pub plan_step_bps: i32,
+    /// The share of its full capacity a service seller sells at the reference price, in basis
+    /// points. Selling more asks more, selling less asks less.
+    pub service_balance_bps: i64,
+    /// Basis points of price a service seller adds for every basis point of capacity sold over
+    /// the balance point (and takes off under it), in hundredths: 60 is 0.6.
+    pub service_slope_pct: i64,
+    /// The least and most a service seller asks, in basis points of reference.
+    pub service_min_bps: i64,
+    pub service_max_bps: i64,
+    /// Whether households that found no service count as demand on top of what sold, so a
+    /// region short of capacity reads as more than full.
+    pub service_counts_unmet: bool,
+    /// The highest price a good with no import, or a service, may ask, in basis points of its
+    /// reference. A good with an import is held under the import instead.
+    pub local_ceiling_bps: i64,
+}
+
+impl Default for MarketRules {
+    fn default() -> Self {
+        MarketRules {
+            import_first_step_bps: 10_000,
+            export_first_step_bps: 10_000,
+            gateway_step_bps: 10_000,
+            gateway_steps: 1,
+            import_step_premium_bps: 0,
+            export_step_discount_bps: 0,
+            export_floor_bps: 10_000,
+            trade_pressure_pass_bps: 0,
+            anchor_to_outside: false,
+            anchor_pass_bps: 10_000,
+            room_growth_bps: 100,
+            room_shrink_bps: 0,
+            room_shrink_below_bps: 0,
+            plan_step_bps: 1_500,
+            service_balance_bps: 8_500,
+            service_slope_pct: 60,
+            service_min_bps: 8_000,
+            service_max_bps: 11_500,
+            service_counts_unmet: false,
+            local_ceiling_bps: 11_500,
+        }
+    }
 }
 
 /// A scenario's starting balance on top of the shared products and strategies: the wage level
@@ -276,6 +565,9 @@ pub struct BalanceOverlay {
     /// Product id to opening reference price in cents. Unknown ids are an error.
     #[serde(default)]
     pub reference_price_cents: BTreeMap<String, i64>,
+    /// Rivals open at this share of their authored size, basis points (see `Balance`).
+    #[serde(default)]
+    pub rival_blocks_bps: Option<i64>,
 }
 
 impl BalanceOverlay {
@@ -289,6 +581,14 @@ impl BalanceOverlay {
         }
         if let Some(bps) = self.maintenance_annual_bps {
             balance.maintenance_annual_bps = bps;
+        }
+        if let Some(bps) = self.rival_blocks_bps {
+            if !(1_000..=10_000).contains(&bps) {
+                return Err(format!(
+                    "scenario balance rival_blocks_bps {bps} is out of range"
+                ));
+            }
+            balance.rival_blocks_bps = bps;
         }
         for (id, price) in &self.reference_price_cents {
             let product = balance

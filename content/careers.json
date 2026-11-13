@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "note": "Careers (2.0): how a career starts, what it plays for and how it ends. Every number of the career frame is here. Not part of the dataset hash; a career copies what it needs into its save when it starts. See docs/rules/CORPORATE.md, Careers.",
+  "helm": {
+    "rank_from": 8,
+    "rank_to": 15,
+    "offers": 3,
+    "fortune_cover_bps": 11000,
+    "fortune_difficulty_bps": { "easy": 12000, "standard": 10000, "hard": 9300 }
+  },
+  "lengths_years": [5, 10, 20],
+  "default_years": 10,
+  "fortune_floor_cents": 27500000,
+  "found_grace_weeks": 26,
+  "board": {
+    "grace_weeks": 52,
+    "loss_periods": 6,
+    "warning_weeks": 26
+  },
+  "dominant": {
+    "quarters": 4,
+    "min_producers": 5,
+    "bronze_bps": 2000,
+    "silver_bps": 3000,
+    "gold_bps": 4000
+  },
+  "richest": {
+    "note": "Richest: the player's net worth at the end over the fortune the career started with (a helm start: the net worth just after buying control), in basis points (10000 = no growth). One row per career length; scenarios lists rows for a scenario whose founders grow at a different pace, and any other scenario uses multiples. The 10 year rows are calibrated on the careful founder's grid in each scenario (2.0 inputs round two, 10 seeds: bronze in about four careers of ten, gold above every measured career); the default row is Great Lakes. 5 and 20 years compound the same yearly growth and are not measured.",
+    "multiples": [
+      { "years": 5, "bronze_bps": 41000, "silver_bps": 50000, "gold_bps": 63000 },
+      { "years": 10, "bronze_bps": 170000, "silver_bps": 250000, "gold_bps": 400000 },
+      { "years": 20, "bronze_bps": 2890000, "silver_bps": 6250000, "gold_bps": 16000000 }
+    ],
+    "scenarios": {
+      "texas-1981": [
+        { "years": 5, "bronze_bps": 33000, "silver_bps": 40000, "gold_bps": 50000 },
+        { "years": 10, "bronze_bps": 110000, "silver_bps": 160000, "gold_bps": 250000 },
+        { "years": 20, "bronze_bps": 1210000, "silver_bps": 2560000, "gold_bps": 6250000 }
+      ],
+      "silicon-valley-1995": [
+        { "years": 5, "bronze_bps": 21000, "silver_bps": 28000, "gold_bps": 39000 },
+        { "years": 10, "bronze_bps": 45000, "silver_bps": 80000, "gold_bps": 150000 },
+        { "years": 20, "bronze_bps": 202000, "silver_bps": 640000, "gold_bps": 2250000 }
+      ],
+      "ruhr-rhine-1991": [
+        { "years": 5, "bronze_bps": 29000, "silver_bps": 39000, "gold_bps": 50000 },
+        { "years": 10, "bronze_bps": 83000, "silver_bps": 150000, "gold_bps": 250000 },
+        { "years": 20, "bronze_bps": 689000, "silver_bps": 2250000, "gold_bps": 6250000 }
+      ]
+    }
+  },
+  "biggest": {
+    "note": "Biggest: the company league place at the end, per start. bronze_top_bps, when not 0, also gives bronze to a company in that top share of the league (5000 = the top half).",
+    "founder": { "bronze_top_bps": 5000, "bronze": 0, "silver": 10, "gold": 3 },
+    "helm": { "bronze_top_bps": 0, "bronze": 10, "silver": 3, "gold": 1 }
+  },
+  "survivor": {
+    "silver_top_bps": 5000,
+    "gold_top_bps": 2500
+  },
+  "events_kept": 10
+}

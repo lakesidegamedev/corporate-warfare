@@ -138,7 +138,8 @@ returns after its year with a smaller cost base. A firm whose judged plants all 
 plan and is liquidated; the player's request to restructure is refused for the same reason. The
 firm stays in restructuring for its full 52 weeks: a bill it defers meanwhile joins its overdue
 payables and does not turn the plan back into a four-week grace and a second haircut.
-Otherwise liquidate assets at 40 percent carrying value through finite outside buyer
+Otherwise liquidate. Each plant that could still run goes to a four week break-up auction
+(AUCTIONS.md); other assets are sold at 40 percent carrying value through finite outside buyer
 funds. Insufficient buyers delay sale, never mint cash. Parent guarantee shortfalls become
 claims against guarantor up to the contracted cap. No implied guarantee for siblings.
 
@@ -148,7 +149,8 @@ has no plant operating, building or retooling, holds no stake in another company
 trade payables, accruals, prepayments, insurance claims or provisions outstanding, and its
 cash plus 40 percent of the carrying value of everything else covers every loan, bond, deposit,
 arrear and accrued tax in full. Accrued tax is paid to the state, then the liquidation above
-runs: assets sold at 40 percent to finite outside buyers, creditors paid by seniority (in
+runs: idle plants go to the break-up auction, other assets are sold at 40 percent to finite
+outside buyers, creditors paid by seniority (in
 full, by the test), the residual to shareholders pro rata, and the company is dissolved. The
 player and rivals meet the same test. A rival proposes it after thirteen closed weeks without
 a sale when every plant has been mothballed for 26 weeks, or when it has had no plant at all
@@ -185,15 +187,14 @@ A plant in the firm's home region is the input baseline; another region of the h
 specialized sector types use 3 and 1.5 percent fewer.
 
 `RaidMarket` spends a marketing budget against a rival's division in a cell the raider also
-operates in. Attack strength is the budget plus thirteen weeks of standing marketing; defence is
-thirteen weeks of the defender's marketing plus five percent of its division's quarterly output
-value. One percent of the defender's plants are at stake at even strength, rising linearly to
-twenty percent at two to one. Success probability is attack over attack plus defence, clamped
-to 5..95 percent, from the deterministic raid stream. The budget buys advertising whatever
-happens; on success the raider takes the plants into its own division at its own strategy and
-pays the defender half their book value. A group cannot raid itself. The 1.7 raid
-rules below replace the one-plant floor and the cooldown. Rival AI raids when the
-chance-weighted three-year contribution of the captured plants exceeds the campaign and price.
+operates in. Since 2.0 a raid is announced and decided four weeks later, and its strength, stake
+and chance are the formulas in [RAIDS.md](RAIDS.md), which replace the 1.2 figures (the stake
+rises to the whole division at five to one, and the chance is dragged down by the stake). The
+budget buys advertising whatever happens; on success the raider takes the plants into its own
+division at its own strategy and pays the defender half their book value. A group cannot raid
+itself. The 1.7 raid rules below replace the one-plant floor and the cooldown. Rival AI raids
+when the chance-weighted three-year contribution of the captured plants exceeds the campaign
+and price.
 
 ## Board objectives (1.2.0), replaced in 1.9
 
@@ -636,3 +637,112 @@ comes back at once, and a company selling shares reads its cost basis from the c
 book. The ownership cycle check now follows the shares a company holds, as its comment always said; a
 buyer that already holds some of a target is no cycle.
 
+
+## Careers (2.0)
+
+A career is a new-game option over any scenario: how it starts, what it plays for, how long it
+lasts and how it ends. A game started without it is the sandbox or five-year game as before
+(`World.career` is none; no rule reads anything new). Every number is in `content/careers.json`;
+a career copies the numbers it is judged by into its saved state when it starts. Engine:
+`cw_sim::economy::career`; session: `Session::create_career`, `Session::helm_offers`,
+`Session::career_summary`.
+
+**Start.** Founder is today's start. At the helm: the game offers `helm.offers` (3) companies
+from the company league's ranks `helm.rank_from` to `helm.rank_to` (8 to 15), in different
+sectors where it can. Companies another company or the state controls, and companies whose
+outside holders do not hold enough shares to sell control, are not offered. The player buys,
+at the opening mark, the shares that give more than half of the eligible votes, from the
+outside holders, largest holder first, through the exchange's own settlement: each seller's
+capital rises by exactly what it is paid and nothing is created. When the scenario's standard
+fortune cannot pay for the block, the fortune is raised to `helm.fortune_cover_bps` of the price
+(110 percent) times the difficulty factor (easy 120, standard 100, hard 93 percent; never below
+the price), and the offer and the summary say so. The sitting chief executive leaves (benched
+like any departed chief); the board, its seats and its mandates stay. From week 0 the company is
+the player's primary company and every rule that asks whether a firm is the player's reads its
+controlling holder, so the rival AI stops playing it and executives, letters and chapters treat
+it as the player's.
+
+**Leagues.** The company league is every operating company that no other company controls,
+ranked by value (the engine valuation's equity, book equity before the first valuation),
+largest first, ties by handle; the player's group counts once, as its primary company. The
+wealth league (the player and the corridor's eight outside funds, each valued as cash plus
+shares at the fair price) is kept as information in the summary only: eight funds holding the
+outside float of every company are not a contest.
+
+**Ambition.** One of four, each with bronze, silver and gold:
+
+| ambition | judged | bronze | silver | gold |
+|---|---|---|---|---|
+| Richest (10 years) | at the end, net worth over the starting fortune | 17 times (Texas 11, Silicon Valley 4.5, Ruhr 8.3) | 25 times (16, 8, 15) | 40 times (25, 15, 25) |
+| Biggest, founder | at the end, company league place | top half | top 10 | top 3 |
+| Biggest, helm | at the end, company league place | top 10 | top 3 | 1st |
+| Dominant | at any time | 20 percent | 30 percent | 40 percent |
+| Survivor | at the end | controls a solvent company | in the top half | in the top quarter |
+
+Richest's multiples are set per scenario from how fast a careful founder grows there (`careers.json` richest.scenarios; any scenario not listed uses the shared row, which is Great Lakes). The new-game guide still shows the shared row. Richest is the growth of the player's own fortune: personal net worth (cash plus shares at the
+fair price, less personal loans) at the end over the net worth when the career started. For a
+helm start the starting fortune is the net worth just after buying control, so the fortune the
+start scaled up is not counted as a gain. The multiples are per career length in
+`richest.multiples` (the Great Lakes row: 5 years 4.1, 5 and 6.3 times; 20 years 289, 625 and
+1,600 times) and replaced per scenario in `richest.scenarios`. Each 10 year row is calibrated on
+the careful founder's careers in that scenario (bronze in about four careers of ten, gold above
+every measured career); the other lengths compound the same yearly growth and are not measured.
+Biggest's places are per start in `biggest.founder` and `biggest.helm`; `bronze_top_bps` gives
+bronze to a company in that top share of the league (rank r is in the top share s of n
+companies when r is at most n times s rounded up). Survivor and Dominant have one scale.
+
+Dominant: the player's group makes at least the share of one industry's output across the
+corridor (lots made by operating plants, summed over the quarter) for `dominant.quarters` (4)
+quarters in a row. A quarter in which fewer than `dominant.min_producers` (5) owners made that
+industry's output counts as nothing, so a near monopoly at the start is not dominance won.
+Reaching Dominant gold ends the career as won at once.
+
+**Length.** 5, 10 or 20 years (default 10). The five-year score mode is the five-year length: a
+five-year game started with a career and no length plays five years, and its score sheet at week
+260 is unchanged.
+
+**Ending.** At the end of the length (completed, with the ambition's medal), at Dominant gold
+(won), or lost at any time:
+- no company in the player's group after `found_grace_weeks` (26) and a net worth under
+  `fortune_floor_cents` ($275,000: the least founding needs, $250,000 capital and the $25,000
+  fee);
+- a rival (or outside holders) holds control of the player's primary company;
+- the board removes the player. The rival rule for chief executives applied to the player:
+  after `board.grace_weeks` (52), `board.loss_periods` (6) four-week periods of losses in a row
+  draw the board's warning (an alert, a pause the player may waive, the chair's letter). One
+  profitable four-week period within `board.warning_weeks` (26) restores its confidence;
+  otherwise the board removes the player. The board can remove the player only while the
+  player holds less than half of the company's eligible votes (shares held directly and
+  through companies the player controls); it reads the primary company while no one else
+  controls it, so a player who sold below half still answers to it. With half or more the
+  board still warns, and the warning is read again every `board.warning_weeks` while the
+  losses run, but a board the player controls cannot remove the player: the discipline is the
+  market's (the credit grade and lenders' terms, the share price, an activist after a long
+  slump, default on unpaid debt, and, below half, a raid on the outside float). The helm start
+  buys just over half, so a helm player is not removable until it sells down. The rival rule
+  replaces a hired chief with a 25 percent chance each period after the same losses; rival
+  chiefs hold no shares, so the controlling-owner case cannot arise for a rival. The board-named
+  chief after two missed mandates (`executives`, 1.9) is unchanged and does not end a career.
+After any ending the world plays on as a sandbox; the career keeps its ending.
+
+**Telling the player.** Through the chair of the board's letters (`letters::career_letters`):
+every quarter the standing against the ambition and what the next medal needs
+(`career::progress`), the board's warning and its lifting, and the ending. The same lines reach
+the weekly brief the week they are written (change kind `career`), and the ending is a story in
+the paper. `Session::career_standing` gives the standing at any week for the screens: ambition,
+medal, rank, growth, the sentence it rests on, what the next medal needs, weeks left, and the
+board's warning with whether the board can act on it. The apps reach all of it through cw-ffi:
+`helm_offers(NewGameDto)`, `SessionHandle::start_career(NewGameDto, CareerOptionsDto)`,
+`career_standing()` and `career_summary()`. The pause `career_board_warning` is a warning pause; `career_end` is a milestone.
+
+**Summary.** `CareerSummaryDto`: start, ambition, length, the medal it stands at, the ending and
+its medal, one sentence from engine facts on why it ended as it did, a line a year (company
+rank and league size, company value, net worth and wealth place, medal), and the events that
+mattered (`events_kept`, 10), by weight then shown in date order: taking the helm, the first
+plant, companies bought, failed or lost, raids won and lost (the largest of each kind),
+companies paying their way out of default, mandates met and missed, the board's warnings and
+the ending.
+
+**Saved state.** `World.career` is outside the postcard payload, in its own `CARE` trailer,
+folded into the canonical hash while set (INTERFACE.md). The replay log carries the career
+option, so a replay rebuilds the same world.

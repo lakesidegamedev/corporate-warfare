@@ -67,6 +67,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     );
     crate::ph!("deals::weekly", crate::economy::deals::weekly(world));
     crate::ph!(
+        "sectors::resolve_raid_campaigns",
+        crate::economy::sectors::resolve_raid_campaigns(world, dataset)
+    );
+    crate::ph!(
         "governance::weekly",
         crate::economy::governance::weekly(world, dataset)
     );
@@ -110,6 +114,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::ph!(
         "insurance::weekly",
         crate::economy::insurance::weekly(world)
+    );
+    crate::ph!(
+        "auctions::weekly",
+        crate::economy::auctions::weekly(world, dataset)
     );
     let solvency = crate::ph!(
         "insolvency::settle",
@@ -161,7 +169,7 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     );
     crate::ph!(
         "world_prices::weekly",
-        crate::economy::world_prices::weekly(world)
+        crate::economy::world_prices::weekly(world, dataset)
     );
     crate::ph!(
         "macro_cycle::weekly",
@@ -290,6 +298,10 @@ pub fn advance(world: &mut World, dataset: &Dataset) -> WeekOutcome {
     crate::ph!(
         "score::update",
         crate::economy::score::update(world, dataset)
+    );
+    crate::ph!(
+        "career::weekly",
+        crate::economy::career::weekly(world, dataset)
     );
     WeekOutcome {
         week: world.tick,

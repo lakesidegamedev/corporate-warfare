@@ -6,6 +6,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Switch
@@ -20,6 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,7 +70,7 @@ const val DOCK_MIN = 0.2f
 const val DOCK_MAX = 0.8f
 const val DOCK_DEFAULT = 0.45f
 
-class AppSettings(private val file: File) {
+class AppSettings(private val file: File) : ViewPrefs {
     /** Whether a settings file was already there: a player upgrading from 1.8 has one, a first launch does not. */
     private val existedAtLaunch = file.exists()
     private val props = Properties().apply { if (file.exists()) file.inputStream().use { load(it) } }
@@ -81,6 +98,8 @@ class AppSettings(private val file: File) {
     var pauseOnWarnings by mutableStateOf(props.getProperty("pauseOnWarnings")?.toBoolean() ?: false); private set
     /** Open the weekly brief by itself when a new week starts with time paused or at 1x. Desktop only. */
     var showBriefEachWeek by mutableStateOf(props.getProperty("showBriefEachWeek")?.toBoolean() ?: false); private set
+    /** Desktop: use the 1.x page layout instead of the 2.0 layout (kept for 2.0 only). */
+    var classicLayout by mutableStateOf(props.getProperty("classicLayout")?.toBoolean() ?: false); private set
     /** The brief panel at the top of the CEO Office is folded away. */
     var briefCollapsed by mutableStateOf(props.getProperty("briefCollapsed")?.toBoolean() ?: false); private set
     /** Pages with the map docked beside them, and how much of the width the map takes (0.2 to 0.8), per page id. */
@@ -107,8 +126,24 @@ class AppSettings(private val file: File) {
         },
     ); private set
 
+    /** The version whose changes the player has been shown on the main menu. A first install starts at the running version, so nothing is shown. */
+    var whatsNewSeen: String? = props.getProperty("whatsNewSeen") ?: if (existedAtLaunch) null else BuildInfo.VERSION
+        private set
+
+    /** Whether the main menu should show the What's new panel for [version]. */
+    fun whatsNewDue(version: String): Boolean = WhatsNew.due(whatsNewSeen, version)
+
+    fun markWhatsNewSeen(version: String) { whatsNewSeen = version; store() }
+
     /** Finished or left careers, newest first: a few lines each, for the main menu's Hall of Careers. */
     var careers by mutableStateOf(loadCareers()); private set
+
+    init {
+        KeyBindings.load(props.stringPropertyNames().filter { it.startsWith("key.") }.associate { it.removePrefix("key.") to props.getProperty(it) })
+    }
+
+    /** Rebind a key. Null when done, else the reason in plain words. */
+    fun bindKey(action: String, name: String): String? = KeyBindings.bind(action, name).also { if (it == null) store() }
 
     /** Keep a career's summary. A career left again replaces its earlier line instead of adding one. */
     fun recordCareer(summary: CareerSummary) {
@@ -124,7 +159,7 @@ class AppSettings(private val file: File) {
         ?: java.util.UUID.randomUUID().toString().also { props.setProperty("installId", it); store() }
 
     /** Mark setup finished (or What's new dismissed); never touches any other choice. */
-    fun finishSetup() { setupFlag = "true"; setupState = SetupState.Done; store() }
+    fun finishSetup() { setupFlag = "true"; setupState = SetupState.Done; whatsNewSeen = BuildInfo.VERSION; store() }
 
     fun chooseGraphics(value: GraphicsConfig) { graphics = value; graphicsChosen = true; store() }
 
@@ -146,6 +181,7 @@ class AppSettings(private val file: File) {
     fun chooseReportingCurrency(value: String) { reportingCurrency = value; store() }
     fun choosePauseOnWarnings(value: Boolean) { pauseOnWarnings = value; store() }
     fun chooseShowBriefEachWeek(value: Boolean) { showBriefEachWeek = value; store() }
+    fun chooseClassicLayout(value: Boolean) { classicLayout = value; store() }
     fun chooseBriefCollapsed(value: Boolean) { briefCollapsed = value; store() }
     /** Dock the map beside a page with the given share of the width, or undock it with null. */
     fun chooseDock(pageId: String, share: Float?) {
@@ -155,6 +191,32 @@ class AppSettings(private val file: File) {
     fun chooseUiScale(value: Float) { uiScale = value; store() }
     fun chooseWindowMode(value: WindowMode) { windowMode = value; store() }
     fun chooseResolution(value: Pair<Int, Int>) { resolution = value; store() }
+
+    /** Put one section of Settings back to how the game came. Saves, careers, views and the tutorial are not touched. */
+    fun resetSection(section: SettingsSection) {
+        when (section) {
+            SettingsSection.Game -> { pauseOnWarnings = false; showBriefEachWeek = false }
+            SettingsSection.Graphics -> {
+                graphics = GraphicsConfig.Default; graphicsChosen = true
+                windowMode = WindowMode.Windowed; resolution = 1600 to 900
+            }
+            SettingsSection.Interface -> { uiScale = 1f; classicLayout = false }
+            SettingsSection.Data -> analytics = true
+            SettingsSection.Updates -> { autoUpdate = true; updateChannel = UpdateChannel.build }
+            SettingsSection.Keys -> KeyBindings.reset()
+            SettingsSection.About -> Unit
+        }
+        store()
+    }
+
+    fun resetAll() = SettingsSection.entries.forEach(::resetSection)
+
+    /** Saved grid views and the game's timeframe (the 2.0 grids): kept here so they outlast any one career. */
+    override fun read(key: String): String? = props.getProperty(key)
+    override fun write(key: String, value: String?) {
+        if (value == null) props.remove(key) else props.setProperty(key, value)
+        store()
+    }
 
     private fun store() {
         if (graphicsChosen) graphics.let { g ->
@@ -177,7 +239,7 @@ class AppSettings(private val file: File) {
             props.setProperty("interstates", g.interstates.toString())
             props.setProperty("seasons", g.seasons.toString())
             props.setProperty("labels", g.labels.toString())
-            props.setProperty("newMap", g.newMap.toString())
+            props.setProperty("map3d", g.newMap.toString())
             g.directMap?.let { props.setProperty("directMap", it.toString()) }
         }
         setupFlag?.let { props.setProperty("setupDone", it) }
@@ -190,9 +252,13 @@ class AppSettings(private val file: File) {
         props.setProperty("reportingCurrency", reportingCurrency)
         props.setProperty("pauseOnWarnings", pauseOnWarnings.toString())
         props.setProperty("showBriefEachWeek", showBriefEachWeek.toString())
+        props.setProperty("classicLayout", classicLayout.toString())
         props.setProperty("briefCollapsed", briefCollapsed.toString())
         props.stringPropertyNames().filter { it.startsWith("dock.") }.forEach { props.remove(it) }
         docks.forEach { (id, share) -> props.setProperty("dock.$id", share.toString()) }
+        props.stringPropertyNames().filter { it.startsWith("key.") }.forEach { props.remove(it) }
+        KeyBindings.changed().forEach { (id, name) -> props.setProperty("key.$id", name) }
+        whatsNewSeen?.let { props.setProperty("whatsNewSeen", it) }
         props.setProperty("uiScale", uiScale.toString())
         props.setProperty("windowMode", windowMode.name)
         props.setProperty("resolution", "${resolution.first}x${resolution.second}")
@@ -227,7 +293,8 @@ class AppSettings(private val file: File) {
             interstates = bool("interstates", base.interstates),
             seasons = bool("seasons", base.seasons),
             labels = int("labels", base.labels, 0..2),
-            newMap = bool("newMap", base.newMap),
+            // A new key from 2.0: the 3D map is on unless the player turns it off (the 1.x key defaulted to off).
+            newMap = bool("map3d", base.newMap),
             directMap = props.getProperty("directMap")?.toBooleanStrictOrNull() ?: base.directMap,
         )
     }
@@ -236,167 +303,317 @@ class AppSettings(private val file: File) {
         enumValues<T>().firstOrNull { it.name == name } ?: fallback
 }
 
+/** The sections of Settings, down the side. There is no Sound section: the game has no sound yet. */
+enum class SettingsSection(val title: String, val resettable: Boolean) {
+    Game("Game", true), Graphics("Graphics", true), Interface("Interface", true), Keys("Controls and keys", true),
+    Data("Data and privacy", true), Updates("Updates", true), About("About", false),
+}
+
+/** One setting: what it is called, one plain sentence on what it does, extra words search finds it by, and its control. */
+internal class SettingRow(
+    val section: SettingsSection,
+    val title: String,
+    val note: String,
+    val words: String = "",
+    /** The control sits under the words (chips, lists) rather than at the right (a switch, a button). */
+    val below: Boolean = false,
+    val control: @Composable () -> Unit = {},
+)
+
+/** Whether a row matches what was typed in the search box: every word must appear somewhere in it. */
+internal fun SettingRow.matches(query: String): Boolean {
+    val hay = "$title $note $words ${section.title}".lowercase()
+    return query.lowercase().split(' ').filter { it.isNotBlank() }.all { it in hay }
+}
+
+/** What this machine can do with the 3D map, in one plain sentence, and whether that is a problem. */
+internal fun mapSupport(): Pair<String, Boolean> = when {
+    GpuMapHost.opener == null ->
+        "The 3D map is not available here, so the flat map is used. It needs the desktop app on a graphics card with Vulkan, Direct3D 12 or Metal." to false
+    GpuMapHost.failure != null ->
+        "This machine cannot run the 3D map (${GpuMapHost.failure}). The flat map is used instead; the options marked 3D have no effect." to true
+    RenderInfo.software ->
+        "This machine draws in software, so the 3D map will be slow here. Medium or Low is the better preset." to true
+    else -> "This machine can run the 3D map: it needs a graphics card with Vulkan, Direct3D 12 or Metal, which this one has." to false
+}
+
 /**
- * The full settings page, from the main menu or a running career: game, graphics and, on
- * desktop, the window.
+ * Settings (2.0): sections down the side, a search box that finds any setting, one plain sentence under each,
+ * presets where they exist, Reset section and Reset all. Every change applies at once; there is no Apply button.
  */
 @Composable
-fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, updater: Updater? = null, onSetupAgain: (() -> Unit)? = null, onClose: () -> Unit) {
-    TabList {
-        item { ScreenHeader("Settings", null) { TextButton(onClick = onClose) { Text("Done", color = Palette.gold) } } }
-        if (store.ready) {
-            item {
-                Panel {
-                    Eyebrow("Game")
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Save", color = Palette.primaryText)
-                            Text("The game also saves itself every four weeks and when you leave.", color = Palette.secondary, fontSize = 12.sp)
-                        }
-                        TextButton(onClick = { store.saveNow() }) { Text("Save now", color = Palette.gold) }
+fun SettingsScreen(store: GameStore, settings: AppSettings, desktop: Boolean, updater: Updater? = null, onSetupAgain: (() -> Unit)? = null, startSection: SettingsSection = SettingsSection.Game, startQuery: String = "", onClose: () -> Unit) {
+    var section by remember { mutableStateOf(startSection) }
+    var query by remember { mutableStateOf(startQuery) }
+    var confirmAll by remember { mutableStateOf(false) }
+    val rows = settingRows(store, settings, desktop, updater, onSetupAgain)
+    val sections = SettingsSection.entries.filter { s -> rows.any { it.section == s } }
+    val shown = if (query.isBlank()) rows.filter { it.section == section } else rows.filter { it.matches(query) }
+    BoxWithConstraints(Modifier.fillMaxSize().background(Palette.ink)) {
+        val wide = maxWidth >= 900.dp
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TextButton(onClick = onClose) { BackLabel("Done", Palette.gold) }
+                Text("SETTINGS", color = Palette.primaryText, fontSize = 18.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = if (wide) Modifier.width(200.dp) else Modifier.weight(1f))
+                if (wide) SettingsSearch(query, Modifier.widthIn(max = 520.dp).weight(1f)) { query = it }
+            }
+            Box(Modifier.fillMaxWidth().height(2.dp).background(Palette.stroke))
+            if (!wide) {
+                Column(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SettingsSearch(query, Modifier.fillMaxWidth()) { query = it }
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        sections.forEach { s -> SectionChip(s.title, s == section && query.isBlank()) { section = s; query = "" } }
                     }
-                    if (store.status.isNotEmpty()) Text(store.status, color = Palette.secondary, fontSize = 12.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Stop for warnings too", color = Palette.primaryText)
-                            Text("Time always stops for a decision that needs your answer. Turn this on to also stop when a company runs short of grace, or workers strike.", color = Palette.secondary, fontSize = 12.sp)
-                        }
-                        Switch(
-                            checked = settings.pauseOnWarnings,
-                            onCheckedChange = { settings.choosePauseOnWarnings(it) },
-                            colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
-                        )
-                    }
-                    if (desktop) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Show the brief each week", color = Palette.primaryText)
-                                Text("Opens the weekly brief when a new week starts while time is paused or at normal speed. It never opens at faster speeds.", color = Palette.secondary, fontSize = 12.sp)
-                            }
-                            Switch(
-                                checked = settings.showBriefEachWeek,
-                                onCheckedChange = { settings.chooseShowBriefEachWeek(it) },
-                                colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
+                }
+            }
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                if (wide) {
+                    Column(Modifier.width(260.dp).fillMaxHeight().background(Palette.panel).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        sections.forEach { s ->
+                            val on = s == section && query.isBlank()
+                            Text(
+                                s.title.uppercase(), color = if (on) Palette.ink else Palette.primaryText, fontSize = 13.sp, fontFamily = Pixel.font,
+                                modifier = Modifier.fillMaxWidth().clip(Pixel.small).background(if (on) Palette.gold else Palette.panel)
+                                    .clickable { section = s; query = "" }.padding(horizontal = 12.dp, vertical = 10.dp),
                             )
                         }
-                    }
-                }
-            }
-        }
-        val fx = store.economy?.fx
-        if (store.ready && fx != null) {
-            item {
-                Panel {
-                    Eyebrow("Currency")
-                    Text("Show my cash and net worth in", color = Palette.primaryText)
-                    CurrencyChoices(store, fx)
-                    Text("Each company keeps its own currency. This only changes how your own figures are shown.", color = Palette.secondary, fontSize = 12.sp)
-                }
-            }
-        }
-        item {
-            Panel {
-                Eyebrow("Graphics")
-                GraphicsChoices(settings)
-                Text("Interface size", color = Palette.primaryText)
-                Choices(listOf(0.85f, 1f, 1.15f, 1.3f), settings.uiScale, { "${(it * 100).toInt()}%" }) { settings.chooseUiScale(it) }
-            }
-        }
-        if (desktop) {
-            item {
-                Panel {
-                    Eyebrow("Display")
-                    Text("Window", color = Palette.primaryText)
-                    Choices(WindowMode.entries, settings.windowMode, { it.title }) { settings.chooseWindowMode(it) }
-                    Text("Resolution", color = Palette.primaryText)
-                    Choices(Resolutions, settings.resolution, { "${it.first} x ${it.second}" }) {
-                        settings.chooseResolution(it)
-                        if (settings.windowMode != WindowMode.Windowed) settings.chooseWindowMode(WindowMode.Windowed)
-                    }
-                    Text("Resolution sets the window size; full screen uses the whole display.", color = Palette.secondary, fontSize = 12.sp)
-                }
-            }
-        }
-        if (onSetupAgain != null) {
-            item {
-                Panel {
-                    Eyebrow("Setup")
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("First-run setup", color = Palette.primaryText)
-                            Text("Test your graphics again and review updates, privacy and the tutorial.", color = Palette.secondary, fontSize = 12.sp)
+                        Spacer(Modifier.weight(1f))
+                        // Reserved: the Lakeside account row goes here, above Reset all, once accounts exist.
+                        AccountEntry()
+                        if (confirmAll) {
+                            Text("Put every setting back to how the game came? Saves and careers are not touched.", color = Palette.warning, fontSize = 12.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                MenuBarButton("Reset all", danger = true) { settings.resetAll(); updater?.channelChanged(); confirmAll = false }
+                                MenuBarButton("Keep") { confirmAll = false }
+                            }
+                        } else {
+                            MenuBarButton("Reset all") { confirmAll = true }
                         }
-                        TextButton(onClick = onSetupAgain) { Text("Set up again", color = Palette.gold) }
+                    }
+                    Box(Modifier.width(2.dp).fillMaxHeight().background(Palette.stroke))
+                }
+                Column(
+                    Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(if (wide) 24.dp else 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Column(Modifier.widthIn(max = 980.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                if (query.isBlank()) section.title.uppercase() else "${shown.size} SETTING${if (shown.size == 1) "" else "S"} FOUND",
+                                color = Palette.primaryText, fontSize = 16.sp, fontFamily = Pixel.font, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
+                            )
+                            if (query.isBlank() && section.resettable) MenuBarButton("Reset section") { settings.resetSection(section); if (section == SettingsSection.Updates) updater?.channelChanged() }
+                        }
+                        if (query.isBlank() && section == SettingsSection.Keys) {
+                            Text("Click a key, then press the new one. A key that is already in use is refused. Reset section restores the original keys.", color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        if (shown.isEmpty()) Text("No setting matches \"$query\".", color = Palette.secondary, fontSize = 13.sp)
+                        var lastSection: SettingsSection? = null
+                        shown.forEach { row ->
+                            if (query.isNotBlank() && row.section != lastSection) {
+                                Spacer(Modifier.height(8.dp))
+                                Eyebrow(row.section.title)
+                                lastSection = row.section
+                            }
+                            SettingLine(row, wide)
+                        }
+                        if (!wide && query.isBlank() && section == SettingsSection.About) {
+                            Spacer(Modifier.height(16.dp))
+                            MenuBarButton("Reset all settings", danger = confirmAll) { if (confirmAll) { settings.resetAll(); confirmAll = false } else confirmAll = true }
+                        }
                     }
                 }
-            }
-        }
-        item {
-            Panel {
-                Eyebrow("Tutorial")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        if (Tutorial.finished) "Tutorial complete" else "${Tutorial.done.size} of ${Tutorial.steps.size} steps done",
-                        color = Palette.primaryText,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { Tutorial.restart() }) { Text("Start over", color = Palette.gold) }
-                }
-            }
-        }
-        item {
-            Panel {
-                Eyebrow("Analytics")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Share anonymous market data", color = Palette.primaryText)
-                        Text(
-                            Privacy.explanation,
-                            color = Palette.secondary,
-                            fontSize = 12.sp,
-                        )
-                    }
-                    Switch(
-                        checked = settings.analytics,
-                        onCheckedChange = { settings.chooseAnalytics(it) },
-                        colors = SwitchDefaults.colors(checkedTrackColor = Palette.gold),
-                    )
-                }
-            }
-        }
-        if (updater != null) {
-            item { UpdatesSection(settings, updater) }
-        }
-        item {
-            Panel {
-                Eyebrow("About")
-                val info = uniffi.cw_ffi.engineInfo()
-                Text("Corporate Warfare ${BuildInfo.VERSION} · engine ${info.version}", color = Palette.secondary, fontSize = 12.sp)
-                Text("Institutions are simplified game rules, not legal, tax or investment advice.", color = Palette.secondary, fontSize = 11.sp)
-                Text("Clouds: Solar System Scope, CC BY 4.0, based on NASA Blue Marble imagery.", color = Palette.secondary, fontSize = 11.sp)
             }
         }
     }
 }
 
-/** The quality preset, then every graphics option with its note. */
 @Composable
-private fun GraphicsChoices(settings: AppSettings) {
-    val g = settings.graphics
-    Text("Quality", color = Palette.primaryText)
-    Choices<GraphicsPreset?>(GraphicsPreset.entries, g.preset, { it?.title.orEmpty() }) { it?.let(settings::choosePreset) }
-    Text(
-        if (g.preset == null) "Custom: your own mix of the options below." else "Picking a preset sets every option below. Change any of them to make your own mix.",
-        color = Palette.secondary, fontSize = 12.sp,
+private fun SettingsSearch(query: String, modifier: Modifier, onQuery: (String) -> Unit) {
+    OutlinedTextField(
+        query, { onQuery(it.take(40)) }, singleLine = true,
+        placeholder = { Text("Find a setting", color = Palette.secondary, fontSize = 13.sp) },
+        textStyle = androidx.compose.ui.text.TextStyle(color = Palette.primaryText, fontSize = 14.sp),
+        modifier = modifier.textEntry(),
     )
-    graphicsOptions.filter { (!it.gpuOnly || GpuMapHost.opener != null) && (!it.surfaceOnly || GpuMapHost.surfaceHost != null) }.forEach { option ->
-        Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(option.title, color = Palette.primaryText)
-            Choices(option.choices.indices.toList(), option.get(g), { option.choices[it] }) { settings.chooseGraphics(option.set(g, it)) }
-            Text(option.note(g), color = Palette.secondary, fontSize = 12.sp)
+}
+
+@Composable
+private fun SectionChip(text: String, on: Boolean, onClick: () -> Unit) {
+    Text(
+        text.uppercase(), color = if (on) Palette.ink else Palette.primaryText, fontSize = 11.sp, fontFamily = Pixel.font,
+        modifier = Modifier.clip(Pixel.small).background(if (on) Palette.gold else Palette.panelRaised).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp),
+    )
+}
+
+/** One setting: the name and its sentence, the control at the right or underneath. */
+@Composable
+private fun SettingLine(row: SettingRow, wide: Boolean) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        if (row.below || !wide) {
+            Text(row.title, color = Palette.primaryText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            if (row.note.isNotEmpty()) Text(row.note, color = Palette.secondary, fontSize = 12.sp)
+            Spacer(Modifier.height(6.dp))
+            row.control()
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                    Text(row.title, color = Palette.primaryText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    if (row.note.isNotEmpty()) Text(row.note, color = Palette.secondary, fontSize = 12.sp)
+                }
+                row.control()
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.stroke))
+    }
+}
+
+@Composable
+private fun KeyCap(name: String) {
+    Text(name, color = Palette.gold, fontSize = 13.sp, fontFamily = Pixel.font, modifier = Modifier.clip(Pixel.small).background(Palette.panelRaised).padding(horizontal = 10.dp, vertical = 5.dp))
+}
+
+/** One rebindable key: shows the key, and on a click waits for the next key press. Esc cancels. */
+@Composable
+private fun KeyRebind(action: KeyBindings.Action, settings: AppSettings) {
+    var waiting by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(waiting) { if (waiting) runCatching { focus.requestFocus() } }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        message?.let { Text(it, color = Palette.warning, fontSize = 12.sp, modifier = Modifier.widthIn(max = 320.dp)) }
+        if (waiting) {
+            Text(
+                "Press a key (Esc cancels)", color = Palette.ink, fontSize = 13.sp, fontFamily = Pixel.font,
+                modifier = Modifier.clip(Pixel.small).background(Palette.gold).padding(horizontal = 10.dp, vertical = 5.dp)
+                    .focusRequester(focus).focusable()
+                    .onPreviewKeyEvent { e ->
+                        if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent true
+                        if (e.key != androidx.compose.ui.input.key.Key.Escape) {
+                            val name = KeyBindings.nameOf(e.key)
+                            message = if (name == null) "That key cannot be used. Pick a letter, a digit, Space or F1 to F12." else settings.bindKey(action.id, name)
+                        }
+                        waiting = false
+                        true
+                    },
+            )
+        } else {
+            Box(Modifier.clickable { message = null; waiting = true }) { KeyCap(KeyBindings.keyOf(action.id)) }
         }
     }
 }
+
+@Composable
+private fun OnOff(checked: Boolean, onChange: (Boolean) -> Unit) {
+    Switch(
+        checked = checked, onCheckedChange = onChange,
+        colors = SwitchDefaults.colors(
+            checkedTrackColor = Palette.gold, checkedThumbColor = Palette.ink,
+            uncheckedTrackColor = Palette.panelRaised, uncheckedThumbColor = Palette.secondary, uncheckedBorderColor = Palette.secondary,
+        ),
+    )
+}
+
+/** Every setting the game has, in section order. Rows that do not apply here (no career, no updater, a phone) are left out. */
+@Composable
+private fun settingRows(store: GameStore, settings: AppSettings, desktop: Boolean, updater: Updater?, onSetupAgain: (() -> Unit)?): List<SettingRow> {
+    val rows = mutableListOf<SettingRow>()
+    val g = settings.graphics
+    if (store.ready) rows += SettingRow(SettingsSection.Game, "Save now", "Writes this career to disk. The game also saves itself every four weeks and when you leave." + if (store.status.isNotEmpty()) " ${store.status}" else "", "save") {
+        MenuBarButton("Save now") { store.saveNow() }
+    }
+    rows += SettingRow(SettingsSection.Game, "Stop for warnings too", "Time always stops for a decision that needs your answer. This also stops it when a company runs short of grace or workers strike.", "pause") {
+        OnOff(settings.pauseOnWarnings) { settings.choosePauseOnWarnings(it) }
+    }
+    if (desktop) rows += SettingRow(SettingsSection.Game, "Show the brief each week", "Opens the weekly brief when a new week starts while time is paused or at normal speed, never at faster speeds.") {
+        OnOff(settings.showBriefEachWeek) { settings.chooseShowBriefEachWeek(it) }
+    }
+    store.economy?.fx?.takeIf { store.ready }?.let { fx ->
+        rows += SettingRow(SettingsSection.Game, "Show my figures in", "Your own cash and net worth in another of the scenario's currencies. Each company keeps its own.", "currency money", below = true) { CurrencyChoices(store, fx) }
+    }
+    rows += SettingRow(
+        SettingsSection.Game, "Tutorial",
+        if (Tutorial.finished) "Finished. Start over to see its eight steps again." else "${Tutorial.active.count { it.id in Tutorial.done }} of ${Tutorial.active.size} steps done. Start over to see them from the first.",
+        "guide help",
+    ) { MenuBarButton("Start over") { Tutorial.restart() } }
+    if (onSetupAgain != null) rows += SettingRow(SettingsSection.Game, "First-run setup", "Test the graphics again and go through updates, data and the tutorial.", "wizard welcome") {
+        MenuBarButton("Set up again", onClick = onSetupAgain)
+    }
+
+    val (support, problem) = mapSupport()
+    rows += SettingRow(SettingsSection.Graphics, "3D map on this machine", support, "gpu vulkan direct3d metal card", below = problem) {
+        if (problem) Text("Check the graphics driver, or pick Low.", color = Palette.warning, fontSize = 12.sp)
+    }
+    rows += SettingRow(
+        SettingsSection.Graphics, "Quality preset",
+        if (g.preset == null) "Custom: your own mix of the options below. A preset sets every one of them." else "Sets every option below at once. Change any of them to make your own mix.",
+        "low medium high ultra", below = true,
+    ) { Choices<GraphicsPreset?>(GraphicsPreset.entries, g.preset, { it?.title.orEmpty() }) { it?.let(settings::choosePreset) } }
+    graphicsOptions.filter { (!it.gpuOnly || GpuMapHost.opener != null) && (!it.surfaceOnly || GpuMapHost.surfaceHost != null) }.forEach { option ->
+        rows += SettingRow(SettingsSection.Graphics, option.title, option.note(g), option.choices.joinToString(" "), below = true) {
+            Choices(option.choices.indices.toList(), option.get(g), { option.choices[it] }) { settings.chooseGraphics(option.set(g, it)) }
+        }
+    }
+    if (desktop) {
+        rows += SettingRow(SettingsSection.Graphics, "Window", "Windowed, filling the screen with the title bar, or full screen.", "fullscreen maximized display", below = true) {
+            Choices(WindowMode.entries, settings.windowMode, { it.title }) { settings.chooseWindowMode(it) }
+        }
+        rows += SettingRow(SettingsSection.Graphics, "Resolution", "The window's size when windowed. Picking one switches back to windowed.", "size display", below = true) {
+            Choices(Resolutions, settings.resolution, { "${it.first} x ${it.second}" }) {
+                settings.chooseResolution(it)
+                if (settings.windowMode != WindowMode.Windowed) settings.chooseWindowMode(WindowMode.Windowed)
+            }
+        }
+    }
+
+    rows += SettingRow(SettingsSection.Interface, "Interface size", "Makes every panel, figure and button bigger or smaller.", "scale zoom text font", below = true) {
+        Choices(listOf(0.85f, 1f, 1.15f, 1.3f), settings.uiScale, { "${(it * 100).toInt()}%" }) { settings.chooseUiScale(it) }
+    }
+    rows += SettingRow(
+        SettingsSection.Interface, "Classic layout",
+        if (desktop) "The page layout from version 1. Kept for this release only, then removed." else "The five tabs from version 1. Kept for this release only, then removed.",
+        "old 1.x",
+    ) { OnOff(settings.classicLayout) { settings.chooseClassicLayout(it) } }
+
+    listOf(
+        "Esc" to "Close the open screen, or open the game menu", "Ctrl K" to "Find a place, a good, a company, a view or an action",
+        "Ctrl M" to "Dock the map beside the screen, or undock it",
+    ).forEach { (key, what) ->
+        rows += SettingRow(SettingsSection.Keys, what, "This key is fixed.", "key shortcut $key") {
+            KeyCap(key)
+        }
+    }
+    KeyBindings.actions.forEach { action ->
+        rows += SettingRow(SettingsSection.Keys, action.label, "", "key shortcut rebind ${KeyBindings.keyOf(action.id)}") {
+            KeyRebind(action, settings)
+        }
+    }
+
+    rows += SettingRow(SettingsSection.Data, "Share anonymous market data", Privacy.explanation + " " + Privacy.points.take(3).joinToString(" "), "analytics telemetry privacy snapshot") {
+        OnOff(settings.analytics) { settings.chooseAnalytics(it) }
+    }
+    rows += SettingRow(SettingsSection.Data, "Where your saves are kept", store.saveFolder.path + ". Back this folder up to keep your careers safe. Load can export and import single saves.", "folder backup files")
+
+    if (updater != null) rows += SettingRow(SettingsSection.Updates, "Updates", "", "version release preview channel check install", below = true) {
+        UpdatesSection(settings, updater)
+    }
+    else if (LauncherSession.current.managed) rows += SettingRow(
+        SettingsSection.Updates, "Updates", LauncherSession.current.updatesNote(), "version release launcher lakeside update",
+    )
+
+    val info = remember { uniffi.cw_ffi.engineInfo() }
+    rows += SettingRow(SettingsSection.About, "Corporate Warfare ${BuildInfo.VERSION}", "Engine ${info.version}." + if (BuildInfo.CHANNEL == "preview") " Tester preview." else "", "version")
+    rows += SettingRow(SettingsSection.About, "Rules, not advice", "Institutions are simplified game rules, not legal, tax or investment advice.")
+    rows += SettingRow(SettingsSection.About, "Clouds", "Solar System Scope, CC BY 4.0, based on NASA Blue Marble imagery.", "credits")
+    return rows
+}
+
+
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -555,6 +772,9 @@ fun UpdatePanel(updater: Updater, compact: Boolean = false) {
                     GoldButton(label) { updater.choose(status.release) }
                     TextButton(onClick = { updater.openPage(status.release) }) { Text("What's new", color = Palette.secondary) }
                 }
+                if (status.release.installer != null && status.release.installer.sha256 == null) {
+                    Text("This release publishes no checksum, so only the file size is checked before installing.", color = Palette.secondary, fontSize = 11.sp)
+                }
             }
             is UpdateStatus.ConfirmDowngrade -> {
                 Text("Go back to ${status.release.version}?", color = Palette.warning, fontWeight = FontWeight.SemiBold)
@@ -592,6 +812,13 @@ fun UpdatePanel(updater: Updater, compact: Boolean = false) {
                     TextButton(onClick = { updater.cancel() }) { Text("Cancel", color = Palette.gold) }
                 }
             }
+            is UpdateStatus.NoInstaller -> {
+                Text("Version ${status.release.version} is delivered through the Lakeside launcher or your store, not as a download here.", color = Palette.primaryText, fontSize = 12.sp)
+                Row {
+                    TextButton(onClick = { updater.openPage(status.release) }) { Text("What's new", color = Palette.secondary) }
+                    TextButton(onClick = { updater.cancel() }) { Text("Done", color = Palette.gold) }
+                }
+            }
             is UpdateStatus.Downloading -> {
                 Text("Downloading ${status.release.version}… ${(status.fraction * 100).toInt()}%", color = Palette.primaryText, fontSize = 12.sp)
                 androidx.compose.material3.LinearProgressIndicator(
@@ -612,3 +839,5 @@ fun CurrencyChoices(store: GameStore, fx: uniffi.cw_ffi.FxDto) {
         store.chooseReportingCurrency(it)
     }
 }
+
+

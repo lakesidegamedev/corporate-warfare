@@ -1744,6 +1744,356 @@
   ],
   "maintenance_annual_bps": 200,
   "fixture_land_rent_cents_weekly": 20000,
+  "markets": {
+    "import_first_step_bps": 5000,
+    "export_first_step_bps": 10000,
+    "gateway_step_bps": 2500,
+    "gateway_steps": 5,
+    "import_step_premium_bps": 1000,
+    "export_step_discount_bps": 1000,
+    "export_floor_bps": 5000,
+    "trade_pressure_pass_bps": 10000,
+    "anchor_to_outside": true,
+    "anchor_pass_bps": 10000,
+    "room_growth_bps": 25,
+    "room_shrink_bps": 25,
+    "room_shrink_below_bps": 7500,
+    "plan_step_bps": 500,
+    "service_balance_bps": 9000,
+    "service_slope_pct": 200,
+    "service_min_bps": 7500,
+    "service_max_bps": 13000,
+    "service_counts_unmet": true,
+    "local_ceiling_bps": 15000
+  },
   "plant_scale": 5,
-  "margin_floor": 0.2
+  "margin_floor": 0.2,
+  "capacity": {
+    "build_price_level_bps": 4000,
+    "build_inputs": [
+      [
+        "steel",
+        2000
+      ],
+      [
+        "building_materials",
+        2000
+      ],
+      [
+        "construction",
+        2000
+      ]
+    ],
+    "build_price_min_bps": 5000,
+    "build_price_max_bps": 30000,
+    "local_room": true,
+    "opening_patient_tenths": 12,
+    "opening_keen_tenths": 5,
+    "opening_entry_tenths": 30,
+    "span_plants": 4,
+    "span_weeks_per_plant": 8,
+    "close_after_loss_weeks": 26,
+    "payout_buffer_weeks": 26,
+    "payout_share_bps": 5000,
+    "raid_warning_weeks": 4,
+    "household_cover_bps": 9000,
+    "household_unmet_bps": 3000,
+    "plant_auction_weeks": 4
+  },
+  "demand": {
+    "sell_within_room": true,
+    "latent_growth_bps": 600,
+    "latent_content_bps": 1000,
+    "cycle_elasticity": [
+      [
+        "construction",
+        30000
+      ],
+      [
+        "building_materials",
+        30000
+      ],
+      [
+        "steel",
+        25000
+      ],
+      [
+        "vehicles",
+        25000
+      ],
+      [
+        "components",
+        20000
+      ],
+      [
+        "advertising",
+        25000
+      ],
+      [
+        "freight",
+        20000
+      ],
+      [
+        "timber",
+        20000
+      ],
+      [
+        "pig_iron",
+        20000
+      ],
+      [
+        "ore",
+        18000
+      ],
+      [
+        "goods_retail",
+        15000
+      ],
+      [
+        "goods",
+        15000
+      ],
+      [
+        "lease",
+        8000
+      ],
+      [
+        "telecom",
+        6000
+      ],
+      [
+        "software",
+        10000
+      ],
+      [
+        "food_retail",
+        4000
+      ],
+      [
+        "food_raw",
+        4000
+      ],
+      [
+        "grain",
+        4000
+      ],
+      [
+        "livestock",
+        4000
+      ],
+      [
+        "care",
+        3000
+      ],
+      [
+        "pharmaceuticals",
+        3000
+      ],
+      [
+        "electricity",
+        4000
+      ],
+      [
+        "water",
+        2000
+      ]
+    ],
+    "cycle_default_bps": 12000,
+    "investment_goods": [
+      "construction",
+      "building_materials",
+      "steel",
+      "vehicles",
+      "components"
+    ],
+    "credit_elasticity_bps": 5000,
+    "retail_reads_street": true,
+    "street_short_bps": 1000
+  },
+  "texture": {
+    "named_bps": 1500,
+    "families": [
+      {
+        "family": "oil",
+        "swing_bps": 1300,
+        "half_life_weeks": 14,
+        "causes_up": [
+          "unrest in an oil producing region lifts crude",
+          "producers cut output and crude climbs",
+          "a refinery outage tightens fuel supply"
+        ],
+        "causes_down": [
+          "producers pump past their quotas and crude slides",
+          "a mild winter leaves fuel tanks full"
+        ]
+      },
+      {
+        "family": "natural_gas",
+        "swing_bps": 1600,
+        "half_life_weeks": 9,
+        "causes_up": [
+          "a cold winter lifts natural gas",
+          "a pipeline outage tightens gas supply"
+        ],
+        "causes_down": [
+          "a warm winter leaves gas in storage",
+          "new gas fields flood the market"
+        ]
+      },
+      {
+        "family": "coal",
+        "swing_bps": 1350,
+        "half_life_weeks": 18,
+        "causes_up": [
+          "a mine strike cuts coal supply",
+          "a cold snap lifts demand for coal"
+        ],
+        "causes_down": [
+          "power stations switch away from coal",
+          "a mild season leaves coal stockpiles high"
+        ]
+      },
+      {
+        "family": "ore",
+        "swing_bps": 1700,
+        "half_life_weeks": 18,
+        "causes_up": [
+          "a mine flood cuts ore shipments",
+          "strong mill orders abroad lift ore"
+        ],
+        "causes_down": [
+          "new mines abroad flood the ore market",
+          "mills abroad cut orders for ore"
+        ]
+      },
+      {
+        "family": "steel",
+        "swing_bps": 1600,
+        "half_life_weeks": 18,
+        "causes_up": [
+          "mills abroad run short and steel climbs",
+          "trade duties abroad lift steel"
+        ],
+        "causes_down": [
+          "mills abroad dump surplus steel",
+          "a slack building season leaves steel unsold"
+        ]
+      },
+      {
+        "family": "grain",
+        "swing_bps": 1300,
+        "half_life_weeks": 12,
+        "causes_up": [
+          "a drought cuts the harvest",
+          "a poor harvest abroad lifts grain"
+        ],
+        "causes_down": [
+          "a bumper harvest fills the silos",
+          "good weather brings a record crop"
+        ]
+      },
+      {
+        "family": "fertilizer",
+        "swing_bps": 1600,
+        "half_life_weeks": 16,
+        "causes_up": [
+          "dear gas lifts fertilizer costs",
+          "a plant outage abroad tightens fertilizer"
+        ],
+        "causes_down": [
+          "farmers cut spending on fertilizer",
+          "new plants abroad add fertilizer supply"
+        ]
+      },
+      {
+        "family": "chemicals",
+        "swing_bps": 1300,
+        "half_life_weeks": 18,
+        "causes_up": [
+          "a plant outage abroad tightens chemicals",
+          "dear feedstock lifts chemical prices"
+        ],
+        "causes_down": [
+          "plants abroad add capacity and chemicals ease",
+          "cheap feedstock lowers chemical prices"
+        ]
+      },
+      {
+        "family": "timber",
+        "swing_bps": 1350,
+        "half_life_weeks": 18,
+        "causes_up": [
+          "forest fires cut timber supply",
+          "a building boom abroad lifts timber"
+        ],
+        "causes_down": [
+          "sawmills abroad overproduce and timber falls",
+          "a slack building season leaves timber unsold"
+        ]
+      },
+      {
+        "family": "rare_earth",
+        "swing_bps": 1800,
+        "half_life_weeks": 20,
+        "causes_up": [
+          "export limits abroad lift rare earths",
+          "a mine closure abroad tightens rare earths"
+        ],
+        "causes_down": [
+          "new mines abroad add rare earth supply",
+          "makers abroad cut orders for rare earths"
+        ]
+      },
+      {
+        "family": "building_materials",
+        "swing_bps": 1000,
+        "half_life_weeks": 22,
+        "causes_up": [
+          "a building boom abroad lifts materials",
+          "kilns abroad run short"
+        ],
+        "causes_down": [
+          "a slack building season leaves materials unsold",
+          "new plants abroad add capacity"
+        ]
+      },
+      {
+        "family": "electronics",
+        "swing_bps": 1200,
+        "half_life_weeks": 16,
+        "causes_up": [
+          "a chip shortage lifts components",
+          "a factory fire abroad tightens components"
+        ],
+        "causes_down": [
+          "fabs abroad add capacity and components fall",
+          "a glut of chips abroad cuts prices"
+        ]
+      },
+      {
+        "family": "manufactures",
+        "swing_bps": 300,
+        "half_life_weeks": 26,
+        "causes_up": [
+          "shipping costs rise and imported goods climb"
+        ],
+        "causes_down": [
+          "cheap imports from abroad press prices down"
+        ]
+      },
+      {
+        "family": "power",
+        "swing_bps": 600,
+        "half_life_weeks": 8,
+        "causes_up": [
+          "a heat wave strains the power grid",
+          "a plant outage tightens power supply"
+        ],
+        "causes_down": [
+          "mild weather leaves spare power on the grid",
+          "new plants add power supply"
+        ]
+      }
+    ]
+  }
 }

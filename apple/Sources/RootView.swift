@@ -16,11 +16,14 @@ struct RootView: View {
     }
 
     var body: some View {
-        if sizeClass == .regular {
-            DesktopShell()
-        } else {
-            phone
+        Group {
+            if sizeClass == .regular {
+                DesktopShell()
+            } else {
+                phone
+            }
         }
+        .careerEndHost()
     }
 
     private var phone: some View {

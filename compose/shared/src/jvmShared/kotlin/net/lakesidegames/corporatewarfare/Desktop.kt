@@ -76,7 +76,7 @@ import uniffi.cw_ffi.StockDto
 /** Windows at least this wide get the desktop layout instead of the phone tabs. */
 val DesktopBreakpoint: Dp = 1000.dp
 
-private enum class Page(val id: String, val title: String, val icon: String, val group: String, val key: String) {
+internal enum class Page(val id: String, val title: String, val icon: String, val group: String, val key: String) {
     Map("map", "Map", "map", "Play", "F1"),
     Office("office", "CEO Office", "office", "Company", "F2"),
     Research("research", "Research", "research", "Company", "F3"),
@@ -441,7 +441,7 @@ private val DOCK_PAGE_MIN = 760.dp
  * The share is the map's part of the width; it is saved when the drag ends or a key moves it.
  */
 @Composable
-private fun DockedSplit(share: Float, onShare: (Float) -> Unit, map: @Composable () -> Unit, page: @Composable () -> Unit) {
+internal fun DockedSplit(share: Float, onShare: (Float) -> Unit, map: @Composable () -> Unit, page: @Composable () -> Unit) {
     var width by remember { mutableStateOf(1f) }
     var live by remember(share) { mutableStateOf(share) }
     Row(Modifier.fillMaxSize().onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }) {
@@ -485,7 +485,7 @@ private fun DockedSplit(share: Float, onShare: (Float) -> Unit, map: @Composable
 
 /** The world map for a split: the same map as the Map page with its modes in one scrolling line. */
 @Composable
-private fun DockedMap(
+internal fun DockedMap(
     store: GameStore, layer: MapLayer, onLayer: (MapLayer) -> Unit, selected: String?, onSelect: (String?) -> Unit, onFullMap: () -> Unit,
 ) {
     var pickedLane by remember { mutableStateOf<String?>(null) }
@@ -515,7 +515,7 @@ private fun DockedMap(
 
 /** Outliner on the left, the world map in the middle, the selected region's board on the right. */
 @Composable
-private fun DesktopMap(store: GameStore) {
+internal fun DesktopMap(store: GameStore) {
     var layer by remember { mutableStateOf(MapLayer.Presence) }
     var selected by remember { mutableStateOf<String?>(null) }
     var pickedLane by remember { mutableStateOf<String?>(null) }
@@ -664,7 +664,7 @@ private fun RegionBoardDetail(store: GameStore, board: RegionBoardDto) {
 
 /** Figures in a strip, then results, pricing and divisions side by side. */
 @Composable
-private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
+internal fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
     val firm = store.selectedFirmDto
     var editing by remember { mutableStateOf<ProductLineDto?>(null) }
     if (firm == null) {
@@ -780,7 +780,7 @@ private fun DesktopOffice(store: GameStore, onOpen: (Page) -> Unit) {
 
 /** The stock exchange and the commodity board side by side, as full tables. */
 @Composable
-private fun DesktopMarkets(store: GameStore) {
+internal fun DesktopMarkets(store: GameStore) {
     var stock by remember { mutableStateOf<StockDto?>(null) }
     var commodity by remember { mutableStateOf<CommodityDto?>(null) }
     var sort by remember { mutableStateOf("Top movers") }
@@ -843,7 +843,7 @@ private fun DesktopMarkets(store: GameStore) {
 
 /** Charts and statements in two columns. */
 @Composable
-private fun DesktopStats(store: GameStore) {
+internal fun DesktopStats(store: GameStore) {
     var period by remember { mutableStateOf(StatsPeriod.Month) }
     val firm = store.selectedFirmDto
     val buckets = ResultBuckets.make(period, store.finance?.recentWeeks ?: emptyList(), store.history)
@@ -939,7 +939,7 @@ internal fun DesktopInbox(store: GameStore, initial: String? = null) {
 
 /** The investor's position and every company they control, as one table. */
 @Composable
-private fun DesktopPortfolio(store: GameStore) {
+internal fun DesktopPortfolio(store: GameStore) {
     val overview = store.overview ?: return
     Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(

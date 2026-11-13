@@ -643,6 +643,16 @@ fn raid_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Lett
             // A failed raid on you is not a letter: the raider has nothing to say.
             (false, false) => continue,
         };
+        let fact = if !you_attack
+            && raid.success
+            && world
+                .firm(raid.defender)
+                .is_some_and(|f| f.operative() && f.facilities.is_empty())
+        {
+            format!("{fact} That was the last of your plants.")
+        } else {
+            fact
+        };
         out.push(finish(
             world,
             Draft {
@@ -661,6 +671,220 @@ fn raid_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Lett
                 addressee: yours.clone(),
                 facts: vec![fact],
                 link: PaperLink::company(writer),
+            },
+            None,
+        ));
+    }
+}
+
+/// Plant auctions (2.0): the liquidator writes when a failed company's plants go up for auction,
+/// a rival's chief when it lists a plant, each with the plant, the opening figures and the
+/// deadline; and the liquidator or seller writes again when a lot the player bid on closes.
+fn auction_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
+    use cw_sim::economy::auctions::{LotOutcome, LotRoute};
+    let addressee = world
+        .investor
+        .primary_group
+        .and_then(|firm| paper::firm_name(world, firm))
+        .unwrap_or_else(|| "Investor".to_owned());
+    let views = crate::plant_lots(world, dataset);
+    for view in views.iter().filter(|v| v.opened_week >= since && !v.yours) {
+        let seller = Handle(view.seller);
+        let money = |cents: i64| paper::money(world, dataset, seller, cents);
+        let plant = format!(
+            "{} plant in {} ({})",
+            view.plant_name,
+            view.region_name,
+            blocks_word(view.blocks)
+        );
+        let breakup = view.route == "break_up";
+        let fact = if breakup {
+            format!(
+                "{} is in liquidation. Its {plant} is offered to the highest bidder until week {}; book value {}, and a scrap buyer pays {}.",
+                view.seller_name,
+                view.closes_week,
+                money(view.book_cents),
+                money(view.reserve_cents),
+            )
+        } else {
+            format!(
+                "We are selling our {plant}. Sealed bids close in week {}; book value {}.",
+                view.closes_week,
+                money(view.book_cents),
+            )
+        };
+        let reading = if view.blocks_used > 0 {
+            format!(
+                "By your company's own figures it would earn {} a week on {}.",
+                money(view.weekly_cents),
+                blocks_word(view.blocks_used.clamp(0, 255) as u8)
+            )
+        } else {
+            "By your company's own figures there is no room to sell what it makes today.".to_owned()
+        };
+        let sender = if breakup {
+            office_sender(
+                &format!("The liquidator of {}", view.seller_name),
+                "Liquidator",
+                &view.seller_name,
+            )
+        } else {
+            rival_sender(world, dataset, seller, view.opened_week)
+        };
+        out.push(finish(
+            world,
+            Draft {
+                id: format!("lot:{}", view.lot),
+                kind: "bid",
+                week: view.opened_week,
+                sender,
+                tone: Tone::Formal,
+                addressee: addressee.clone(),
+                facts: vec![fact, reading],
+                link: PaperLink::company(seller),
+            },
+            None,
+        ));
+    }
+    for closed in world.auctions.closed.iter().filter(|c| {
+        c.closed.0 >= since && c.lot.player_bid.is_some() && c.outcome != LotOutcome::Void
+    }) {
+        let lot = &closed.lot;
+        let Some(bid) = &lot.player_bid else {
+            continue;
+        };
+        let seller_name = paper::firm_name(world, lot.seller).unwrap_or_default();
+        let money = |cents: i64| paper::money(world, dataset, lot.seller, cents);
+        let fact = match closed.outcome {
+            LotOutcome::Sold {
+                by_player: true,
+                price_cents,
+                ..
+            } => format!(
+                "Your bid of {} won the plant from {seller_name}. It is yours, running, with its staff.",
+                money(price_cents)
+            ),
+            LotOutcome::Sold {
+                buyer, price_cents, ..
+            } => format!(
+                "Your bid of {} for {seller_name}'s plant lost: {} paid {}.",
+                money(bid.price_cents),
+                paper::firm_name(world, buyer).unwrap_or_default(),
+                money(price_cents)
+            ),
+            LotOutcome::Scrapped { proceeds_cents } => format!(
+                "Your bid of {} for {seller_name}'s plant did not stand at the deadline; it went for scrap at {}.",
+                money(bid.price_cents),
+                money(proceeds_cents)
+            ),
+            _ => format!(
+                "{seller_name} withdrew the plant you bid {} for.",
+                money(bid.price_cents)
+            ),
+        };
+        let sender = if lot.route == LotRoute::BreakUp {
+            office_sender(
+                &format!("The liquidator of {seller_name}"),
+                "Liquidator",
+                &seller_name,
+            )
+        } else {
+            rival_sender(world, dataset, lot.seller, closed.closed.0)
+        };
+        out.push(finish(
+            world,
+            Draft {
+                id: format!("lot-closed:{}", lot.id),
+                kind: "bid",
+                week: closed.closed.0,
+                sender,
+                tone: Tone::Formal,
+                addressee: addressee.clone(),
+                facts: vec![fact],
+                link: PaperLink::company(lot.seller),
+            },
+            None,
+        ));
+    }
+}
+
+/// A company folding in one the player holds shares in writes to say the shares were bought out
+/// (2.0).
+fn merger_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
+    for m in world
+        .auctions
+        .mergers
+        .iter()
+        .filter(|m| m.tick.0 >= since && m.investor_shares > 0 && !player_side(world, m.buyer))
+    {
+        let (Some(buyer), Some(target)) = (
+            paper::firm_name(world, m.buyer),
+            paper::firm_name(world, m.target),
+        ) else {
+            continue;
+        };
+        out.push(finish(
+            world,
+            Draft {
+                id: format!("merger:{}:{}", m.tick.0, m.target.0),
+                kind: "bid",
+                week: m.tick.0,
+                sender: rival_sender(world, dataset, m.buyer, m.tick.0),
+                tone: Tone::Formal,
+                addressee: "Investor".to_owned(),
+                facts: vec![format!(
+                    "{buyer} has folded {target} into itself. Your {} shares in {target} were bought out for cash with the other minority holders, {} in all.",
+                    m.investor_shares,
+                    paper::money(world, dataset, m.buyer, m.minority_cents),
+                )],
+                link: PaperLink::company(m.buyer),
+            },
+            None,
+        ));
+    }
+}
+
+/// A rival that announces a raid campaign on one of the player's companies writes to say so, in
+/// its chief's voice (2.0). The facts are the campaign's: business, region, budget, the week it is
+/// decided.
+fn campaign_letters(world: &World, dataset: &Dataset, since: u32, out: &mut Vec<Letter>) {
+    for c in world
+        .raids
+        .campaigns
+        .iter()
+        .filter(|c| c.announced >= since)
+    {
+        if !player_side(world, c.defender) || player_side(world, c.attacker) {
+            continue;
+        }
+        let (Some(_), Some(yours)) = (
+            paper::firm_name(world, c.attacker),
+            paper::firm_name(world, c.defender),
+        ) else {
+            continue;
+        };
+        let industry = industry_name(c.industry);
+        let region = paper::region_name(world, c.region);
+        let weeks = c.resolves.saturating_sub(c.announced);
+        let fact = format!(
+            "We have put {} behind a campaign for {yours}'s {industry} business in {region}. It is decided in {weeks} week{}.",
+            paper::money(world, dataset, c.attacker, c.budget_cents),
+            if weeks == 1 { "" } else { "s" },
+        );
+        out.push(finish(
+            world,
+            Draft {
+                id: format!(
+                    "raid-announced:{}:{}:{}",
+                    c.announced, c.attacker.0, c.defender.0
+                ),
+                kind: "rival",
+                week: c.announced,
+                sender: rival_sender(world, dataset, c.attacker, c.announced).felt(Mood::Pleased),
+                tone: Tone::Grudge,
+                addressee: yours.clone(),
+                facts: vec![fact],
+                link: PaperLink::company(c.attacker),
             },
             None,
         ));
@@ -1215,6 +1439,53 @@ fn board_letters(world: &World, since: u32, out: &mut Vec<Letter>) {
     }
 }
 
+/// The career frame (2.0): the chair of the board writes each quarter with progress against the
+/// ambition, when the board's confidence turns (the warning before removal, and its lifting), and
+/// when the career ends. The text is the engine's own sentence from `economy::career`.
+fn career_letters(world: &World, since: u32, out: &mut Vec<Letter>) {
+    if world.career.is_none() {
+        return;
+    }
+    let firm = world.investor.primary_group;
+    let org = firm
+        .and_then(|f| paper::firm_name(world, f))
+        .unwrap_or_else(|| "Your career".to_owned());
+    for (i, item) in world.news.iter().enumerate() {
+        let Some(kind) = item.key.strip_prefix("career.") else {
+            continue;
+        };
+        if item.week.0 < since {
+            continue;
+        }
+        let mut facts = vec![item.subject.clone()];
+        match kind {
+            "board_warning" => facts.push(
+                "Open the company's results to see where the money is going. Close or sell what loses, cut costs, or raise prices where the market allows."
+                    .to_owned(),
+            ),
+            "ended" => facts.push(
+                "Open the career summary to read how it went. You may play on in the same world."
+                    .to_owned(),
+            ),
+            _ => {}
+        }
+        out.push(finish(
+            world,
+            Draft {
+                id: format!("career:{}:{}", item.week.0, i),
+                kind: "board",
+                week: item.week.0,
+                sender: office_sender("The chair of the board", "Chair of the board", &org),
+                tone: Tone::Formal,
+                addressee: org.clone(),
+                facts,
+                link: firm.map(PaperLink::company).unwrap_or_default(),
+            },
+            None,
+        ));
+    }
+}
+
 /// Hires, departures, poaching, and the board naming a chief executive for the player's company.
 /// The new executive introduces themselves in their temperament's voice; a poached executive's old
 /// boss writes; the board chair writes when the board replaces the chief.
@@ -1638,6 +1909,7 @@ pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter>
 
     let mut out: Vec<Letter> = Vec::new();
     raid_letters(world, dataset, since, &mut out);
+    campaign_letters(world, dataset, since, &mut out);
     ally_letters(world, dataset, since, &mut out);
     bid_letters(world, dataset, since, &mut out);
     rate_letters(world, dataset, since, &mut out);
@@ -1648,8 +1920,11 @@ pub fn letters(world: &World, dataset: &Dataset, since_week: u32) -> Vec<Letter>
     earnings_letters(world, dataset, since, &mut out);
     cfo_letters(world, dataset, since, &mut out);
     board_letters(world, since, &mut out);
+    career_letters(world, since, &mut out);
     executive_letters(world, dataset, since, &mut out);
     stake_letters(world, dataset, since, &mut out);
+    auction_letters(world, dataset, since, &mut out);
+    merger_letters(world, dataset, since, &mut out);
     decision_letters(world, dataset, 1, &mut out);
 
     out.sort_by(|a, b| {
@@ -1919,7 +2194,8 @@ mod tests {
         // A failed raid on you is not a letter, and raids between two rivals are not either.
         let mut t = quiet("great-lakes-2000", 30);
         let (a, b) = (rival(&t, 0), rival(&t, 1));
-        t.world.raids.push(raid(a, you(&t), false));
+        let on_you = raid(a, you(&t), false);
+        t.world.raids.push(on_you);
         t.world.raids.push(raid(a, b, true));
         assert!(letters(&t.world, &t.dataset, 25).is_empty());
     }

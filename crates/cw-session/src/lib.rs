@@ -4,11 +4,13 @@
 //! weekly advances. It exposes immutable read models, a versioned save envelope and a replay log.
 //! Swift keeps file I/O and lifecycle; it never computes a financial identity.
 
+pub mod auction_alerts;
 pub mod brief;
 pub mod cfo;
 pub mod dto;
 pub mod letters;
 pub mod paper;
+pub mod raid_alerts;
 pub mod save;
 pub mod telemetry;
 
@@ -78,6 +80,9 @@ pub struct ReplayLog {
     pub config: ScenarioConfig,
     pub commands: Vec<RecordedCommand>,
     pub advance_calls: Vec<u32>,
+    /// The career option the session started with (2.0); none for a sandbox or five-year game.
+    #[serde(default)]
+    pub career: Option<cw_sim::economy::career::CareerSetup>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -169,6 +174,165 @@ pub struct ArchetypeActions {
 impl Session {
     pub fn create(config: ScenarioConfig) -> Result<Session, DomainError> {
         Self::create_with(config, None)
+    }
+
+    /// A new game with a career (2.0): a start (founder or at the helm of an established
+    /// company), an ambition and a length. `config` is the scenario's ordinary new-game config;
+    /// a career with no ambition is a sandbox career that never ends. The refusal is in plain
+    /// words (a helm pick that is not on offer).
+    pub fn create_career(
+        config: ScenarioConfig,
+        setup: &cw_sim::economy::career::CareerSetup,
+    ) -> Result<Session, String> {
+        let mut session = Self::create(config).map_err(|e| format!("{e:?}"))?;
+        cw_sim::economy::career::begin(&mut session.world, &session.dataset, setup)?;
+        session.log.career = Some(setup.clone());
+        Ok(session)
+    }
+
+    /// The established companies a helm start offers for this new-game config, with their
+    /// figures and the price of control at the opening mark, and the fortune each would start
+    /// with (the scenario's standard fortune, or the content cover of the price when that is
+    /// short).
+    pub fn helm_offers(config: ScenarioConfig) -> Result<Vec<dto::HelmOfferDto>, DomainError> {
+        let session = Self::create(config)?;
+        let world = &session.world;
+        let standard = world.investor.cash_cents;
+        Ok(cw_sim::economy::career::helm_offers(world)
+            .into_iter()
+            .map(|o| dto::HelmOfferDto {
+                firm: o.firm.0,
+                industry: cw_sim::state::INDUSTRY_NAMES
+                    .get(o.industry as usize)
+                    .copied()
+                    .unwrap_or("business")
+                    .to_owned(),
+                region: session
+                    .dataset
+                    .regions
+                    .get(o.region as usize)
+                    .map(|r| r.name.clone())
+                    .unwrap_or_default(),
+                fortune_cents: cw_sim::economy::career::helm_fortune(
+                    standard,
+                    o.price_cents,
+                    world.difficulty,
+                ),
+                standard_fortune_cents: standard,
+                name: o.name,
+                rank: o.rank,
+                value_cents: o.value_cents,
+                revenue_year_cents: o.revenue_year_cents,
+                plants: o.plants,
+                workers: o.workers,
+                shares_needed: o.shares_needed,
+                mark_cents: o.mark_cents,
+                price_cents: o.price_cents,
+            })
+            .collect())
+    }
+
+    /// Where the career stands this week: the medal, the facts it rests on, what the next medal
+    /// needs and the board's warning. `None` without a career.
+    pub fn career_standing(&self) -> Option<dto::CareerStandingDto> {
+        use cw_sim::economy::career as c;
+        let state = self.world.career.as_ref()?;
+        let p = c::progress(&self.world, state);
+        let warned = state.tracking.warned_week.is_some();
+        Some(dto::CareerStandingDto {
+            ambition: p.ambition.map(|a| a.key().to_owned()),
+            medal: p.medal.key().to_owned(),
+            rank: p.rank,
+            league: p.league,
+            growth_bps: p.growth_bps,
+            detail: p.detail,
+            next: p.next,
+            weeks_left: state.end_week.saturating_sub(self.world.tick.0),
+            ended: state.ending.is_some(),
+            board_warned: warned,
+            board_warning: if warned {
+                state
+                    .events
+                    .iter()
+                    .rev()
+                    .find(|e| e.key == "board_warning")
+                    .map(|e| e.text.clone())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            },
+            board_can_remove: self
+                .world
+                .investor
+                .primary_group
+                .is_some_and(|h| !c::holds_majority(&self.world, h)),
+        })
+    }
+
+    /// The career's summary: ambition and standing, the year by year line, the events that
+    /// mattered and, once it has ended, the ending in one sentence. `None` without a career.
+    pub fn career_summary(&self) -> Option<dto::CareerSummaryDto> {
+        use cw_sim::economy::career as c;
+        let state = self.world.career.as_ref()?;
+        let sentence = state
+            .ending
+            .as_ref()
+            .map(|e| e.sentence.clone())
+            .unwrap_or_default();
+        Some(dto::CareerSummaryDto {
+            start: match state.start {
+                c::Start::Founder => "founder",
+                c::Start::Helm => "helm",
+            }
+            .to_owned(),
+            helm_company: state.helm.as_ref().map(|h| h.name.clone()),
+            helm_fortune_scaled: state
+                .helm
+                .as_ref()
+                .is_some_and(|h| h.fortune_cents != h.standard_fortune_cents),
+            ambition: state.ambition.map(|a| a.key().to_owned()),
+            years: state.years,
+            end_week: state.end_week,
+            standing: c::standing(&self.world, state).key().to_owned(),
+            ended: state.ending.is_some(),
+            ending: state
+                .ending
+                .as_ref()
+                .map(|e| e.kind.key().to_owned())
+                .unwrap_or_default(),
+            lost: state.ending.as_ref().is_some_and(|e| e.kind.lost()),
+            medal: state
+                .ending
+                .as_ref()
+                .map(|e| e.medal.key().to_owned())
+                .unwrap_or_default(),
+            sentence,
+            board_warned: state.tracking.warned_week.is_some(),
+            start_worth_cents: state.start_worth_cents,
+            net_worth_cents: c::wealth_league(&self.world).0,
+            growth_bps: c::growth_bps(c::wealth_league(&self.world).0, state.start_worth_cents),
+            years_log: state
+                .years_log
+                .iter()
+                .map(|y| dto::CareerYearDto {
+                    year: y.year,
+                    rank: y.rank.unwrap_or(0),
+                    league: y.league,
+                    company_value_cents: y.company_value_cents,
+                    net_worth_cents: y.net_worth_cents,
+                    wealth_rank: y.wealth_rank,
+                    medal: y.medal.key().to_owned(),
+                })
+                .collect(),
+            events: c::key_events(state)
+                .into_iter()
+                .map(|e| dto::CareerEventDto {
+                    week: e.week,
+                    key: e.key,
+                    text: e.text,
+                })
+                .collect(),
+        })
     }
 
     /// A career from a custom scenario. Its difficulty, economy and capital replace the
@@ -283,6 +447,7 @@ impl Session {
             config: config.clone(),
             commands: Vec::new(),
             advance_calls: Vec::new(),
+            career: None,
         };
         Ok(Session {
             dataset,
@@ -481,6 +646,29 @@ impl Session {
                 "Your counteroffer was turned down. Open the company's labour page to try again, or continue."
                     .to_owned(),
                 None,
+            ),
+            "career_end" => proceed(
+                "milestone",
+                "Your career has ended".to_owned(),
+                self.career_summary()
+                    .map(|s| s.sentence)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "The career summary is ready.".to_owned())
+                    + " Continue to play on in the same world.",
+                None,
+            ),
+            "career_board_warning" => proceed(
+                "warning",
+                "The board has lost confidence".to_owned(),
+                if self.world.investor.primary_group.is_some_and(|p| {
+                    cw_sim::economy::career::holds_majority(&self.world, p)
+                }) {
+                    "Your company has made losses for months. You hold the majority of the votes, so the board cannot remove you, but lenders, the share price and activist shareholders will feel it. Selling below half would let the board act."
+                } else {
+                    "Your company has made losses for months. Turn a profit in a four-week period before the warning runs out, or the board removes you."
+                }
+                .to_owned(),
+                self.world.investor.primary_group.map(|h| h.0),
             ),
             "five_year_score" => proceed(
                 "milestone",
@@ -1005,6 +1193,82 @@ impl Session {
         dto::fx_view(&self.world, &self.dataset, self.reporting_currency)
     }
 
+    /// Openings to build, fastest payback first, valued from the player's primary company's head
+    /// office (or the first region before one is founded): every strategy and state where the
+    /// market is short of at least a fifth of a block and a block pays back. The rivals read the
+    /// same signal (`cw_sim::economy::capacity`).
+    /// Raid campaigns announced and not yet decided (2.0): against the player, by the player
+    /// and between rivals, soonest to resolve first, with today's chance and stake.
+    pub fn raid_campaigns(&self) -> Vec<dto::RaidCampaignView> {
+        campaigns(&self.world, &self.dataset)
+    }
+
+    /// The bids a plant would draw if it were put up for sale now (2.0). None when there is no
+    /// such plant.
+    pub fn plant_sale(&self, facility: u64) -> Option<dto::PlantSaleView> {
+        let handle = Handle(facility);
+        let plant = self.world.facilities.get(handle)?;
+        let bids = cw_sim::economy::disposal::plant_bids(&self.world, &self.dataset, handle)
+            .into_iter()
+            .map(|bid| dto::PlantBidView {
+                bidder: bid.bidder.0,
+                bidder_name: self
+                    .world
+                    .firm(bid.bidder)
+                    .map(|f| f.name.clone())
+                    .unwrap_or_default(),
+                price_cents: bid.price_cents,
+                weekly_cents: bid.weekly_cents,
+                blocks_used: bid.blocks_used,
+            })
+            .collect();
+        Some(dto::PlantSaleView {
+            facility,
+            book_cents: (plant.capex_cents - plant.accumulated_depreciation).max(0),
+            bids,
+        })
+    }
+
+    /// Every plant on offer (2.0), by deadline. See `dto::PlantLotView`.
+    pub fn plant_lots(&self) -> Vec<dto::PlantLotView> {
+        plant_lots(&self.world, &self.dataset)
+    }
+
+    pub fn capacity_openings(&self, limit: usize) -> Vec<dto::CapacityOpening> {
+        let world = &self.world;
+        let dataset = &self.dataset;
+        let home = world
+            .investor
+            .primary_group
+            .and_then(|firm| world.firm(firm))
+            .map(|firm| firm.region)
+            .unwrap_or(0);
+        cw_sim::economy::capacity::openings(world, dataset, home)
+            .into_iter()
+            .take(limit)
+            .map(|open| {
+                let recipe = &dataset.recipes[open.recipe as usize];
+                dto::CapacityOpening {
+                    recipe_id: recipe.id.clone(),
+                    industry: recipe.industry.clone(),
+                    region: open.region,
+                    region_code: dataset.regions[open.region as usize].code.clone(),
+                    product_id: dataset.products[open.product as usize].id.clone(),
+                    traded: open.traded,
+                    room_lots: open.room_lots,
+                    block_lots: open.block_lots,
+                    price_cents: open.price_cents,
+                    price_vs_reference_bps: open.price_vs_reference_bps,
+                    unmet_lots: open.unmet_lots,
+                    wanted_lots: open.wanted_lots,
+                    weekly_contribution_cents: open.weekly_contribution_cents,
+                    build_cost_cents: open.build_cost_cents,
+                    payback_weeks: open.payback_weeks,
+                }
+            })
+            .collect()
+    }
+
     pub fn overview(&self) -> Overview {
         let world = &self.world;
         let reporting = self.reporting_currency;
@@ -1083,6 +1347,8 @@ impl Session {
         logistics_alerts(world, &self.dataset, &mut alerts);
         government_alerts(world, &self.dataset, &mut alerts);
         structure_alerts(world, &mut alerts);
+        raid_alerts::raid_alerts(world, &self.dataset, &mut alerts);
+        auction_alerts::auction_alerts(world, &self.dataset, &mut alerts);
         for event in dto::events(world, &self.dataset) {
             if event.mandatory {
                 alerts.push(Alert {
@@ -1393,6 +1659,7 @@ impl Session {
             config: config.clone(),
             commands: Vec::new(),
             advance_calls: Vec::new(),
+            career: None,
         };
         Ok(Session {
             dataset,
@@ -1413,7 +1680,14 @@ impl Session {
 
     /// Replay a recorded log from a fresh scenario and return the canonical hash.
     pub fn replay(log: &ReplayLog) -> Result<String, DomainError> {
-        let mut session = Session::create(log.config.clone())?;
+        let mut session = match &log.career {
+            Some(setup) => Session::create_career(log.config.clone(), setup).map_err(|_| {
+                DomainError::InvalidSave {
+                    detail: cw_core::error::SaveFault::MalformedPayload,
+                }
+            })?,
+            None => Session::create(log.config.clone())?,
+        };
         for command in &log.commands {
             let intent = decode_intent(&command.intent).ok_or(DomainError::InvalidSave {
                 detail: cw_core::error::SaveFault::MalformedPayload,
@@ -1440,6 +1714,7 @@ fn is_warning_pause(reason: &str) -> bool {
     reason.starts_with("default_grace:")
         || reason.starts_with("strike:")
         || reason == "union_counter_rejected"
+        || reason == "career_board_warning"
 }
 
 fn decode_intent(text: &str) -> Option<CommandIntent> {
@@ -1899,6 +2174,137 @@ fn storage_alerts(
     }
 }
 
+/// Every plant on offer as the player sees it. See `Session::plant_lots`.
+pub fn plant_lots(world: &World, dataset: &Dataset) -> Vec<dto::PlantLotView> {
+    use cw_sim::economy::auctions::LotRoute;
+    use cw_sim::economy::disposal;
+    use cw_sim::economy::events_engine::player_side;
+    let rooms = cw_sim::economy::capacity::input_rooms(world, dataset);
+    let reader = world
+        .investor
+        .primary_group
+        .filter(|firm| world.firm(*firm).is_some_and(|f| f.operative()));
+    let now = world.tick.0;
+    let bid_view = |bid: &disposal::PlantBid| dto::PlantBidView {
+        bidder: bid.bidder.0,
+        bidder_name: world
+            .firm(bid.bidder)
+            .map(|f| f.name.clone())
+            .unwrap_or_default(),
+        price_cents: bid.price_cents,
+        weekly_cents: bid.weekly_cents,
+        blocks_used: bid.blocks_used,
+    };
+    let mut out: Vec<dto::PlantLotView> = world
+        .auctions
+        .lots
+        .iter()
+        .map(|lot| {
+            let reading = reader
+                .and_then(|firm| disposal::appraise(world, dataset, &rooms, firm, lot.facility));
+            let plant_name = dataset
+                .recipes
+                .get(lot.recipe as usize)
+                .map(|r| r.name.clone())
+                .unwrap_or_default();
+            dto::PlantLotView {
+                lot: lot.id,
+                facility: lot.facility.0,
+                route: match lot.route {
+                    LotRoute::BreakUp => "break_up",
+                    LotRoute::Listing => "listing",
+                }
+                .to_owned(),
+                seller: lot.seller.0,
+                seller_name: paper::firm_name(world, lot.seller).unwrap_or_default(),
+                plant_name,
+                region: lot.region,
+                region_name: paper::region_name(world, lot.region),
+                blocks: lot.blocks,
+                book_cents: lot.book_cents,
+                reserve_cents: lot.reserve_cents,
+                opened_week: lot.opened.0,
+                closes_week: lot.closes.0,
+                weeks_left: lot.closes.0.saturating_sub(now),
+                weekly_cents: reading.as_ref().map(|r| r.weekly_cents).unwrap_or(0),
+                blocks_used: reading.as_ref().map(|r| r.blocks_used).unwrap_or(0),
+                earnings_cents: reading.as_ref().map(|r| r.earnings_cents).unwrap_or(0),
+                replacement_cents: reading.as_ref().map(|r| r.replacement_cents).unwrap_or(0),
+                player_bid_cents: lot.player_bid.as_ref().map(|b| b.price_cents).unwrap_or(0),
+                player_bid_firm: lot.player_bid.as_ref().map(|b| b.firm.0).unwrap_or(0),
+                yours: player_side(world, lot.seller),
+                bids: lot.offered.iter().map(bid_view).collect(),
+                answer_by_week: lot.answer_by.0,
+            }
+        })
+        .collect();
+    out.sort_by_key(|view| (view.closes_week, view.lot));
+    out
+}
+
+/// Every pending raid campaign as the player sees it. See `Session::raid_campaigns`.
+pub fn campaigns(world: &World, dataset: &Dataset) -> Vec<dto::RaidCampaignView> {
+    use cw_sim::economy::events_engine::player_side;
+    use cw_sim::economy::sectors;
+    let mut out: Vec<dto::RaidCampaignView> = world
+        .raids
+        .campaigns
+        .iter()
+        .filter_map(|c| {
+            let attacker_name = paper::firm_name(world, c.attacker)?;
+            let defender_name = paper::firm_name(world, c.defender)?;
+            let role = if player_side(world, c.defender) {
+                dto::CampaignRole::AgainstPlayer
+            } else if player_side(world, c.attacker) {
+                dto::CampaignRole::ByPlayer
+            } else {
+                dto::CampaignRole::BetweenRivals
+            };
+            let quote = sectors::raid_quote(
+                world,
+                dataset,
+                c.attacker,
+                c.defender,
+                c.region,
+                c.industry,
+                c.budget_cents,
+            );
+            let division_blocks = sectors::divisions_of(world, dataset, c.defender)
+                .iter()
+                .find(|d| d.region == c.region && d.industry == c.industry)
+                .map(|d| d.blocks)
+                .unwrap_or(0);
+            Some(dto::RaidCampaignView {
+                role,
+                attacker: c.attacker.0,
+                attacker_name,
+                defender: c.defender.0,
+                defender_name,
+                region: c.region,
+                region_name: paper::region_name(world, c.region),
+                industry: c.industry,
+                industry_name: cw_sim::state::INDUSTRY_NAMES
+                    .get(c.industry as usize)
+                    .copied()
+                    .unwrap_or("business")
+                    .to_lowercase(),
+                budget_cents: c.budget_cents,
+                attack_cents: quote.attack_cents,
+                defence_cents: quote.defence_cents,
+                chance_bps: quote.chance_bps,
+                blocks_at_stake: quote.blocks_at_stake,
+                division_blocks,
+                price_cents: quote.price_cents,
+                announced_week: c.announced,
+                resolves_week: c.resolves,
+                weeks_left: c.resolves.saturating_sub(world.tick.0),
+            })
+        })
+        .collect();
+    out.sort_by_key(|v| (v.resolves_week, v.attacker, v.defender));
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2202,7 +2608,32 @@ mod tests {
         // different names, ages and temperaments), with no change to any rule this fixture exercises. The Swift
         // In 1.9 it moved from de25d78b... when the world gained its rival plan and migration state
         // (the migration references are taken in week one and hashed), with no change to any
-        // other rule this fixture exercises. The Swift
+        // other rule this fixture exercises. In 2.0 it moved from a08ddca2... when the content
+        // gained the market rules (the dataset hash is folded in) and gateways began trading in
+        // volume steps, exports settling at one average price for every seller and goods pricing
+        // around the outside world's middle quote. In 2.0 it moved again from 8440e658... when
+        // the market rules joined the dataset hash (the hash string is in the world) and services
+        // began pricing on capacity against regional demand, plants ramping five points a week.
+        // In 2.0 it moved again from 04e9740b... when the capacity rules joined the dataset hash
+        // (build prices follow prices; rivals build, enter, close and pay out on one room-to-build
+        // signal). In 2.0 it moved again from 24eeba2c... when home sellers began reading the
+        // average export discount instead of the last lot's step, households began asking for no
+        // more than their budget buys (unspent budgets return to savings), and openings began
+        // reading the inputs a new plant could buy, and again when households' opening demand was
+        // sized to what the named plants serve (household_cover_bps and household_unmet_bps
+        // joined the dataset hash), and again when services and sellers with no import were given
+        // more room over reference (130 and 150 percent). In 2.0 it moved again from b2a6baa7...
+        // when raids began to be announced four weeks ahead (the warning joined the dataset hash
+        // and the world gained the list of campaigns in progress, save schema 4), and again when the demand rules joined the dataset hash (a new seller counts
+        // only what its room, inputs and labour allow, households turn to sellers with stock left
+        // and grow toward their budget where served, demand follows the cycle by product) and a new company began offering at least the going wage, and again
+        // when the texture and street rules joined the dataset hash (world prices stray from their
+        // paths by a seeded texture, seller markets open near balance, shops and services price on
+        // their street), and again in 2.0 when plant auctions joined the dataset hash (four weeks
+        // for a break-up or a listing), and again in 2.0 (from 54409d0c...) when electricity
+        // began to be dispatched over a grid (a currency area) at its generators' asking prices
+        // with imports at the import price, its generators began to be paid for every lot they
+        // deliver, and services began pricing on their business buyers' shortfall. The Swift
         // constant
         // must be updated
         // in the same change and re-verified on the Mac runner before R05 claims cross-platform
@@ -2228,7 +2659,7 @@ mod tests {
         let hash = session.canonical_hash();
         assert_eq!(
             hash,
-            "a08ddca23a2e702a0eb02692ddc605c60c4f5ddf3c33085889c0cfdcb9efce1b"
+            "b960155fb27aa5d6608621c3672140233d323c5a008dbc118a0cc2cc5c3d55f3"
         );
     }
 

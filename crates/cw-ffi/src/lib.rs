@@ -17,6 +17,7 @@ use cw_session::{Query, Session};
 uniffi::setup_scaffolding!();
 
 mod brief;
+mod career;
 mod cast;
 mod catalogue;
 mod chapters;
@@ -29,6 +30,7 @@ mod letters;
 mod paper;
 mod plans;
 mod politics;
+mod series;
 mod statements;
 mod systems;
 pub use cast::{
@@ -1338,6 +1340,8 @@ pub struct MapPlantDto {
     pub blocks: u32,
     pub status: String,
     pub utilisation_bps: i32,
+    /// How far a plant under construction has got, in basis points (0 when it is not building).
+    pub progress_bps: i32,
 }
 
 /// A firm's sector focus and logistics position.
@@ -1438,7 +1442,69 @@ fn alert_text(alert: cw_session::Alert) -> String {
             "{}: a rival reserved capacity on a lane you ship on.",
             alert.subject
         ),
+        "alert.decision" => format!("Decision needed: {}", alert.subject),
+        "alert.past_due" => format!(
+            "{}: payments are past due. Raise cash or the company goes into restructuring.",
+            alert.subject
+        ),
+        "alert.payout_frozen" => format!(
+            "{}: payouts to shareholders are frozen until the company is back in good standing.",
+            alert.subject
+        ),
+        // These carry their whole sentence in the subject.
+        "alert.incident" | "alert.law_carrier" | "alert.law_rescue" | "alert.state_rescue"
+        | "alert.quota" | "alert.reserve" => alert.subject,
+        "alert.raid_announced" => format!(
+            "{}: a rival has announced a raid on one of its businesses. Raise marketing before it is decided to cut their chance.",
+            alert.subject
+        ),
+        "alert.raid" => format!("{}: a rival raided one of its businesses.", alert.subject),
+        "alert.raid_last_block" => format!(
+            "{}: a raid took its last plant. Build a new plant or found a new company.",
+            alert.subject
+        ),
+        "alert.raid_exposed" => format!(
+            "{}: its whole business is one block, which a raid could take. Marketing is its defence.",
+            alert.subject
+        ),
+        "alert.plant_auction" => format!(
+            "{} is in liquidation and a plant is up for auction. Bid before the deadline.",
+            alert.subject
+        ),
+        "alert.plant_listed" => format!("{} has put a plant up for sale.", alert.subject),
+        "alert.plant_bids_in" => format!(
+            "Bids are in for a plant {} listed. Accept the best or keep the plant.",
+            alert.subject
+        ),
+        // An unknown key never reaches the player as a raw key: show what it is about instead.
+        _ if !alert.subject.is_empty() => alert.subject,
         _ => alert.key,
+    }
+}
+
+/// Every raid alert key the session raises (cw_session::raid_alerts).
+#[cfg(test)]
+const RAID_ALERT_KEYS: [&str; 4] = [
+    "alert.raid_announced",
+    "alert.raid",
+    "alert.raid_last_block",
+    "alert.raid_exposed",
+];
+
+#[cfg(test)]
+mod raid_alert_text {
+    #[test]
+    fn every_raid_alert_key_has_text_of_its_own() {
+        for key in super::RAID_ALERT_KEYS {
+            let text = super::alert_text(cw_session::Alert {
+                key: key.to_owned(),
+                subject: "Acme".to_owned(),
+                severity: 2,
+                detail: String::new(),
+            });
+            assert!(text.starts_with("Acme: "), "{key} -> {text}");
+            assert_ne!(text, key);
+        }
     }
 }
 
@@ -2420,6 +2486,160 @@ fn laws_dto(laws: &cw_sim::state::Laws, dataset: &cw_data::Dataset) -> LawsDto {
     }
 }
 
+/// The engine's scenario configuration for a new-game screen's choices.
+fn scenario_config(options: &NewGameDto) -> cw_session::ScenarioConfig {
+    cw_session::ScenarioConfig {
+        seed: options.seed,
+        scenario: if options.guided {
+            cw_sim::state::ScenarioKind::Guided
+        } else {
+            cw_sim::state::ScenarioKind::Founder
+        },
+        mode: if options.five_year {
+            cw_sim::state::ScenarioMode::FiveYear
+        } else {
+            cw_sim::state::ScenarioMode::Sandbox
+        },
+        dataset_hash: String::new(),
+        difficulty: cw_data::Difficulty::from_key(&options.difficulty),
+        economy_start: cw_sim::state::EconomyStart::from_key(&options.economy),
+        starting_capital_cents: options.starting_capital_cents.filter(|c| *c > 0),
+        prices: cw_session::PriceSetup {
+            scenario_id: options.scenario_id.clone(),
+            path: cw_data::PricePath::from_key(&options.price_path),
+            timeline: cw_sim::economy::timeline::TimelineMode::from_key(&options.timeline),
+        },
+    }
+}
+
+/// The established companies a helm career can start at, for these new-game choices (2.0).
+#[uniffi::export]
+pub fn helm_offers(options: NewGameDto) -> Result<Vec<career::HelmOfferDto>, FfiError> {
+    Ok(Session::helm_offers(scenario_config(&options))?
+        .into_iter()
+        .map(career::HelmOfferDto::from)
+        .collect())
+}
+
+/// The four ambitions, with their bronze, silver and gold in plain words for a start ("founder"
+/// or "helm") and a length in years (0 takes the default), read from the content table (2.0).
+#[uniffi::export]
+pub fn ambition_guide(start: String, years: u32) -> Vec<career::AmbitionGuideDto> {
+    career::ambition_guide(&start, years)
+}
+
+/// The career lengths the content offers, and the default (2.0).
+#[uniffi::export]
+pub fn career_lengths() -> career::CareerLengthsDto {
+    let (years, default_years) = career::career_lengths();
+    career::CareerLengthsDto {
+        years,
+        default_years,
+    }
+}
+
+/// What the board of the company you run expects, from the engine's career table (2.0 menus).
+#[derive(uniffi::Record)]
+pub struct BoardExpectationDto {
+    /// Weeks from the start before the board judges the results.
+    pub grace_weeks: u32,
+    /// Four-week periods of losses in a row that draw its warning.
+    pub loss_periods: u32,
+    /// Weeks the warning runs before removal; a profitable four-week period lifts it.
+    pub warning_weeks: u32,
+}
+
+/// The board's rule for a career, for the new-career screen.
+#[uniffi::export]
+pub fn board_expectation() -> BoardExpectationDto {
+    let b = &cw_data::careers::career_table().board;
+    BoardExpectationDto {
+        grace_weeks: b.grace_weeks,
+        loss_periods: b.loss_periods,
+        warning_weeks: b.warning_weeks,
+    }
+}
+
+/// One difficulty and the starting capital it gives, for the new-career screen (2.0 menus).
+#[derive(uniffi::Record)]
+pub struct DifficultyDto {
+    /// "easy", "standard" or "hard".
+    pub key: String,
+    pub starting_capital_cents: i64,
+}
+
+/// The difficulties in order, each with its starting capital from the engine's rule set.
+#[uniffi::export]
+pub fn difficulties() -> Vec<DifficultyDto> {
+    [
+        cw_data::Difficulty::Easy,
+        cw_data::Difficulty::Standard,
+        cw_data::Difficulty::Hard,
+    ]
+    .into_iter()
+    .map(|d| DifficultyDto {
+        key: d.key().to_string(),
+        starting_capital_cents: d.starting_capital_cents(),
+    })
+    .collect()
+}
+
+#[cfg(test)]
+mod difficulty_tests {
+    #[test]
+    fn the_difficulties_carry_the_engine_capital() {
+        let list = super::difficulties();
+        let keys: Vec<_> = list.iter().map(|d| d.key.as_str()).collect();
+        assert_eq!(keys, ["easy", "standard", "hard"]);
+        for d in &list {
+            assert_eq!(
+                d.starting_capital_cents,
+                cw_data::Difficulty::from_key(&d.key).starting_capital_cents()
+            );
+        }
+        assert!(list[0].starting_capital_cents > list[2].starting_capital_cents);
+    }
+}
+
+/// The longest company name the game keeps, the same limit as a chief's or a scenario's name.
+const COMPANY_NAME_MAX: usize = cw_sim::state::PlayerChief::NAME_MAX;
+
+/// Why a company name cannot be used, in plain words, or none when it can (2.0). A name has at
+/// least one visible character, no control characters and at most 40 characters.
+#[uniffi::export]
+pub fn company_name_problem(name: String) -> Option<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        Some("Give the company a name".to_owned())
+    } else if trimmed.chars().any(|c| c.is_control()) {
+        Some("The name cannot hold line breaks or other control characters".to_owned())
+    } else if trimmed.chars().count() > COMPANY_NAME_MAX {
+        Some(format!(
+            "The name can be at most {COMPANY_NAME_MAX} characters"
+        ))
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod company_name_tests {
+    use super::company_name_problem as problem;
+
+    #[test]
+    fn names_are_checked_in_plain_words() {
+        assert!(problem("Lakeshore Industries".into()).is_none());
+        assert!(problem("  Prairie Works  ".into()).is_none());
+        assert!(problem("".into()).is_some());
+        assert!(problem("    ".into()).is_some());
+        assert!(problem("Two\nLines".into()).is_some());
+        assert!(problem("x".repeat(40)).is_none());
+        assert!(problem("x".repeat(41)).is_some());
+        // Surrounding spaces do not count toward the limit.
+        assert!(problem(format!(" {} ", "x".repeat(40))).is_none());
+    }
+}
+
 /// Everything the new-game screen chooses.
 #[derive(uniffi::Record)]
 pub struct NewGameDto {
@@ -2457,28 +2677,7 @@ impl SessionHandle {
     /// A new career from the new-game screen's choices.
     #[uniffi::constructor]
     pub fn start(options: NewGameDto) -> Result<Arc<SessionHandle>, FfiError> {
-        let config = cw_session::ScenarioConfig {
-            seed: options.seed,
-            scenario: if options.guided {
-                cw_sim::state::ScenarioKind::Guided
-            } else {
-                cw_sim::state::ScenarioKind::Founder
-            },
-            mode: if options.five_year {
-                cw_sim::state::ScenarioMode::FiveYear
-            } else {
-                cw_sim::state::ScenarioMode::Sandbox
-            },
-            dataset_hash: String::new(),
-            difficulty: cw_data::Difficulty::from_key(&options.difficulty),
-            economy_start: cw_sim::state::EconomyStart::from_key(&options.economy),
-            starting_capital_cents: options.starting_capital_cents.filter(|c| *c > 0),
-            prices: cw_session::PriceSetup {
-                scenario_id: options.scenario_id.clone(),
-                path: cw_data::PricePath::from_key(&options.price_path),
-                timeline: cw_sim::economy::timeline::TimelineMode::from_key(&options.timeline),
-            },
-        };
+        let config = scenario_config(&options);
         let mut session = Session::create(config)?;
         if !options.chief_name.is_empty() || !options.chief_portrait.is_empty() {
             session.set_player_chief(
@@ -2490,6 +2689,50 @@ impl SessionHandle {
         Ok(Arc::new(SessionHandle {
             inner: Mutex::new(session),
         }))
+    }
+
+    /// A new career with a start, an ambition and a length (2.0): the new-game screen's choices
+    /// plus the career options. A helm start needs `career.helm_firm` from `helm_offers`.
+    #[uniffi::constructor]
+    pub fn start_career(
+        options: NewGameDto,
+        career: career::CareerOptionsDto,
+    ) -> Result<Arc<SessionHandle>, FfiError> {
+        let setup = career.setup().map_err(|detail| FfiError::Domain {
+            key: "career.invalid".to_owned(),
+            detail,
+        })?;
+        let mut session =
+            Session::create_career(scenario_config(&options), &setup).map_err(|detail| {
+                FfiError::Domain {
+                    key: "career.refused".to_owned(),
+                    detail,
+                }
+            })?;
+        if !options.chief_name.is_empty() || !options.chief_portrait.is_empty() {
+            session.set_player_chief(
+                &options.chief_name,
+                &options.chief_portrait,
+                &options.chief_temperament,
+            );
+        }
+        Ok(Arc::new(SessionHandle {
+            inner: Mutex::new(session),
+        }))
+    }
+
+    /// Where the career stands this week; none for a game started without career options.
+    pub fn career_standing(&self) -> Option<career::CareerStandingDto> {
+        self.lock()
+            .career_standing()
+            .map(career::CareerStandingDto::from)
+    }
+
+    /// The career summary for the end screen; none without a career.
+    pub fn career_summary(&self) -> Option<career::CareerSummaryDto> {
+        self.lock()
+            .career_summary()
+            .map(career::CareerSummaryDto::from)
     }
 
     /// The engine fixture constructor: no world commodity prices. Games started from the
@@ -4141,6 +4384,15 @@ impl SessionHandle {
                     } else {
                         0
                     },
+                    progress_bps: if plant.status == cw_sim::state::FacilityStatus::Building
+                        && plant.completes.0 > plant.started.0
+                    {
+                        let done = world.tick.0.saturating_sub(plant.started.0) as i64;
+                        let span = (plant.completes.0 - plant.started.0) as i64;
+                        (done * 10_000 / span).clamp(0, 10_000) as i32
+                    } else {
+                        0
+                    },
                 })
             })
             .collect()
@@ -5094,6 +5346,47 @@ impl SessionHandle {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn every_alert_key_reads_as_a_sentence() {
+        let keys = [
+            "alert.decision",
+            "alert.past_due",
+            "alert.payout_frozen",
+            "alert.incident",
+            "alert.law_carrier",
+            "alert.law_rescue",
+            "alert.state_rescue",
+            "alert.quota",
+            "alert.reserve",
+            "alert.storage_full",
+            "alert.storage_fees",
+            "alert.spoilage",
+            "alert.lane_congested",
+            "alert.carrier_hike",
+            "alert.activist",
+            "alert.squeeze",
+            "alert.captive_markdown",
+            "alert.bond_due",
+            "alert.lane_reserved",
+            "alert.plant_auction",
+            "alert.plant_listed",
+            "alert.plant_bids_in",
+            "alert.something_new",
+        ];
+        for key in keys {
+            let text = super::alert_text(cw_session::Alert {
+                key: key.to_owned(),
+                subject: "Acme".to_owned(),
+                severity: 1,
+                detail: String::new(),
+            });
+            assert!(
+                !text.starts_with("alert."),
+                "{key} reached the player raw: {text}"
+            );
+        }
+    }
+
     use super::*;
 
     #[test]
@@ -5137,6 +5430,75 @@ mod tests {
             archive[archive.len() - 1]
         );
         assert_eq!(career.paper(now + 50).week, now, "a future week is today");
+    }
+
+    fn career_options(scenario: &str) -> NewGameDto {
+        NewGameDto {
+            seed: 7,
+            scenario_id: scenario.to_owned(),
+            guided: false,
+            five_year: false,
+            difficulty: "standard".to_owned(),
+            economy: "historic".to_owned(),
+            starting_capital_cents: None,
+            price_path: String::new(),
+            timeline: String::new(),
+            chief_name: String::new(),
+            chief_portrait: String::new(),
+            chief_temperament: String::new(),
+        }
+    }
+
+    #[test]
+    fn careers_cross_the_boundary() {
+        // The new-game screen: offers, then a helm career with an ambition and a length.
+        let offers = helm_offers(career_options("great-lakes-2000")).unwrap();
+        assert!(!offers.is_empty());
+        let pick = &offers[0];
+        assert!(pick.price_cents > 0 && pick.fortune_cents >= pick.price_cents);
+        let career = SessionHandle::start_career(
+            career_options("great-lakes-2000"),
+            career::CareerOptionsDto {
+                start: "helm".to_owned(),
+                helm_firm: Some(pick.firm),
+                ambition: "biggest".to_owned(),
+                years: 10,
+            },
+        )
+        .unwrap();
+        // The standing each week.
+        let standing = career.career_standing().unwrap();
+        assert_eq!(standing.ambition.as_deref(), Some("biggest"));
+        assert_eq!(standing.rank, pick.rank);
+        assert!(!standing.detail.is_empty());
+        assert!(standing.medal == "gold" || !standing.next.is_empty());
+        assert_eq!(standing.weeks_left, 520);
+        assert!(!standing.board_warned);
+        // A helm start buys just over half the votes: the board cannot remove the player.
+        assert!(!standing.board_can_remove);
+        // The summary.
+        let summary = career.career_summary().unwrap();
+        assert_eq!(summary.start, "helm");
+        assert_eq!(summary.helm_company.as_deref(), Some(pick.name.as_str()));
+        assert_eq!(summary.years, 10);
+        assert!(!summary.ended && summary.ending.is_empty());
+        assert!(summary.start_worth_cents > 0);
+        assert!(summary.events.iter().any(|e| e.key == "took_helm"));
+        // A refused pick is a typed error, and a game without career options has no career.
+        assert!(
+            SessionHandle::start_career(
+                career_options("great-lakes-2000"),
+                career::CareerOptionsDto {
+                    start: "helm".to_owned(),
+                    helm_firm: Some(u64::MAX),
+                    ..Default::default()
+                },
+            )
+            .is_err()
+        );
+        let sandbox = SessionHandle::start(career_options("great-lakes-2000")).unwrap();
+        assert!(sandbox.career_standing().is_none());
+        assert!(sandbox.career_summary().is_none());
     }
 
     #[test]

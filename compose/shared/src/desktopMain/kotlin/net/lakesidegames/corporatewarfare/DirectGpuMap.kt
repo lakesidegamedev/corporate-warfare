@@ -2,6 +2,7 @@ package net.lakesidegames.corporatewarfare
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import com.sun.jna.Library
@@ -120,6 +121,10 @@ internal class DirectGpuSession(
     override var version by mutableLongStateOf(0L)
         private set
 
+    /** Set when the first frame has been presented: until then the window holds nothing worth showing and the map keeps drawing what it drew before. */
+    override var ready by mutableStateOf(false)
+        private set
+
     /** Frames put on the screen, and a listener called on the render thread for each one. */
     val presented = AtomicLong()
     @Volatile var frameListener: ((DirectFrame) -> Unit)? = null
@@ -194,6 +199,11 @@ internal class DirectGpuSession(
         redraw.run()
     }
 
+    override fun setAnimation(on: Boolean) {
+        animate = on
+        redraw.run()
+    }
+
     override fun request(camera: GpuCamera, width: Int, height: Int, moving: Boolean) {
         if (width <= 0 || height <= 0) return
         firstRequestAt.compareAndSet(0, System.nanoTime())
@@ -237,6 +247,7 @@ internal class DirectGpuSession(
                 }
             }
             val t0 = System.nanoTime()
+            val animating = tick(job.camera.widthKm)
             val code = try {
                 lib.cw_gpu_render_surface(id, cam(job.camera), job.width, job.height, timing)
             } catch (_: Throwable) { -1 }
@@ -257,7 +268,10 @@ internal class DirectGpuSession(
             renderMs = timing[0]
             copyMs = timing[1]
             if (timing[1] > 250.0) { if (++slowRun >= 10) slowWhy = "frames took over 250 ms to present, ten in a row" } else slowRun = 0
+            // Something moves: the next frame follows at once; presenting waits for the display, which paces it.
+            if (animating) lock.withLock { dirty = true }
             val seq = presented.incrementAndGet()
+            if (seq == 1L) ready = true
             frameListener?.invoke(DirectFrame(seq, job.camera, job.width, job.height, timing[0], timing[1], total, t0))
         }
     }

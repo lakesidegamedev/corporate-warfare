@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::data::{Owner, Scene, VoxelModel, WATER_LAKE};
+use crate::data::{Owner, Placement, Scene, VoxelModel, WATER_LAKE};
 
 /// Vertex kinds, carried in the colour alpha byte.
 pub const KIND_TOP: u8 = 0;
@@ -18,6 +18,10 @@ pub const KIND_ROAD: u8 = 5;
 pub const KIND_APRON_TOP: u8 = 6;
 pub const KIND_APRON_WALL: u8 = 7;
 pub const APRON_WATER: u8 = 7;
+/// A lamp: drawn flat in a step of the signal ramp (the red byte), never shaded or outlined.
+pub const KIND_LIGHT: u8 = 15;
+/// Countryside props: lit and shaded like buildings, without the ink outline.
+pub const KIND_PROP: u8 = 8;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -30,6 +34,10 @@ pub struct Vertex {
     pub local: [f32; 3],
     /// Position on the face, 0 to 1 each way (building outlines); unused for terrain.
     pub uv: [f32; 2],
+    /// The building this vertex belongs to: where it stands (km) and how wide it is (km). The
+    /// vertex shader keeps a building from shrinking below a readable size on screen by scaling
+    /// it about this point. A width of zero (terrain, roads, props) means never scaled.
+    pub anchor: [f32; 4],
 }
 
 const UV: [[f32; 2]; 4] = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
@@ -40,7 +48,23 @@ pub const VERTEX_BYTES: usize = std::mem::size_of::<Vertex>();
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
+    /// The anchor given to the vertices pushed from now on (see [`Vertex::anchor`]).
+    pub anchor: [f32; 4],
 }
+
+/// How much a building `size_km` wide is enlarged about its base so it stays `min_px` pixels
+/// wide when a pixel covers `km_px` kilometres: 1 up close (true size), growing smoothly as the
+/// camera pulls away, but never wider than `max_km`.
+pub fn grow_k(size_km: f32, km_px: f32, min_px: f32, max_km: f32) -> f32 {
+    if size_km <= 0.0 {
+        return 1.0;
+    }
+    (min_px * km_px / size_km).clamp(1.0, (max_km / size_km).max(1.0))
+}
+
+/// The widest a plant is ever drawn, in kilometres: its landmark size at the zooms the game is
+/// played at. Plants are stood this far apart, so they never overlap however far they grow.
+pub const LANDMARK_KM: f32 = 5.0;
 
 impl Mesh {
     fn quad(&mut self, p: [[f32; 3]; 4], normal: [f32; 3], colour: [u8; 4], local: [[f32; 3]; 4]) {
@@ -52,6 +76,7 @@ impl Mesh {
                 colour,
                 local: local[i],
                 uv: UV[i],
+                anchor: self.anchor,
             });
         }
         self.indices
@@ -469,7 +494,144 @@ pub fn terrain(scene: &Scene) -> Mesh {
     m
 }
 
-fn box_faces(
+/// The faces of one model part: a box, or the solid its shape names, filling the same box.
+pub(crate) fn shape_faces(
+    m: &mut Mesh,
+    tf: &dyn Fn([f32; 3]) -> [f32; 3],
+    rot: &dyn Fn([f32; 3]) -> [f32; 3],
+    b: &crate::data::VoxelBox,
+    rgb: [u8; 3],
+    kind: u8,
+) {
+    use crate::data::Shape;
+    const SIDES: usize = 12;
+    let (a, z) = (b.min, b.max);
+    let mid = [
+        (a[0] + z[0]) / 2.0,
+        (a[1] + z[1]) / 2.0,
+        (a[2] + z[2]) / 2.0,
+    ];
+    let half = [
+        (z[0] - a[0]) / 2.0,
+        (z[1] - a[1]) / 2.0,
+        (z[2] - a[2]) / 2.0,
+    ];
+    let c = [rgb[0], rgb[1], rgb[2], KIND_PLAIN];
+    let mut face = |p: [[f32; 3]; 4]| {
+        // Flat normal from the first three corners (counter clockwise seen from outside).
+        let u = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
+        let w = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
+        let n = [
+            u[1] * w[2] - u[2] * w[1],
+            u[2] * w[0] - u[0] * w[2],
+            u[0] * w[1] - u[1] * w[0],
+        ];
+        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-6);
+        m.quad(
+            [tf(p[0]), tf(p[1]), tf(p[2]), tf(p[3])],
+            rot([n[0] / len, n[1] / len, n[2] / len]),
+            c,
+            p,
+        );
+    };
+    let ring = |k: usize| {
+        let t = (k % SIDES) as f32 / SIDES as f32 * std::f32::consts::TAU;
+        (t.cos(), t.sin())
+    };
+    match b.shape {
+        Shape::Box => box_faces(m, tf, rot, a, z, rgb, kind),
+        Shape::Round { bottom, top } => {
+            for k in 0..SIDES {
+                let ((c0, s0), (c1, s1)) = (ring(k), ring(k + 1));
+                let at = |cs: (f32, f32), r: f32, h: f32| {
+                    [mid[0] + cs.0 * half[0] * r, mid[1] + cs.1 * half[1] * r, h]
+                };
+                face([
+                    at((c0, s0), bottom, a[2]),
+                    at((c1, s1), bottom, a[2]),
+                    at((c1, s1), top, z[2]),
+                    at((c0, s0), top, z[2]),
+                ]);
+                if top > 0.0 {
+                    let centre = [mid[0], mid[1], z[2]];
+                    face([
+                        centre,
+                        at((c0, s0), top, z[2]),
+                        at((c1, s1), top, z[2]),
+                        centre,
+                    ]);
+                }
+            }
+        }
+        Shape::RoundX | Shape::RoundY => {
+            let along_x = b.shape == Shape::RoundX;
+            for k in 0..SIDES {
+                let ((c0, s0), (c1, s1)) = (ring(k), ring(k + 1));
+                // The circle stands across the long axis: one of its axes is up.
+                let at = |cs: (f32, f32), end: f32| {
+                    if along_x {
+                        [end, mid[1] + cs.0 * half[1], mid[2] + cs.1 * half[2]]
+                    } else {
+                        [mid[0] - cs.0 * half[0], end, mid[2] + cs.1 * half[2]]
+                    }
+                };
+                let (lo, hi) = if along_x { (a[0], z[0]) } else { (a[1], z[1]) };
+                face([
+                    at((c0, s0), lo),
+                    at((c0, s0), hi),
+                    at((c1, s1), hi),
+                    at((c1, s1), lo),
+                ]);
+                let cap = |end: f32| {
+                    if along_x {
+                        [end, mid[1], mid[2]]
+                    } else {
+                        [mid[0], end, mid[2]]
+                    }
+                };
+                face([cap(hi), at((c0, s0), hi), at((c1, s1), hi), cap(hi)]);
+                face([cap(lo), at((c1, s1), lo), at((c0, s0), lo), cap(lo)]);
+            }
+        }
+        Shape::GableX | Shape::GableY => {
+            // Eaves at the bottom of the box, the ridge along the middle at the top.
+            let (sw, se, ne, nw) = (
+                [a[0], a[1], a[2]],
+                [z[0], a[1], a[2]],
+                [z[0], z[1], a[2]],
+                [a[0], z[1], a[2]],
+            );
+            if b.shape == Shape::GableX {
+                let (rw, re) = ([a[0], mid[1], z[2]], [z[0], mid[1], z[2]]);
+                face([sw, se, re, rw]);
+                face([ne, nw, rw, re]);
+                face([se, ne, re, re]);
+                face([nw, sw, rw, rw]);
+            } else {
+                let (rs, rn) = ([mid[0], a[1], z[2]], [mid[0], z[1], z[2]]);
+                face([se, ne, rn, rs]);
+                face([nw, sw, rs, rn]);
+                face([sw, se, rs, rs]);
+                face([ne, nw, rn, rn]);
+            }
+        }
+        Shape::Pyramid => {
+            let top = [mid[0], mid[1], z[2]];
+            let (sw, se, ne, nw) = (
+                [a[0], a[1], a[2]],
+                [z[0], a[1], a[2]],
+                [z[0], z[1], a[2]],
+                [a[0], z[1], a[2]],
+            );
+            face([sw, se, top, top]);
+            face([se, ne, top, top]);
+            face([ne, nw, top, top]);
+            face([nw, sw, top, top]);
+        }
+    }
+}
+
+pub(crate) fn box_faces(
     m: &mut Mesh,
     tf: &dyn Fn([f32; 3]) -> [f32; 3],
     rot: &dyn Fn([f32; 3]) -> [f32; 3],
@@ -553,9 +715,19 @@ fn box_faces(
 }
 
 /// Voxel buildings standing on the terrain, each on a plinth down to the lowest ground under it.
+#[allow(dead_code)]
 pub fn buildings(scene: &Scene) -> Mesh {
+    buildings_where(scene, |_, _| true)
+}
+
+/// The same, for the buildings `keep` accepts (index and placement). The animated layer draws
+/// the others itself.
+pub fn buildings_where(scene: &Scene, keep: impl Fn(usize, &Placement) -> bool) -> Mesh {
     let mut m = Mesh::default();
-    for p in &scene.buildings {
+    for (index, p) in scene.buildings.iter().enumerate() {
+        if !keep(index, p) {
+            continue;
+        }
         let Some(model) = scene.models.get(&p.model) else {
             continue;
         };
@@ -564,6 +736,17 @@ pub fn buildings(scene: &Scene) -> Mesh {
         let (z_top, z_low) = (level_z_km(scene, hi), level_z_km(scene, lo));
         let (s, c) = p.yaw.to_radians().sin_cos();
         let v = scene.voxel_km * p.scale;
+        // Only companies' plants keep a minimum size on screen; the scenery stays true to scale.
+        m.anchor = if p.owner == Owner::Scenery {
+            [0.0; 4]
+        } else {
+            [
+                cx,
+                cy,
+                z_top,
+                model.footprint[0].max(model.footprint[1]) * v,
+            ]
+        };
         let rot = move |n: [f32; 3]| [n[0] * c - n[1] * s, n[0] * s + n[1] * c, n[2]];
         let tf = move |q: [f32; 3]| {
             [
@@ -589,24 +772,29 @@ pub fn buildings(scene: &Scene) -> Mesh {
         // The plant models mark their own roofs and trim; the player's firm colour replaces them.
         let marked = model.boxes.iter().any(|b| b.trim);
         for b in &model.boxes {
-            let tall = if marked {
+            let tall = if let Some(w) = b.windows {
+                w && !p.look.idle
+            } else if marked {
                 b.max[2] - b.min[2] >= 3.0
                     && b.max[0] - b.min[0] >= 4.0
                     && b.max[1] - b.min[1] >= 4.0
             } else {
                 b.max[2] - b.min[2] >= 2.0 && b.min[2] >= 1.0
             };
-            let colour = if marked && b.trim && p.owner == Owner::Player {
+            let colour = if p.look.idle {
+                idle_grey(b.colour)
+            } else if b.trim && p.owner == Owner::Player && (marked || b.windows.is_some()) {
                 PLAYER_ROOF
+            } else if let (true, Some(firm)) = (b.trim && p.owner == Owner::Rival, p.look.firm) {
+                firm
             } else {
                 b.colour
             };
-            box_faces(
+            shape_faces(
                 &mut m,
                 &tf,
                 &rot,
-                b.min,
-                b.max,
+                b,
                 colour,
                 if tall { KIND_BUILDING } else { KIND_PLAIN },
             );
@@ -630,7 +818,29 @@ pub fn buildings(scene: &Scene) -> Mesh {
             }
         }
     }
+    m.anchor = [0.0; 4];
     m
+}
+
+/// Where a placed building stands: its centre in kilometres, the height of its base and of the
+/// lowest ground under it (the plinth reaches down to it). None when its model is missing.
+pub(crate) fn placement_frame(scene: &Scene, p: &Placement) -> Option<[f32; 4]> {
+    let model = scene.models.get(&p.model)?;
+    let (cx, cy) = scene.projection.to_km(p.lon, p.lat);
+    let (hi, lo) = ground_range(scene, model, p.scale, cx, cy);
+    Some([cx, cy, level_z_km(scene, hi), level_z_km(scene, lo)])
+}
+
+/// A mothballed plant: every colour becomes the rock ramp step of the same lightness.
+fn idle_grey(c: [u8; 3]) -> [u8; 3] {
+    const ROCK: [[u8; 3]; 4] = [
+        [0x3B, 0x3F, 0x46],
+        [0x56, 0x5B, 0x63],
+        [0x7A, 0x7F, 0x86],
+        [0xA3, 0xA8, 0xAE],
+    ];
+    let lum = 0.3 * c[0] as f32 + 0.59 * c[1] as f32 + 0.11 * c[2] as f32;
+    ROCK[((lum - 40.0) / 45.0).clamp(0.0, 3.0) as usize]
 }
 
 /// Roof colour of the player's own buildings (the palette's gold).
@@ -758,6 +968,7 @@ pub fn ground_z(scene: &Scene, x: f32, y: f32) -> f32 {
 }
 
 /// One end of a road segment ribbon: the vertex shader widens it in screen pixels.
+#[derive(Clone)]
 pub struct RoadPoint {
     pub xyz: [f32; 3],
     /// Kilometres along the line, for dashes and sleepers cut on the ground.
@@ -931,6 +1142,7 @@ pub fn road_chains(scene: &Scene) -> Vec<(u8, Vec<RoadPoint>)> {
     scene
         .lines
         .iter()
+        .filter(|line| line.class != crate::data::LINE_RIVER)
         .map(|line| {
             let km: Vec<(f32, f32)> = line
                 .points
@@ -1009,9 +1221,126 @@ pub fn road_chains_for_band(scene: &Scene, band: &RoadBand) -> Vec<(u8, Vec<Road
     out
 }
 
+/// Corner cutting: each pass replaces every corner with two points a quarter of the way along
+/// the neighbouring segments, so a coarse polyline becomes a smooth bend. Both ends stay.
+fn chaikin(pts: &[(f32, f32)], passes: usize) -> Vec<(f32, f32)> {
+    let mut cur = pts.to_vec();
+    for _ in 0..passes {
+        if cur.len() < 3 {
+            break;
+        }
+        let mut next = vec![cur[0]];
+        for w in cur.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            next.push((a.0 * 0.75 + b.0 * 0.25, a.1 * 0.75 + b.1 * 0.25));
+            next.push((a.0 * 0.25 + b.0 * 0.75, a.1 * 0.25 + b.1 * 0.75));
+        }
+        next.push(*cur.last().unwrap());
+        cur = next;
+    }
+    cur
+}
+
+/// Rivers of one zoom band: Douglas-Peucker simplified chains on the ground. Rivers are
+/// not drawn from the far band, where a ribbon would be a pixel of noise.
+pub fn river_chains(scene: &Scene, band: usize) -> Vec<Vec<RoadPoint>> {
+    if band == 0 {
+        return Vec::new();
+    }
+    let tol = ROAD_BANDS[band].merge_km * 0.25;
+    scene
+        .lines
+        .iter()
+        .filter(|l| l.class == crate::data::LINE_RIVER && l.points.len() >= 2)
+        .map(|line| {
+            let km: Vec<(f32, f32)> = line
+                .points
+                .iter()
+                .map(|p| scene.projection.to_km(p.0, p.1))
+                .collect();
+            ground_chain(scene, &chaikin(&douglas_peucker(&km, tol), 3))
+        })
+        .collect()
+}
+
+/// Where a road or railway crosses a river: the crossing point on the ground, the direction of
+/// the road there, its class and how much longer than the river is wide the deck must be. Crossings within a few hundred metres of each other merge
+/// (map duplicates of one corridor).
+pub fn bridge_sites(
+    roads: &[(u8, Vec<RoadPoint>)],
+    rivers: &[Vec<RoadPoint>],
+) -> Vec<(u8, [f32; 3], [f32; 2], f32)> {
+    const CELL: f32 = 4.0;
+    type Cell = Vec<(u8, usize, usize)>;
+    let mut grid: HashMap<(i32, i32), Cell> = HashMap::new();
+    for (ri, (_, pts)) in roads.iter().enumerate() {
+        for si in 0..pts.len().saturating_sub(1) {
+            let (a, b) = (&pts[si].xyz, &pts[si + 1].xyz);
+            let (x0, x1) = (a[0].min(b[0]), a[0].max(b[0]));
+            let (y0, y1) = (a[1].min(b[1]), a[1].max(b[1]));
+            for cx in (x0 / CELL).floor() as i32..=(x1 / CELL).floor() as i32 {
+                for cy in (y0 / CELL).floor() as i32..=(y1 / CELL).floor() as i32 {
+                    grid.entry((cx, cy))
+                        .or_default()
+                        .push((roads[ri].0, ri, si));
+                }
+            }
+        }
+    }
+    let mut found: Vec<(u8, [f32; 3], [f32; 2], f32)> = Vec::new();
+    let mut seen: std::collections::HashSet<(usize, usize, usize, usize)> = Default::default();
+    for (vi, river) in rivers.iter().enumerate() {
+        for ei in 0..river.len().saturating_sub(1) {
+            let (p, q) = (&river[ei].xyz, &river[ei + 1].xyz);
+            let (x0, x1) = (p[0].min(q[0]), p[0].max(q[0]));
+            let (y0, y1) = (p[1].min(q[1]), p[1].max(q[1]));
+            for cx in (x0 / CELL).floor() as i32..=(x1 / CELL).floor() as i32 {
+                for cy in (y0 / CELL).floor() as i32..=(y1 / CELL).floor() as i32 {
+                    let Some(list) = grid.get(&(cx, cy)) else {
+                        continue;
+                    };
+                    for &(class, ri, si) in list {
+                        if !seen.insert((vi, ei, ri, si)) {
+                            continue;
+                        }
+                        let (a, b) = (&roads[ri].1[si].xyz, &roads[ri].1[si + 1].xyz);
+                        let (rx, ry) = (b[0] - a[0], b[1] - a[1]);
+                        let (sx, sy) = (q[0] - p[0], q[1] - p[1]);
+                        let den = rx * sy - ry * sx;
+                        if den.abs() < 1e-9 {
+                            continue;
+                        }
+                        let (ox, oy) = (p[0] - a[0], p[1] - a[1]);
+                        let t = (ox * sy - oy * sx) / den;
+                        let u = (ox * ry - oy * rx) / den;
+                        if !(0.0..=1.0).contains(&t) || !(0.0..=1.0).contains(&u) {
+                            continue;
+                        }
+                        let len = (rx * rx + ry * ry).sqrt().max(1e-9);
+                        let at = [a[0] + rx * t, a[1] + ry * t, a[2] + (b[2] - a[2]) * t];
+                        let dup = found
+                            .iter()
+                            .any(|f| f.0 == class && (f.1[0] - at[0]).hypot(f.1[1] - at[1]) < 0.4);
+                        if !dup {
+                            // A slanted crossing needs a longer deck: 1 / sin of the angle.
+                            let slen = (sx * sx + sy * sy).sqrt().max(1e-9);
+                            let sin = ((rx * sy - ry * sx) / (len * slen)).abs();
+                            found.push((class, at, [rx / len, ry / len], 1.0 / sin.max(0.3)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    found
+}
+
 fn line_lonlat(scene: &Scene, p: (f32, f32)) -> (f32, f32) {
     scene.projection.to_lonlat(p.0, p.1)
 }
+
+/// Class number of the first bridge deck segment: 4 plus the class of the road it carries.
+pub const BRIDGE_KIND: u8 = 4;
 
 /// Edge of a road tile in kilometres. Roads are grouped by tile so a frame draws only the
 /// tiles in view.
@@ -1038,7 +1367,31 @@ pub struct RoadMesh {
 pub fn roads(scene: &Scene, band: usize) -> RoadMesh {
     type Seg = (u8, [f32; 3], f32, [f32; 3], f32);
     let mut by_tile: BTreeMap<(i32, i32), Vec<Seg>> = BTreeMap::new();
-    for (class, pts) in road_chains_for_band(scene, &ROAD_BANDS[band]) {
+    let road_lines = road_chains_for_band(scene, &ROAD_BANDS[band]);
+    let rivers = river_chains(scene, band);
+    // Bridge decks: a degenerate segment at the crossing whose far end only gives the road's
+    // direction. Class 4 + the road's class; the shader sizes the deck by the river's width.
+    let mut all: Vec<(u8, Vec<RoadPoint>)> = road_lines.clone();
+    for (class, at, dir, stretch) in bridge_sites(&road_lines, &rivers) {
+        let far = [at[0] + dir[0] * 0.05, at[1] + dir[1] * 0.05, at[2]];
+        all.push((
+            BRIDGE_KIND + class,
+            vec![
+                RoadPoint {
+                    xyz: at,
+                    along: stretch,
+                },
+                RoadPoint {
+                    xyz: far,
+                    along: stretch,
+                },
+            ],
+        ));
+    }
+    for pts in rivers {
+        all.push((crate::data::LINE_RIVER, pts));
+    }
+    for (class, pts) in all {
         for w in pts.windows(2) {
             let (a, b) = (&w[0], &w[1]);
             if (a.xyz[0] - b.xyz[0]).abs() + (a.xyz[1] - b.xyz[1]).abs() < 1e-5 {
@@ -1081,6 +1434,7 @@ pub fn roads(scene: &Scene, band: usize) -> RoadMesh {
                     colour,
                     local: [side, end, along],
                     uv: [other_along, 0.0],
+                    anchor: [0.0; 4],
                 });
             }
             m.indices
@@ -1691,4 +2045,118 @@ pub fn apron_seam_steps(scene: &Scene) -> usize {
         }
     }
     bad
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::{Look, Placement, VoxelBox, VoxelModel};
+    use crate::palette::Rgb;
+
+    fn scene_with(model: VoxelModel, owner: Owner, look: Look) -> Scene {
+        let mut scene = Scene::tiny();
+        scene.models.insert("t/0".into(), model);
+        scene.set_buildings(vec![Placement {
+            model: "t/0".into(),
+            lon: -83.0,
+            lat: 41.0,
+            yaw: 0.0,
+            scale: 0.05,
+            owner,
+            look,
+            activity: Default::default(),
+        }]);
+        scene
+    }
+
+    fn model() -> VoxelModel {
+        let b = |min: [f32; 3], max: [f32; 3], colour: Rgb, trim: bool, windows: bool| VoxelBox {
+            min,
+            max,
+            colour,
+            trim,
+            windows: Some(windows),
+            shape: crate::data::Shape::Box,
+        };
+        VoxelModel {
+            footprint: [24.0, 24.0],
+            boxes: vec![
+                b(
+                    [-8.0, -8.0, 0.0],
+                    [8.0, 8.0, 5.0],
+                    [0xB2, 0x3A, 0x2E],
+                    false,
+                    true,
+                ),
+                b(
+                    [-8.0, -8.0, 5.0],
+                    [8.0, 8.0, 5.5],
+                    [0xC9, 0xD4, 0xE2],
+                    true,
+                    false,
+                ),
+            ],
+        }
+    }
+
+    fn colours(m: &Mesh) -> Vec<[u8; 3]> {
+        let mut v: Vec<[u8; 3]> = m
+            .vertices
+            .iter()
+            .map(|v| [v.colour[0], v.colour[1], v.colour[2]])
+            .collect();
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    #[test]
+    fn a_rivals_roof_takes_its_firm_colour_and_the_players_stays_gold() {
+        let firm = [0x2D, 0x63, 0x96];
+        let rival = buildings(&scene_with(
+            model(),
+            Owner::Rival,
+            Look {
+                firm: Some(firm),
+                idle: false,
+            },
+        ));
+        assert!(colours(&rival).contains(&firm));
+        assert!(!colours(&rival).contains(&PLAYER_ROOF));
+        let plain = buildings(&scene_with(model(), Owner::Rival, Look::default()));
+        assert!(!colours(&plain).contains(&firm));
+        let mine = buildings(&scene_with(
+            model(),
+            Owner::Player,
+            Look {
+                firm: Some(firm),
+                idle: false,
+            },
+        ));
+        assert!(colours(&mine).contains(&PLAYER_ROOF) && !colours(&mine).contains(&firm));
+        // The walls keep the sector's colour either way.
+        assert!(colours(&mine).contains(&[0xB2, 0x3A, 0x2E]));
+    }
+
+    #[test]
+    fn a_mothballed_plant_is_grey_and_has_no_windows() {
+        let idle = buildings(&scene_with(
+            model(),
+            Owner::Rival,
+            Look {
+                firm: Some([0x2D, 0x63, 0x96]),
+                idle: true,
+            },
+        ));
+        for c in colours(&idle) {
+            let spread = c.iter().max().unwrap() - c.iter().min().unwrap();
+            assert!(spread <= 16 || c == [0x8C, 0x75, 0x56], "{c:?} is not grey");
+        }
+        assert!(idle.vertices.iter().all(|v| v.colour[3] != KIND_BUILDING));
+        let live = buildings(&scene_with(model(), Owner::Rival, Look::default()));
+        assert!(
+            live.vertices.iter().any(|v| v.colour[3] == KIND_BUILDING),
+            "windows on a live plant"
+        );
+    }
 }

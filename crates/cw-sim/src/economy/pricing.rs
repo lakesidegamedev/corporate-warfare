@@ -41,6 +41,31 @@ pub fn outputs(world: &World, dataset: &Dataset, firm: Handle) -> BTreeSet<u16> 
 /// weeks on the books averages over the weeks it has, so a young firm's sales are not read as a
 /// fraction of what they are.
 pub fn weekly_sold(world: &World, firm: Handle, product: u16) -> i64 {
+    // Within the weekly pricing pass no sale is booked, so the answer holds for the pass.
+    let cached = SOLD_PASS.with(|pass| {
+        pass.borrow()
+            .as_ref()
+            .and_then(|map| map.get(&(firm.0, product)).copied())
+    });
+    if let Some(sold) = cached {
+        return sold;
+    }
+    let sold = weekly_sold_scan(world, firm, product);
+    SOLD_PASS.with(|pass| {
+        if let Some(map) = pass.borrow_mut().as_mut() {
+            map.insert((firm.0, product), sold);
+        }
+    });
+    sold
+}
+
+thread_local! {
+    /// `weekly_sold` answers for the weekly pricing pass in progress on this thread, if any.
+    static SOLD_PASS: std::cell::RefCell<Option<std::collections::HashMap<(u64, u16), i64>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn weekly_sold_scan(world: &World, firm: Handle, product: u16) -> i64 {
     world
         .firms
         .get(firm)
@@ -70,7 +95,6 @@ pub fn free_stock(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         .filter(|((p, _), _)| *p == product)
         .map(|(_, lot)| lot.qty.lots())
         .sum();
-    let id = &dataset.products[product as usize].id;
     // Lots the firm's own plants keep as input cover, each at its own stock target.
     let cover: i64 = entity
         .facilities
@@ -78,10 +102,9 @@ pub fn free_stock(world: &World, dataset: &Dataset, firm: Handle, product: u16) 
         .filter_map(|handle| world.facilities.get(*handle))
         .filter(|plant| plant.status == crate::state::FacilityStatus::Operating)
         .map(|plant| {
-            dataset.recipes[plant.recipe as usize]
-                .weekly_inputs_lots
-                .get(id)
-                .copied()
+            dataset
+                .recipe_tables
+                .input_lots(product, plant.recipe)
                 .unwrap_or(0)
                 * plant.blocks as i64
                 * crate::economy::storage::plant_cover_weeks(world, dataset, entity, plant, product)
@@ -169,15 +192,50 @@ const IDLE_REVERSION_WEEKS: i64 = 26;
 /// Goods: see `goods_wanted_bps`. Services keep no stock, so they read the share of installed
 /// capacity that sold (see `service_wanted_bps`). Both are continuous, with no dead band, so a
 /// price moves as the market moves.
-fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> Option<i64> {
+pub fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> Option<i64> {
     let sold = weekly_sold(world, firm, product);
     if dataset.products[product as usize].kind.is_service() {
         let capacity = service_capacity(world, dataset, firm, product);
         if capacity <= 0 {
             return None;
         }
-        let used_bps = (sold.saturating_mul(10_000) / capacity).clamp(0, 10_000);
-        return Some(service_wanted_bps(used_bps));
+        if dataset.demand.street_short_bps > 0 {
+            return Some(street_wanted_bps(
+                world, dataset, firm, product, sold, capacity,
+            ));
+        }
+        let mut used_bps = (sold.saturating_mul(10_000) / capacity).clamp(0, 10_000);
+        // Households that found no seller are demand the region's capacity could not meet: a
+        // region short of capacity reads as more than full, and its price keeps rising until
+        // demand eases or new capacity opens.
+        if dataset.markets.service_counts_unmet {
+            let (unmet, wanted) = seller_household_unmet(world, dataset, firm, product);
+            if wanted > 0 && unmet > 0 {
+                used_bps = used_bps.saturating_add(unmet.saturating_mul(10_000) / wanted);
+            }
+        }
+        return Some(service_wanted_bps_with(&dataset.markets, used_bps));
+    }
+    // Under the demand rules a shop prices like a service: on the share of its shelves'
+    // capacity that sold, plus the households it serves that went without, so its price reads
+    // the street (shortage and local competition), not only its own shelf cover.
+    if dataset.demand.retail_reads_street
+        && dataset.products[product as usize].kind.is_consumer_goods()
+    {
+        let capacity = service_capacity(world, dataset, firm, product);
+        if capacity > 0 && dataset.demand.street_short_bps > 0 {
+            return Some(street_wanted_bps(
+                world, dataset, firm, product, sold, capacity,
+            ));
+        }
+        if capacity > 0 {
+            let mut used_bps = (sold.saturating_mul(10_000) / capacity).clamp(0, 10_000);
+            let (unmet, wanted) = seller_household_unmet(world, dataset, firm, product);
+            if wanted > 0 && unmet > 0 {
+                used_bps = used_bps.saturating_add(unmet.saturating_mul(10_000) / wanted);
+            }
+            return Some(service_wanted_bps_with(&dataset.markets, used_bps));
+        }
     }
     let stock = free_stock(world, dataset, firm, product);
     if sold <= 0 {
@@ -190,7 +248,11 @@ fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> O
     // Households keep no stock: a week of their demand that found nothing on the shelf counts
     // as being short the seller's whole target cover, so a good households cannot find reads as
     // scarce the way an empty shelf used to.
-    let (unmet, wanted) = household_unmet(world, product);
+    let (unmet, wanted) = if dataset.markets.service_counts_unmet {
+        seller_household_unmet(world, dataset, firm, product)
+    } else {
+        household_unmet(world, product)
+    };
     if wanted > 0 {
         need = need.saturating_add(wanted);
         short = short.saturating_add(unmet.saturating_mul(target) / 100);
@@ -206,6 +268,96 @@ fn wanted_bps(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> O
     Some(goods_wanted_bps(cover, target, short, need))
 }
 
+/// The street rule: what a seller of a service or a shop wants, in basis points of reference.
+/// It reads the share of its capacity that sold plus the share of households in its regions
+/// that went without, against the opening state (everything sold, `street_short_bps` going
+/// without), which asks reference. Above it, a market outgrowing its sellers, the price rises
+/// by the service slope; below it, idle capacity, the price falls by the same slope, but only
+/// while a rival selling in one of its regions also has capacity to spare (a seller alone with
+/// idle shelves has no one to undercut it, and holds). Within the service band; a shop's local
+/// ceiling still bounds it in `target_price`.
+pub fn street_wanted_bps(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    product: u16,
+    sold: i64,
+    capacity: i64,
+) -> i64 {
+    let rules = &dataset.markets;
+    let used = (sold.saturating_mul(10_000) / capacity.max(1)).clamp(0, 10_000);
+    let (unmet, households) = seller_household_unmet(world, dataset, firm, product);
+    // Plants that buy the service and went without count the same as households that did: a
+    // power plant whose grid is short reads short however few households buy power.
+    let (business_unmet, business) = seller_business_unmet(world, dataset, firm, product);
+    let wanted = households.saturating_add(business);
+    let short = if wanted > 0 {
+        (unmet.saturating_add(business_unmet).saturating_mul(10_000) / wanted).clamp(0, 10_000)
+    } else {
+        0
+    };
+    // The opening state, a seller selling all it makes with the opening share of households
+    // going without, reads zero: reference. The street offset is the households' share only;
+    // plants are not expected to go without.
+    let offset = if wanted > 0 {
+        dataset.demand.street_short_bps.saturating_mul(households) / wanted
+    } else {
+        dataset.demand.street_short_bps
+    };
+    let reading = used + short - 10_000 - offset;
+    let reading = if reading < 0 && !rival_has_spare(world, dataset, firm, product) {
+        0
+    } else {
+        reading
+    };
+    (10_000 + reading * rules.service_slope_pct / 100)
+        .clamp(rules.service_min_bps, rules.service_max_bps)
+}
+
+/// Whether another operative firm with an operating plant making the product in one of the
+/// regions this seller serves sold under the service balance share of its capacity last week.
+fn rival_has_spare(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> bool {
+    let id = &dataset.products[product as usize].id;
+    let Some(entity) = world.firms.get(firm) else {
+        return false;
+    };
+    let mut regions: std::collections::BTreeSet<u8> = Default::default();
+    for plant in entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|plant| plant.is_operating() && dataset.recipes[plant.recipe as usize].makes(id))
+    {
+        regions.extend(crate::economy::markets::supply_regions(
+            dataset,
+            plant.region,
+            product,
+        ));
+    }
+    world
+        .firms
+        .iter()
+        .filter(|(handle, rival)| *handle != firm && rival.operative())
+        .any(|(handle, rival)| {
+            let here = rival
+                .facilities
+                .iter()
+                .filter_map(|h| world.facilities.get(*h))
+                .any(|plant| {
+                    plant.is_operating()
+                        && regions.contains(&plant.region)
+                        && dataset.recipes[plant.recipe as usize].makes(id)
+                });
+            if !here {
+                return false;
+            }
+            let capacity = service_capacity(world, dataset, handle, product);
+            capacity > 0
+                && weekly_sold(world, handle, product).saturating_mul(10_000) / capacity
+                    < dataset.markets.service_balance_bps
+        })
+}
+
 /// Whole lots of a good households across the corridor found no seller for last week, and the
 /// lots they asked for. Zero and zero for a good households do not buy.
 pub fn household_unmet(world: &World, product: u16) -> (i64, i64) {
@@ -216,6 +368,204 @@ pub fn household_unmet(world: &World, product: u16) -> (i64, i64) {
         wanted = wanted.saturating_add(households.wanted_milli.get(&product).copied().unwrap_or(0));
     }
     (unmet / 1_000, wanted / 1_000)
+}
+
+/// Whole lots of a good households went without last week, and the lots they asked for, in the
+/// regions one seller's operating plants serve: its plants' regions, and the rest of their
+/// state for a good sold statewide. A region with no seller at all is a gap for whoever builds
+/// there, not a shortage this seller's price can answer, so it is not counted.
+pub fn seller_household_unmet(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    product: u16,
+) -> (i64, i64) {
+    let Some(entity) = world.firms.get(firm) else {
+        return (0, 0);
+    };
+    let id = &dataset.products[product as usize].id;
+    let mut regions: std::collections::BTreeSet<u8> = Default::default();
+    for plant in entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|plant| plant.is_operating() && dataset.recipes[plant.recipe as usize].makes(id))
+    {
+        regions.extend(crate::economy::markets::supply_regions(
+            dataset,
+            plant.region,
+            product,
+        ));
+    }
+    let (mut unmet, mut wanted) = (0i64, 0i64);
+    for region in regions {
+        let Some(households) = world.regions.get(region as usize).map(|r| &r.households) else {
+            continue;
+        };
+        unmet = unmet.saturating_add(households.unmet_milli.get(&product).copied().unwrap_or(0));
+        wanted = wanted.saturating_add(households.wanted_milli.get(&product).copied().unwrap_or(0));
+    }
+    (unmet / 1_000, wanted / 1_000)
+}
+
+/// Lots of a service the operating plants in `regions` went without last week, and the lots they
+/// planned to use, read from saved state: what the plants there plan to draw (their recipe's
+/// weekly use at their run target) against what the plants there made of it and the gateways
+/// there can bring in. Zero and zero for a good (a good's buyers read their stock instead, see
+/// `buyer_shortfall`) and where no plant buys it.
+pub fn business_unmet_in(
+    world: &World,
+    dataset: &Dataset,
+    product: u16,
+    regions: &[u8],
+) -> (i64, i64) {
+    if !dataset.products[product as usize].kind.is_service() {
+        return (0, 0);
+    }
+    if !dataset.recipe_tables.any_use(product) {
+        return (0, 0);
+    }
+    let id = &dataset.products[product as usize].id;
+    let (mut need, mut made) = (0i64, 0i64);
+    for (_, plant) in world.facilities.iter() {
+        if plant.status != crate::state::FacilityStatus::Operating
+            || !regions.contains(&plant.region)
+        {
+            continue;
+        }
+        let tables = &dataset.recipe_tables;
+        if tables.makes(product, plant.recipe) {
+            made = made.saturating_add(plant.last_made(dataset, id).0);
+        }
+        let Some(weekly) = tables.input_lots(product, plant.recipe) else {
+            continue;
+        };
+        if !world.firms.get(plant.firm).is_some_and(|f| f.operative()) {
+            continue;
+        }
+        need = need.saturating_add(
+            weekly
+                .saturating_mul(plant.blocks as i64)
+                .saturating_mul(1_000)
+                .saturating_mul(plant.target_bps.max(0) as i64)
+                / 10_000,
+        );
+    }
+    if need <= 0 {
+        return (0, 0);
+    }
+    let imports: i64 = world
+        .gateways
+        .iter()
+        .filter(|g| g.product == product && regions.contains(&g.region))
+        .map(|g| g.capacity_lots.max(0))
+        .sum();
+    let supply = made.saturating_add(imports.saturating_mul(1_000));
+    ((need - supply).max(0) / 1_000, need / 1_000)
+}
+
+/// What `business_unmet_in` reads, summed per region once for a service so a caller asking for
+/// many region sets scans the plants once instead of once per set.
+pub struct ServiceTotals {
+    need: Vec<i64>,
+    made: Vec<i64>,
+    imports: Vec<i64>,
+}
+
+impl ServiceTotals {
+    /// None for a good (a good's buyers read their stock instead).
+    pub fn build(world: &World, dataset: &Dataset, product: u16) -> Option<ServiceTotals> {
+        if !dataset.products[product as usize].kind.is_service() {
+            return None;
+        }
+        let id = &dataset.products[product as usize].id;
+        let regions = dataset.regions.len().max(world.regions.len());
+        let mut totals = ServiceTotals {
+            need: vec![0; regions],
+            made: vec![0; regions],
+            imports: vec![0; regions],
+        };
+        let tables = &dataset.recipe_tables;
+        for (_, plant) in world.facilities.iter() {
+            if plant.status != crate::state::FacilityStatus::Operating {
+                continue;
+            }
+            let at = plant.region as usize;
+            if tables.makes(product, plant.recipe) {
+                totals.made[at] = totals.made[at].saturating_add(plant.last_made(dataset, id).0);
+            }
+            let Some(weekly) = tables.input_lots(product, plant.recipe) else {
+                continue;
+            };
+            if !world.firms.get(plant.firm).is_some_and(|f| f.operative()) {
+                continue;
+            }
+            totals.need[at] = totals.need[at].saturating_add(
+                weekly
+                    .saturating_mul(plant.blocks as i64)
+                    .saturating_mul(1_000)
+                    .saturating_mul(plant.target_bps.max(0) as i64)
+                    / 10_000,
+            );
+        }
+        for g in world.gateways.iter().filter(|g| g.product == product) {
+            if let Some(slot) = totals.imports.get_mut(g.region as usize) {
+                *slot += g.capacity_lots.max(0);
+            }
+        }
+        Some(totals)
+    }
+
+    /// The same answer as `business_unmet_in` for these regions.
+    pub fn unmet_in(&self, regions: &[u8]) -> (i64, i64) {
+        let (mut need, mut made, mut imports) = (0i64, 0i64, 0i64);
+        let mut seen = [false; 256];
+        for region in regions {
+            if std::mem::replace(&mut seen[*region as usize], true) {
+                continue;
+            }
+            let at = *region as usize;
+            need = need.saturating_add(self.need.get(at).copied().unwrap_or(0));
+            made = made.saturating_add(self.made.get(at).copied().unwrap_or(0));
+            imports += self.imports.get(at).copied().unwrap_or(0);
+        }
+        if need <= 0 {
+            return (0, 0);
+        }
+        let supply = made.saturating_add(imports.saturating_mul(1_000));
+        ((need - supply).max(0) / 1_000, need / 1_000)
+    }
+}
+
+/// The same for the regions one seller's operating plants serve (see `seller_household_unmet`).
+pub fn seller_business_unmet(
+    world: &World,
+    dataset: &Dataset,
+    firm: Handle,
+    product: u16,
+) -> (i64, i64) {
+    let Some(entity) = world.firms.get(firm) else {
+        return (0, 0);
+    };
+    if !dataset.products[product as usize].kind.is_service() {
+        return (0, 0);
+    }
+    let id = &dataset.products[product as usize].id;
+    let mut regions: std::collections::BTreeSet<u8> = Default::default();
+    for plant in entity
+        .facilities
+        .iter()
+        .filter_map(|handle| world.facilities.get(*handle))
+        .filter(|plant| plant.is_operating() && dataset.recipes[plant.recipe as usize].makes(id))
+    {
+        regions.extend(crate::economy::markets::supply_regions(
+            dataset,
+            plant.region,
+            product,
+        ));
+    }
+    let regions: Vec<u8> = regions.into_iter().collect();
+    business_unmet_in(world, dataset, product, &regions)
 }
 
 /// Whether any of the good left the corridor through a gateway last week.
@@ -262,7 +612,15 @@ pub fn goods_wanted_bps(cover: i64, target: i64, short: i64, need: i64) -> i64 {
 /// percent (nine percent over when sold out) and every point below takes the same off, down to
 /// twenty percent under reference, where an idle plant still wins work from its rivals.
 pub fn service_wanted_bps(used_bps: i64) -> i64 {
-    (10_000 + (used_bps.clamp(0, 10_000) - 8_500) * 6 / 10).clamp(8_000, 11_500)
+    service_wanted_bps_with(&cw_data::MarketRules::default(), used_bps.clamp(0, 10_000))
+}
+
+/// The same rule with the content's balance point, slope and band. `used_bps` may pass 10,000
+/// when households went without (see `wanted_bps`), up to twice full.
+pub fn service_wanted_bps_with(rules: &cw_data::MarketRules, used_bps: i64) -> i64 {
+    let used = used_bps.clamp(0, 20_000);
+    (10_000 + (used - rules.service_balance_bps) * rules.service_slope_pct / 100)
+        .clamp(rules.service_min_bps, rules.service_max_bps)
 }
 
 /// Lots that the operating plants buying a good are short of their input cover after this
@@ -270,18 +628,13 @@ pub fn service_wanted_bps(used_bps: i64) -> i64 {
 /// plants in one state share their stock, so each firm and state is counted once against the
 /// sum of its plants' targets. Speculative held stock is not cover.
 pub fn buyer_shortfall(world: &World, dataset: &Dataset, product: u16) -> (i64, i64) {
-    let id = &dataset.products[product as usize].id;
     let mut targets: std::collections::BTreeMap<(Handle, u8), i64> = Default::default();
     let mut need = 0i64;
     for (_, plant) in world.facilities.iter() {
         if plant.status != crate::state::FacilityStatus::Operating {
             continue;
         }
-        let Some(weekly) = dataset.recipes[plant.recipe as usize]
-            .weekly_inputs_lots
-            .get(id)
-            .copied()
-        else {
+        let Some(weekly) = dataset.recipe_tables.input_lots(product, plant.recipe) else {
             continue;
         };
         let Some(entity) = world.firms.get(plant.firm).filter(|f| f.operative()) else {
@@ -331,6 +684,7 @@ pub fn import_dependence_bps(world: &World, dataset: &Dataset, product: u16) -> 
     let made: i64 = world
         .facilities
         .iter()
+        .filter(|(_, plant)| dataset.recipe_tables.makes(product, plant.recipe))
         .map(|(_, plant)| plant.last_made(dataset, id).lots())
         .sum();
     Some(dependence_bps(imported, made))
@@ -389,7 +743,7 @@ pub fn price_reference(world: &World, dataset: &Dataset, product: u16) -> i64 {
 /// a sixth of the way there, never more than two percent in a week. The price is kept within
 /// half and twice reference and under the cheapest import, above which buyers import instead.
 pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16) -> i64 {
-    let reference = price_reference(world, dataset, product);
+    let reference = price_anchor(world, dataset, product);
     let Some(entity) = world.firms.get(firm) else {
         return reference;
     };
@@ -401,18 +755,23 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
         .unwrap_or(reference);
     // A local seller stays five percent under the cheapest import, so its goods still beat
     // imports once freight over a normal haul is added; asking the full import price made the
-    // delivered price higher than imports and the corridor imported what it made.
+    // delivered price higher than imports and the corridor imported what it made. The import
+    // price is last week's marginal one: a corridor importing deep into a gateway's dear steps
+    // is short, and home sellers may ask up to what that last lot cost.
     let import = world
         .gateways
         .iter()
-        .filter(|gateway| gateway.product == product)
-        .map(|gateway| gateway.sell_price_cents)
-        .filter(|price| *price > 0)
+        .filter(|gateway| gateway.product == product && gateway.sell_price_cents > 0)
+        .map(|gateway| marginal_import_price(dataset, gateway))
         .min();
     let ceiling = import
         .map(|import| import * 95 / 100)
-        .unwrap_or(reference + reference * 15 / 100);
-    let signal = wanted_bps(world, dataset, firm, product);
+        .unwrap_or(reference * dataset.markets.local_ceiling_bps.max(10_000) / 10_000);
+    // Last week's trade at the margin: imports bought in dear steps lift the price a seller
+    // wants, exports sold in cheap steps cut it, by the content's pass-through share.
+    let (premium, discount) = trade_pressure_bps(world, dataset, product);
+    let pressure = (premium - discount) * dataset.markets.trade_pressure_pass_bps / 10_000;
+    let signal = wanted_bps(world, dataset, firm, product).map(|bps| bps + pressure);
     // Where imports run well over what the corridor makes, the corridor is short at any home
     // price under the import, so home sellers ask just under it (the ceiling) whatever their
     // own shelf says: buyers pay the import price for the rest anyway.
@@ -451,10 +810,11 @@ pub fn target_price(world: &World, dataset: &Dataset, firm: Handle, product: u16
 }
 
 /// Production planning from sell-through, plant by plant: each plant follows the good it makes.
-/// Goods: more than four weeks of unsold stock (beyond the firm's own input cover) cuts fifteen
-/// points, down to thirty percent; under a week and a half raises fifteen points, up to full
-/// capacity. Services keep no stock: the plant moves fifteen points a week toward what the firm
-/// sold of the service plus a tenth, between ten percent and full. Otherwise the
+/// Goods: more than four weeks of unsold stock (beyond the firm's own input cover) cuts the
+/// content's plan step (`MarketRules::plan_step_bps`), down to thirty percent; under a week and
+/// a half raises it the same, up to full capacity. Services keep no stock: the plant moves one
+/// plan step a week toward what the firm sold of the service plus a tenth, between ten percent
+/// and full. Otherwise the
 /// plant holds. A plant whose good has not sold yet, such as a new plant still waiting for
 /// inputs, holds too.
 pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Handle, i32)> {
@@ -463,6 +823,7 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
     };
     let mut capacity: std::collections::BTreeMap<u16, i64> = std::collections::BTreeMap::new();
     let mut plants: Vec<(Handle, u16, i32)> = Vec::new();
+    let step = dataset.markets.plan_step_bps.max(1);
     for handle in &entity.facilities {
         let Some(plant) = world.facilities.get(*handle) else {
             continue;
@@ -509,13 +870,43 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
                 }
             } else if dataset.products[product as usize].kind.is_service() {
                 // A service that goes unsold expires, so the plant is run toward what sold plus
-                // a tenth, fifteen points a week, rather than held anywhere between half and
+                // a tenth, one plan step a week, rather than held anywhere between half and
                 // nine-tenths of capacity where it could waste a third of its output.
+                let id = &dataset.products[product as usize].id;
+                let made: i64 = entity
+                    .facilities
+                    .iter()
+                    .filter_map(|h| world.facilities.get(*h))
+                    .filter(|p| p.status == crate::state::FacilityStatus::Operating)
+                    .map(|p| p.last_made(dataset, id).0)
+                    .sum();
+                // A plant that made nothing last week (new, or waiting for its first fuel) has
+                // no sales to plan on and holds: cutting it then, on a thirteen-week average
+                // still full of the weeks before it opened, sank a new power station to half.
+                if made <= 0 {
+                    return (handle, current);
+                }
+                let last: i64 = entity
+                    .last_closed_sales()
+                    .map(|week| {
+                        week.iter()
+                            .filter(|((_, p), _)| *p == product)
+                            .map(|(_, lots)| *lots)
+                            .sum()
+                    })
+                    .unwrap_or(0);
+                // Sales close in whole lots, so within a lot of what was made is all of it. When
+                // buyers took everything, the plant runs up a step: aiming at sales plus a tenth
+                // held a ten-lot plant at five and a half lots, its half lot lost to rounding.
+                if (last + 1) * 1_000 >= made {
+                    return (handle, (current + step).min(10_000));
+                }
+                let sold = sold.max(last);
                 let wanted = (sold * 11_000 / full.max(1)).clamp(1_000, 10_000) as i32;
                 let target = if wanted < current {
-                    (current - 1_500).max(wanted)
+                    (current - step).max(wanted)
                 } else {
-                    (current + 1_500).min(wanted)
+                    (current + step).min(wanted)
                 };
                 return (handle, target);
             } else {
@@ -529,9 +920,9 @@ pub fn plant_targets(world: &World, dataset: &Dataset, firm: Handle) -> Vec<(Han
                 )
             };
             let target = if glut {
-                (current - 1_500).max(3_000)
+                (current - step).max(3_000)
             } else if tight {
-                (current + 1_500).min(10_000)
+                (current + step).min(10_000)
             } else {
                 current
             };
@@ -682,6 +1073,18 @@ pub fn posture_price(world: &World, dataset: &Dataset, firm: Handle, product: u1
 /// The player's automatic pricing: every good a player company makes, unless the player set
 /// its price by hand, follows the sell-through rule each week.
 pub fn weekly(world: &mut World, dataset: &Dataset) {
+    struct PassGuard;
+    impl Drop for PassGuard {
+        fn drop(&mut self) {
+            SOLD_PASS.with(|pass| *pass.borrow_mut() = None);
+        }
+    }
+    SOLD_PASS.with(|pass| *pass.borrow_mut() = Some(Default::default()));
+    let _guard = PassGuard;
+    weekly_pass(world, dataset);
+}
+
+fn weekly_pass(world: &mut World, dataset: &Dataset) {
     // Rivals always plan production this way; the player's companies do unless set by hand.
     let rivals: Vec<Handle> = world
         .firms
@@ -847,4 +1250,418 @@ pub fn record_closing_prices(world: &mut World, dataset: &Dataset) {
         .len()
         .saturating_sub(crate::state::PRICE_HISTORY_WEEKS);
     world.price_history.drain(..excess);
+}
+
+/// The outside world's middle quote for a good: halfway between the cheapest import price and
+/// the dearest export price among its gateways, both before any volume step. The gateways move
+/// with world prices and inflation, so this is what a lot is worth to the wider world today. None
+/// when the good has no gateway quoting both ways.
+pub fn outside_mid(world: &World, product: u16) -> Option<i64> {
+    let ask = world
+        .gateways
+        .iter()
+        .filter(|g| g.product == product && g.sell_price_cents > 0)
+        .map(|g| g.sell_price_cents)
+        .min()?;
+    let bid = world
+        .gateways
+        .iter()
+        .filter(|g| g.product == product && g.buy_price_cents > 0)
+        .map(|g| g.buy_price_cents)
+        .max()?;
+    Some(((ask + bid) / 2).max(1))
+}
+
+/// The level a seller prices a good around. A service, or a good with no gateway, keeps
+/// `price_reference`. A traded good, where the content anchors goods to the outside world,
+/// follows the outside middle quote: when world steel prices rise a fifth, home steel is priced
+/// around a fifth higher too, instead of staying at its opening catalogue price while the
+/// gateways drift away from it.
+pub fn price_anchor(world: &World, dataset: &Dataset, product: u16) -> i64 {
+    let reference = price_reference(world, dataset, product);
+    if !dataset.markets.anchor_to_outside || dataset.products[product as usize].kind.is_service() {
+        return reference;
+    }
+    let Some(mid) = outside_mid(world, product) else {
+        return reference;
+    };
+    let pass = dataset.markets.anchor_pass_bps.clamp(0, 10_000) as i128;
+    (reference as i128 + (mid - reference) as i128 * pass / 10_000).max(1) as i64
+}
+
+/// Lots in one volume step of a gateway with `room` lots of normal weekly room. The first step,
+/// traded at the quote, is the content's first-step share of the room (one share for imports,
+/// another for exports); every further step is the content's step share, each dearer to import
+/// and cheaper to export than the last. At least one lot.
+pub fn step_lots(dataset: &Dataset, room: i64, step: i64, import: bool) -> i64 {
+    let markets = &dataset.markets;
+    let share = if step > 0 {
+        markets.gateway_step_bps
+    } else if import {
+        markets.import_first_step_bps
+    } else {
+        markets.export_first_step_bps
+    };
+    (room.max(0) * share / 10_000).max(1)
+}
+
+/// Lots a gateway with `room` lots of normal room trades in a week each way: every step.
+pub fn room_lots(dataset: &Dataset, room: i64, import: bool) -> i64 {
+    (0..dataset.markets.gateway_steps.max(1))
+        .map(|step| step_lots(dataset, room, step, import))
+        .sum()
+}
+
+/// The import price of one volume step (0 is the first), in cents.
+pub fn import_step_price(dataset: &Dataset, quote: i64, step: i64) -> i64 {
+    let premium = dataset.markets.import_step_premium_bps.max(0) * step.max(0);
+    (quote as i128 * (10_000 + premium) as i128 / 10_000).max(1) as i64
+}
+
+/// The export price of one volume step (0 is the first), in cents, never under the floor.
+pub fn export_step_price(dataset: &Dataset, quote: i64, step: i64) -> i64 {
+    let markets = &dataset.markets;
+    let bps = (10_000 - markets.export_step_discount_bps.max(0) * step.max(0))
+        .max(markets.export_floor_bps.clamp(0, 10_000));
+    (quote as i128 * bps as i128 / 10_000).max(1) as i64
+}
+
+/// The step the last lot of `lots` fell in, for a gateway with `room` lots of normal room.
+fn last_step(dataset: &Dataset, room: i64, lots: i64, import: bool) -> i64 {
+    let steps = dataset.markets.gateway_steps.max(1);
+    let mut left = lots;
+    for step in 0..steps {
+        left -= step_lots(dataset, room, step, import);
+        if left <= 0 {
+            return step;
+        }
+    }
+    steps - 1
+}
+
+/// Last week's marginal import price at a gateway: the price of the step its last import lot
+/// came from, or the quote when it imported nothing.
+pub fn marginal_import_price(dataset: &Dataset, gateway: &crate::state::Gateway) -> i64 {
+    import_step_price(
+        dataset,
+        gateway.sell_price_cents,
+        last_step(
+            dataset,
+            gateway.capacity_lots,
+            gateway.last_import_lots,
+            true,
+        ),
+    )
+}
+
+/// Last week's marginal export price at a gateway, the same way.
+pub fn marginal_export_price(dataset: &Dataset, gateway: &crate::state::Gateway) -> i64 {
+    export_step_price(
+        dataset,
+        gateway.buy_price_cents,
+        last_step(
+            dataset,
+            gateway.capacity_lots,
+            gateway.last_export_lots,
+            false,
+        ),
+    )
+}
+
+/// The discount under the quote that `lots` exported through a gateway with `room` lots of normal
+/// room took on average, in basis points: what every exporter there is paid (one average price
+/// per seller). It grows smoothly with the volume, so a week that exports a few lots more or less
+/// than the last moves it a little; the step of the last lot jumps a whole step discount when the
+/// volume crosses a step edge, and home prices read from it saw-toothed with the lumpy surplus
+/// left over after home buyers top up their cover.
+pub fn average_export_discount_bps(dataset: &Dataset, room: i64, lots: i64) -> i64 {
+    if lots <= 0 {
+        return 0;
+    }
+    let steps = dataset.markets.gateway_steps.max(1);
+    let (mut left, mut total) = (lots, 0i64);
+    for step in 0..steps {
+        let size = if step == steps - 1 {
+            left
+        } else {
+            step_lots(dataset, room, step, false).min(left)
+        };
+        total += (10_000 - export_step_price(dataset, 10_000, step)) * size;
+        left -= size;
+        if left <= 0 {
+            break;
+        }
+    }
+    total / lots
+}
+
+/// How hard last week's trade pressed on a good, in basis points of the quotes: the import
+/// premium at the margin (home sellers may ask up to what the last imported lot cost) and the
+/// average export discount (what exporters were paid), each averaged over the good's gateways by
+/// the lots they moved. Zero and zero when the corridor traded inside every gateway's first step.
+pub fn trade_pressure_bps(world: &World, dataset: &Dataset, product: u16) -> (i64, i64) {
+    let (mut premium, mut imported, mut discount, mut exported) = (0i64, 0i64, 0i64, 0i64);
+    for gateway in world.gateways.iter().filter(|g| g.product == product) {
+        if gateway.last_import_lots > 0 && gateway.sell_price_cents > 0 {
+            let step = last_step(
+                dataset,
+                gateway.capacity_lots,
+                gateway.last_import_lots,
+                true,
+            );
+            premium += dataset.markets.import_step_premium_bps * step * gateway.last_import_lots;
+            imported += gateway.last_import_lots;
+        }
+        if gateway.last_export_lots > 0 && gateway.buy_price_cents > 0 {
+            discount += average_export_discount_bps(
+                dataset,
+                gateway.capacity_lots,
+                gateway.last_export_lots,
+            ) * gateway.last_export_lots;
+            exported += gateway.last_export_lots;
+        }
+    }
+    (
+        if imported > 0 { premium / imported } else { 0 },
+        if exported > 0 { discount / exported } else { 0 },
+    )
+}
+
+/// What moved a good's price, strongest first, for the screens to say in plain words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PriceDriver {
+    /// Imports ran past the gateways' normal room and the last lots cost more: the corridor is
+    /// short. Carries the marginal import premium in basis points.
+    ImportsDear(i64),
+    /// Exports ran past the normal room abroad and sold under the export price on average: the
+    /// corridor is glutted. Carries the average export discount in basis points.
+    ExportsCheap(i64),
+    /// Plants that use the good are short of their input cover, in hundredths of a week of use.
+    BuyersShort(i64),
+    /// Sellers hold unsold stock beyond the cover they aim for, in hundredths of a week of sales.
+    SellersGlutted(i64),
+    /// Plants making the good that opened in the last quarter.
+    NewPlants(i64),
+    /// The outside world's price against the good's opening catalogue price, in basis points.
+    WorldPrice(i64),
+    /// A service's reference carried by the general price level, against its opening price, in
+    /// basis points.
+    PriceLevel(i64),
+    /// The business cycle moving demand for the good: the phase and the move in basis points.
+    Cycle(crate::state::CyclePhase, u16, i64),
+    /// A named world event pushing the world price off its usual path: the price family (index
+    /// into the world's families) and the push in basis points.
+    WorldEvent(u16, i64),
+}
+
+/// Why a good's price is where it is this week: its move over the last quarter in basis points
+/// of the price a quarter ago, and the drivers acting on it now, strongest first. Read-only.
+pub fn price_drivers(world: &World, dataset: &Dataset, product: u16) -> (i64, Vec<PriceDriver>) {
+    let now = corridor_price(world, dataset, product);
+    let then = world
+        .price_history
+        .iter()
+        .rev()
+        .find(|point| point.week + 13 <= world.tick.0)
+        .and_then(|point| point.goods.get(&product).copied())
+        .unwrap_or(now)
+        .max(1);
+    let change = (now - then).saturating_mul(10_000) / then;
+    let mut drivers: Vec<(i64, PriceDriver)> = Vec::new();
+    let (premium, discount) = trade_pressure_bps(world, dataset, product);
+    if premium > 0 {
+        drivers.push((premium, PriceDriver::ImportsDear(premium)));
+    }
+    if discount > 0 {
+        drivers.push((discount, PriceDriver::ExportsCheap(discount)));
+    }
+    // A service keeps no stock, so it has neither short buyers nor unsold stock to read.
+    let service = dataset.products[product as usize].kind.is_service();
+    let (short, need) = if service {
+        (0, 0)
+    } else {
+        buyer_shortfall(world, dataset, product)
+    };
+    if need > 0 && short > 0 {
+        let weeks = short.saturating_mul(100) / need;
+        if weeks >= 25 {
+            drivers.push((
+                weeks * WANT_BPS_PER_HUNDREDTH_WEEK,
+                PriceDriver::BuyersShort(weeks),
+            ));
+        }
+    }
+    let id = &dataset.products[product as usize].id;
+    let (mut stock, mut sold, mut new_plants) = (0i64, 0i64, 0i64);
+    for (handle, firm) in world.firms.iter().filter(|(_, f)| f.operative()) {
+        let mut makes = false;
+        for plant in firm
+            .facilities
+            .iter()
+            .filter_map(|h| world.facilities.get(*h))
+        {
+            if plant.is_operating() && dataset.recipes[plant.recipe as usize].makes(id) {
+                makes = true;
+                if plant.completes.0 + 13 > world.tick.0 && plant.completes.0 > 0 {
+                    new_plants += 1;
+                }
+            }
+        }
+        if makes {
+            stock += free_stock(world, dataset, handle, product);
+            sold += weekly_sold(world, handle, product);
+        }
+    }
+    if sold > 0 && !service {
+        let over = stock.saturating_mul(100) / sold - cover_target_hundredths(dataset, product);
+        if over >= 100 {
+            drivers.push((
+                over * WANT_BPS_PER_HUNDREDTH_WEEK,
+                PriceDriver::SellersGlutted(over),
+            ));
+        }
+    }
+    if new_plants > 0 {
+        drivers.push((new_plants * 100, PriceDriver::NewPlants(new_plants)));
+    }
+    let catalogue = dataset.reference_price(product).max(1);
+    let anchor = price_anchor(world, dataset, product);
+    let world_move = (anchor - catalogue).saturating_mul(10_000) / catalogue;
+    if world_move.abs() >= 500 {
+        drivers.push((
+            world_move.abs() / 2,
+            if service {
+                PriceDriver::PriceLevel(world_move)
+            } else {
+                PriceDriver::WorldPrice(world_move)
+            },
+        ));
+    }
+    // A world event past the content's threshold names its cause.
+    if let Some(&index) = world.world_prices.product_family.get(&product)
+        && let Some(family) = world.world_prices.families.get(index as usize)
+        && let Some((bps, _)) = crate::economy::world_prices::world_event(world, dataset, family)
+    {
+        drivers.push((bps.abs(), PriceDriver::WorldEvent(index, bps)));
+    }
+    // Demand moved by the business cycle names the phase, under the demand rules.
+    if !dataset.demand.cycle_elasticity.is_empty() {
+        let (phase, bps) = crate::economy::macro_cycle::cycle_demand(world, dataset, product);
+        if bps.abs() >= 300 {
+            drivers.push((bps.abs() * 2, PriceDriver::Cycle(phase, product, bps)));
+        }
+    }
+    drivers.sort_by_key(|(weight, _)| std::cmp::Reverse(*weight));
+    (change, drivers.into_iter().map(|(_, d)| d).collect())
+}
+
+fn cycle_phase_text(phase: crate::state::CyclePhase) -> &'static str {
+    match phase {
+        crate::state::CyclePhase::Expansion => "Expansion",
+        crate::state::CyclePhase::Boom => "Boom",
+        crate::state::CyclePhase::Slowdown => "Slowdown",
+        crate::state::CyclePhase::Recession => "Recession",
+        crate::state::CyclePhase::Recovery => "Recovery",
+    }
+}
+
+/// The drivers in plain words, one sentence each.
+pub fn driver_text(driver: PriceDriver) -> String {
+    let pct = |bps: i64| format!("{}%", (bps.abs() + 50) / 100);
+    let weeks = |hundredths: i64| format!("{}.{}", hundredths / 100, (hundredths % 100) / 10);
+    match driver {
+        PriceDriver::ImportsDear(bps) => format!(
+            "Short of supply: imports ran past the ports' normal room and the last lots cost {} over the import price.",
+            pct(bps)
+        ),
+        PriceDriver::ExportsCheap(bps) => format!(
+            "Glut: exports ran past the normal room abroad and sold {} under the export price on average.",
+            pct(bps)
+        ),
+        PriceDriver::BuyersShort(h) => format!(
+            "Buyers are short: plants that use it lack {} weeks of what they need.",
+            weeks(h)
+        ),
+        PriceDriver::SellersGlutted(h) => format!(
+            "Sellers are holding {} weeks more unsold stock than they want.",
+            weeks(h)
+        ),
+        PriceDriver::NewPlants(n) => format!(
+            "{n} new plant{} making it opened this quarter.",
+            if n == 1 { "" } else { "s" }
+        ),
+        PriceDriver::WorldPrice(bps) => format!(
+            "The world price is {} {} its opening level.",
+            pct(bps),
+            if bps >= 0 { "above" } else { "below" }
+        ),
+        PriceDriver::Cycle(phase, _, bps) => format!(
+            "{}: orders are {} {}.",
+            cycle_phase_text(phase),
+            if bps >= 0 { "up" } else { "down" },
+            pct(bps)
+        ),
+        PriceDriver::WorldEvent(_, bps) => format!(
+            "A world event has the world price {} {} its usual path.",
+            pct(bps),
+            if bps >= 0 { "over" } else { "under" }
+        ),
+        PriceDriver::PriceLevel(bps) => format!(
+            "Prices and wages across the economy are {} {} their opening level.",
+            pct(bps),
+            if bps >= 0 { "above" } else { "below" }
+        ),
+    }
+}
+
+/// One plain sentence on why a good's price moved this quarter.
+pub fn price_reason(world: &World, dataset: &Dataset, product: u16) -> String {
+    let (change, drivers) = price_drivers(world, dataset, product);
+    let moved = if change.abs() < 100 {
+        "Steady this quarter.".to_owned()
+    } else {
+        format!(
+            "{} {}% this quarter.",
+            if change > 0 { "Up" } else { "Down" },
+            (change.abs() + 50) / 100
+        )
+    };
+    match drivers.first() {
+        Some(PriceDriver::Cycle(phase, good, bps)) => format!(
+            "{moved} {}: orders for {} are {} {}%.",
+            cycle_phase_text(*phase),
+            dataset.products[*good as usize].name.to_lowercase(),
+            if *bps >= 0 { "up" } else { "down" },
+            (bps.abs() + 50) / 100
+        ),
+        Some(PriceDriver::WorldEvent(index, bps)) => {
+            let cause = world
+                .world_prices
+                .families
+                .get(*index as usize)
+                .and_then(|family| {
+                    crate::economy::world_prices::world_event(world, dataset, family)
+                })
+                .map(|(_, cause)| cause);
+            match cause {
+                Some(cause) => {
+                    let mut letters = cause.chars();
+                    let first = letters.next().map(|c| c.to_uppercase().collect::<String>());
+                    format!(
+                        "{moved} {}{}: the world price is {}% {} its usual path.",
+                        first.unwrap_or_default(),
+                        letters.as_str(),
+                        (bps.abs() + 50) / 100,
+                        if *bps >= 0 { "over" } else { "under" }
+                    )
+                }
+                None => format!(
+                    "{moved} {}",
+                    driver_text(PriceDriver::WorldEvent(*index, *bps))
+                ),
+            }
+        }
+        Some(driver) => format!("{moved} {}", driver_text(*driver)),
+        None => format!("{moved} Supply and demand are in balance."),
+    }
 }

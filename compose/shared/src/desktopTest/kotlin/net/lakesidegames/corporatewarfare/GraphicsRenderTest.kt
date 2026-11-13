@@ -58,7 +58,7 @@ class GraphicsRenderTest {
 
     private fun plant(firm: ULong, region: String, industry: String, blocks: UInt) = uniffi.cw_ffi.MapPlantDto(
         handle = firm * 100uL + blocks, firm = firm, firmName = "Rival $firm", player = false, region = region, industry = industry,
-        strategy = "standard", blocks = blocks, status = "running", utilisationBps = 8000,
+        strategy = "standard", blocks = blocks, status = "running", utilisationBps = 8000, progressBps = 0,
     )
 
     // The player's plants as the map reads them: one division still going up, one being retooled.

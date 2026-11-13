@@ -235,7 +235,9 @@ fn the_player_prices_automatically_until_setting_a_price_by_hand() {
 
 #[test]
 fn production_follows_stock_against_sales_plant_by_plant() {
-    let dataset = Dataset::load().unwrap();
+    let mut dataset = Dataset::load().unwrap();
+    // Worked with the pre-2.0 plan step of fifteen points a week; content sets its own.
+    dataset.markets.plan_step_bps = 1_500;
     let mut world = seed::build(&dataset, 57, ScenarioKind::Guided, ScenarioMode::Sandbox);
     let firm = world.investor.primary_group.unwrap();
     let food = dataset.product_index["food_raw"];
@@ -659,7 +661,9 @@ fn an_older_production_command_loads_without_a_lock_and_writes_the_same() {
 
 #[test]
 fn a_hand_set_rate_caps_service_plants_that_still_follow_sales_unless_locked() {
-    let dataset = Dataset::load().unwrap();
+    let mut dataset = Dataset::load().unwrap();
+    // Worked with the pre-2.0 plan step of fifteen points a week; content sets its own.
+    dataset.markets.plan_step_bps = 1_500;
     let mut world = seed::build(&dataset, 5, ScenarioKind::Guided, ScenarioMode::Sandbox);
     let firm = world.investor.primary_group.unwrap();
     // Hand the player company a rival's operating service plant (not a carrier).
@@ -685,7 +689,14 @@ fn a_hand_set_rate_caps_service_plants_that_still_follow_sales_unless_locked() {
     world.firms.get_mut(firm).unwrap().facilities.push(service);
     let product = dataset.product_index
         [&dataset.recipes[world.facilities.get(service).unwrap().recipe as usize].output];
-    // Nothing sold: the plan wants the ten percent floor, fifteen points a week from full.
+    // It ran last week (a plant that made nothing holds its plan) but nothing sold: the plan
+    // wants the ten percent floor, fifteen points a week from full.
+    let full = world
+        .facilities
+        .get(service)
+        .unwrap()
+        .full_weekly_output(&dataset);
+    world.facilities.get_mut(service).unwrap().last_output = full;
     world.firms.get_mut(firm).unwrap().sales_history =
         vec![[((0u8, product), 0)].into_iter().collect(); 13];
     for (lock, expected) in [(false, 8_500), (true, 10_000)] {
@@ -721,7 +732,10 @@ fn set_target(world: &mut World, dataset: &Dataset, firm: Handle, target_bps: i3
 
 #[test]
 fn service_prices_and_freight_rates_follow_the_price_level() {
-    let dataset = Dataset::load().unwrap();
+    let mut dataset = Dataset::load().unwrap();
+    // Under the street rule an idle seller with no rival holds reference; this test walks an
+    // idle firm to the floor, so it uses the rule before the street.
+    dataset.demand.street_short_bps = 0;
     let mut world = seed::build(&dataset, 77, ScenarioKind::Guided, ScenarioMode::Sandbox);
     let telecom = dataset.product_index["telecom"];
     let steel = dataset.product_index["steel"];
@@ -737,9 +751,8 @@ fn service_prices_and_freight_rates_follow_the_price_level() {
         r_tel * 115 / 100
     );
     assert_eq!(pricing::price_reference(&world, &dataset, steel), r_steel);
-    // An idle telecom firm (nothing sold) walks down to the floor, 80 percent of the reference
-    // carried to today's level (92 percent of the catalogue price), not 80 percent of the
-    // catalogue price as when wages were fifteen percent lower.
+    // An idle telecom firm (nothing sold) walks down to the floor of the reference carried to
+    // today's level, not of the catalogue price as when wages were fifteen percent lower.
     let firm = world
         .firms
         .iter()
@@ -764,11 +777,13 @@ fn service_prices_and_freight_rates_follow_the_price_level() {
             .prices
             .insert(telecom, price);
     }
+    // The floor is the content's least service price (75 percent in 2.0 content, 80 before),
+    // of the reference carried to today's level.
+    let floor = r_tel * 115 / 100 * dataset.markets.service_min_bps / 10_000;
     let settled = world.firms.get(firm).unwrap().policies.prices[&telecom];
     assert!(
-        (settled - r_tel * 92 / 100).abs() <= r_tel / 100,
-        "settled at {settled}, floor {}",
-        r_tel * 92 / 100
+        (settled - floor).abs() <= r_tel / 100,
+        "settled at {settled}, floor {floor}"
     );
     // Freight: every rate a shipper pays, outside carriers' included, scales with the level.
     use cw_sim::economy::logistics as lg;
@@ -785,4 +800,139 @@ fn service_prices_and_freight_rates_follow_the_price_level() {
         (inflated - base * 115 / 100).abs() <= 1,
         "{base} at the start, {inflated} after 15 percent inflation"
     );
+}
+
+/// The shipped rules with a known step schedule: half the room at the quote for imports, all of
+/// it for exports, then four further steps of a quarter each, ten percent apart, exports never
+/// under half the quote.
+fn stepped(dataset: &mut Dataset) {
+    let rules = &mut dataset.markets;
+    rules.import_first_step_bps = 5_000;
+    rules.export_first_step_bps = 10_000;
+    rules.gateway_step_bps = 2_500;
+    rules.gateway_steps = 5;
+    rules.import_step_premium_bps = 1_000;
+    rules.export_step_discount_bps = 1_000;
+    rules.export_floor_bps = 5_000;
+    rules.trade_pressure_pass_bps = 10_000;
+    rules.anchor_to_outside = true;
+}
+
+#[test]
+fn gateway_steps_get_dearer_to_import_and_cheaper_to_export() {
+    let mut dataset = Dataset::load().unwrap();
+    stepped(&mut dataset);
+    // A gateway with 1,000 lots of room: imports 500 at the quote, then four steps of 250;
+    // exports 1,000 at the quote, then four steps of 250.
+    assert_eq!(pricing::step_lots(&dataset, 1_000, 0, true), 500);
+    assert_eq!(pricing::step_lots(&dataset, 1_000, 0, false), 1_000);
+    assert_eq!(pricing::step_lots(&dataset, 1_000, 3, true), 250);
+    assert_eq!(pricing::room_lots(&dataset, 1_000, true), 1_500);
+    assert_eq!(pricing::room_lots(&dataset, 1_000, false), 2_000);
+    // A $100 quote: the third import step costs 120, the third export step pays 80.
+    assert_eq!(pricing::import_step_price(&dataset, 10_000, 2), 12_000);
+    assert_eq!(pricing::export_step_price(&dataset, 10_000, 2), 8_000);
+    // Exports never pay under half the quote, however deep.
+    assert_eq!(pricing::export_step_price(&dataset, 10_000, 9), 5_000);
+    // A step of a tiny gateway is still one lot.
+    assert_eq!(pricing::step_lots(&dataset, 2, 1, true), 1);
+}
+
+#[test]
+fn trade_past_the_normal_room_presses_on_home_prices() {
+    let (mut world, mut dataset, firm, food) = food_firm(64, 10_000, 200);
+    stepped(&mut dataset);
+    fill_buyers(&mut world, &dataset, food);
+    let calm = pricing::target_price(&world, &dataset, firm, food);
+    assert_eq!(pricing::trade_pressure_bps(&world, &dataset, food), (0, 0));
+    // Every food gateway imports 80 percent of its room: 50 at the quote, 25 in the first dear
+    // step and the last 5 in the second, so the marginal lot cost 20 percent over the quote.
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.last_import_lots = gateway.capacity_lots * 8 / 10;
+    }
+    let (premium, discount) = pricing::trade_pressure_bps(&world, &dataset, food);
+    assert_eq!((premium, discount), (2_000, 0));
+    let short = pricing::target_price(&world, &dataset, firm, food);
+    assert!(
+        short > calm,
+        "a short corridor asks more: {short} vs {calm}"
+    );
+    assert!(pricing::price_reason(&world, &dataset, food).contains("Short of supply"));
+    // The same food exported twice the room instead: the first room's worth sold at the quote and
+    // a quarter each in the four cheap steps (10, 20, 30 and 40 percent under it), so exporters
+    // were paid 12.5 percent under the quote on average.
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.last_import_lots = 0;
+        gateway.last_export_lots = gateway.capacity_lots * 2;
+    }
+    // (Whole lots: a gateway whose room is not a multiple of four rounds a few points.)
+    let (premium, discount) = pricing::trade_pressure_bps(&world, &dataset, food);
+    assert_eq!(premium, 0);
+    assert!((1_245..=1_255).contains(&discount), "{discount}");
+    let glut = pricing::target_price(&world, &dataset, firm, food);
+    assert!(
+        glut < calm,
+        "a glutted corridor asks less: {glut} vs {calm}"
+    );
+    let reason = pricing::price_reason(&world, &dataset, food);
+    assert!(reason.contains("Glut"), "{reason}");
+}
+
+#[test]
+fn goods_are_priced_around_the_outside_world_price() {
+    let (mut world, mut dataset, firm, food) = food_firm(64, 10_000, 200);
+    stepped(&mut dataset);
+    fill_buyers(&mut world, &dataset, food);
+    // At the start the gateways quote 15 percent either side of reference: the middle is the
+    // catalogue price.
+    assert_eq!(
+        pricing::price_anchor(&world, &dataset, food),
+        dataset.reference_price(food)
+    );
+    // The outside world's food price rises a fifth: both quotes move and so does the anchor.
+    for gateway in world.gateways.iter_mut().filter(|g| g.product == food) {
+        gateway.sell_price_cents = gateway.sell_price_cents * 12 / 10;
+        gateway.buy_price_cents = gateway.buy_price_cents * 12 / 10;
+    }
+    let anchor = pricing::price_anchor(&world, &dataset, food);
+    assert_eq!(anchor, dataset.reference_price(food) * 12 / 10);
+    // The seller moves toward it, two percent at most this week.
+    assert_eq!(pricing::target_price(&world, &dataset, firm, food), 10_200);
+    assert!(pricing::price_reason(&world, &dataset, food).contains("world price is 20% above"));
+    // With anchoring off the seller keeps pricing around the catalogue price.
+    dataset.markets.anchor_to_outside = false;
+    assert_eq!(
+        pricing::price_anchor(&world, &dataset, food),
+        dataset.reference_price(food)
+    );
+}
+
+#[test]
+fn service_price_follows_capacity_against_demand_within_the_content_band() {
+    let rules = cw_data::MarketRules {
+        service_balance_bps: 9_000,
+        service_slope_pct: 200,
+        service_min_bps: 7_500,
+        service_max_bps: 12_500,
+        ..cw_data::MarketRules::default()
+    };
+    // Worked by hand: at 90 percent sold the price is reference; each point over adds two
+    // points of price, each under takes two off; a region short of capacity (households went
+    // without, reading over 100 percent) climbs to the ceiling, an overbuilt one falls to the
+    // floor.
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 9_000), 10_000);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 10_000), 12_000);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 10_250), 12_500);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 15_000), 12_500);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 8_000), 8_000);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 7_750), 7_500);
+    assert_eq!(pricing::service_wanted_bps_with(&rules, 0), 7_500);
+    // The default rules are the pre-2.0 rule.
+    let old = cw_data::MarketRules::default();
+    for used in [0, 6_000, 8_500, 10_000] {
+        assert_eq!(
+            pricing::service_wanted_bps_with(&old, used),
+            pricing::service_wanted_bps(used)
+        );
+    }
 }

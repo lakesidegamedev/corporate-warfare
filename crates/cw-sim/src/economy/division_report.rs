@@ -214,10 +214,8 @@ fn build(
     // Inputs.
     let mut inputs = Vec::new();
     let mut materials = 0i64;
-    for (id, weekly) in &recipe.weekly_inputs_lots {
-        let Some(&code) = dataset.product_index.get(id) else {
-            continue;
-        };
+    for (code, weekly) in dataset.recipe_tables.inputs(first.recipe) {
+        let (code, weekly) = (*code, weekly);
         let service = dataset.products[code as usize].kind.is_service();
         let mut need_milli = 0i64;
         for handle in &plant_handles {
@@ -244,13 +242,16 @@ fn build(
             .iter()
             .find(|((buyer, _, product), _)| *buyer == firm && *product == code)
             .map(|((_, seller, _), _)| *seller);
-        let own_plants = entity.facilities.iter().any(|h| {
-            world.facilities.get(*h).is_some_and(|p| {
-                p.region == region
-                    && p.is_operating()
-                    && dataset.recipes[p.recipe as usize].makes(id)
+        // Only the full report names the source, so the answer is read when it is wanted.
+        let own_plants = || {
+            entity.facilities.iter().any(|h| {
+                world.facilities.get(*h).is_some_and(|p| {
+                    p.region == region
+                        && p.is_operating()
+                        && dataset.recipe_tables.makes(code, p.recipe)
+                })
             })
-        });
+        };
         let (source, price) = if let Some(seller) = group_seller {
             let s_industry = world
                 .firms
@@ -278,7 +279,7 @@ fn build(
             (String::new(), corridor)
         } else if service {
             ("Local service market".to_owned(), corridor)
-        } else if own_plants {
+        } else if own_plants() {
             ("Own plants".to_owned(), corridor)
         } else {
             ("Open market".to_owned(), corridor)
@@ -326,12 +327,15 @@ fn build(
             .filter(|p| p.is_operating())
             .map(|p| p.last_made(dataset, id).0)
             .sum();
-        // The division's share of what the firm makes of this good here.
+        // A sale is booked in the market where the buyer stands: a service sold across the
+        // state, or a good shipped to a buyer in another region, lands outside the plant's own
+        // region. The division takes its share of everything the firm sold of this good, in
+        // proportion to what it made of the firm's whole output of it.
         let firm_made: i64 = entity
             .facilities
             .iter()
             .filter_map(|h| world.facilities.get(*h))
-            .filter(|p| p.region == region && p.is_operating())
+            .filter(|p| p.is_operating())
             .map(|p| p.last_made(dataset, id).0)
             .sum();
         let share_bps = if firm_made > 0 {
@@ -339,10 +343,13 @@ fn build(
         } else {
             0
         };
-        let sold_lots = entity
-            .last_closed_sales()
-            .and_then(|w| w.get(&(region, code)).copied())
-            .unwrap_or(0);
+        let sold_in = |week: &std::collections::BTreeMap<(u8, u16), i64>| -> i64 {
+            week.iter()
+                .filter(|((_, product), _)| *product == code)
+                .map(|(_, lots)| *lots)
+                .sum()
+        };
+        let sold_lots = entity.last_closed_sales().map(sold_in).unwrap_or(0);
         let sold_milli = sold_lots * 1_000 * share_bps / 10_000;
         let price = pricing::posture_price(world, dataset, firm, code)
             .or_else(|| entity.policies.prices.get(&code).copied())
@@ -350,7 +357,7 @@ fn build(
             .max(1);
         revenue += sold_milli * price / 1_000;
         for (i, week) in entity.sales_history.iter().enumerate().filter(|_| detail) {
-            let lots = week.get(&(region, code)).copied().unwrap_or(0);
+            let lots = sold_in(week);
             let milli = lots * 1_000 * share_bps / 10_000;
             if trend_units.len() <= i {
                 trend_units.push((0, 0));

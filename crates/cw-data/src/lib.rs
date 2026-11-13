@@ -8,6 +8,7 @@
 //! calibration until a provenance-traceable crosswalk is recovered.
 
 pub mod balance;
+pub mod careers;
 pub mod cast;
 pub mod chapters;
 pub mod currency;
@@ -29,7 +30,10 @@ use serde::{Deserialize, Serialize};
 /// People in the cast before 1.9; see `Dataset::legacy_hash`.
 const CAST_BEFORE_1_9: usize = 12;
 
-pub use balance::{Balance, BalanceOverlay, Product, ProductKind, Recipe, StorageClass};
+pub use balance::{
+    Balance, BalanceOverlay, CapacityRules, DemandRules, MarketRules, Product, ProductKind, Recipe,
+    StorageClass,
+};
 pub use cast::{Mood, Person, Role, Temperament};
 pub use currency::{CountryDef, CurrencyDef, CurrencySet, PegDef};
 pub use custom::{CustomLaws, CustomScenario, PricePath, RegionAdjust, RivalSetting};
@@ -229,6 +233,13 @@ pub struct Dataset {
     pub baseline_weekly_wage_cents: [i64; 3],
     pub maintenance_annual_bps: i32,
     pub fixture_land_rent_cents_weekly: i64,
+    /// Gateway volume steps and sellers' response to trade (2.0).
+    pub markets: balance::MarketRules,
+    /// Build prices, rival building and closing, payouts and raid warnings (2.0).
+    pub capacity: balance::CapacityRules,
+    pub demand: balance::DemandRules,
+    /// The world price's weekly texture (2.0 prices round).
+    pub texture: balance::TextureRules,
     pub geometry_note: String,
     /// Freight modes, public terminals and sea systems.
     pub logistics: LogisticsData,
@@ -245,7 +256,192 @@ pub struct Dataset {
     pub region_currency: Vec<u8>,
     /// The inflation and interest rates the scenario opens with.
     pub opening_macro: OpeningMacro,
+    /// Rivals open at this share of their authored size, basis points (10000 is as authored).
+    /// A scenario whose roster crowds the shared corridor workforce sets it (2.0 balance pass).
+    pub rival_blocks_bps: i64,
     pub hash: String,
+    /// Recipe-by-product lookup tables derived from `recipes`, so hot loops skip string keys.
+    pub recipe_tables: RecipeTables,
+}
+
+/// Dense tables over (product, recipe), derived once from the recipes at load. Not content:
+/// they are never saved or hashed.
+#[derive(Clone, Debug, Default)]
+pub struct RecipeTables {
+    recipes: usize,
+    /// Weekly input lots per block of a product, by `product * recipes + recipe`, and whether
+    /// the recipe names the product among its inputs at all.
+    input_lots: Vec<i64>,
+    uses: Vec<bool>,
+    /// Whether the recipe makes the product, as its output or a by-product.
+    makes: Vec<bool>,
+    /// Whether the recipe's primary output is the product.
+    primary: Vec<bool>,
+    /// By recipe: its inputs that are products, as (product, weekly lots per block), in id order,
+    /// and the product index of its primary output.
+    inputs: Vec<Vec<(u16, i64)>>,
+    output_product: Vec<Option<u16>>,
+    /// The position of the recipe's industry in `INDUSTRIES`, None for an unknown name.
+    industry: Vec<Option<u8>>,
+    /// By `industry * products + product`: whether a recipe of the industry makes the product.
+    industry_makes: Vec<bool>,
+    products: usize,
+    /// By region, the regions a market there can draw on: itself only, its state (itself first),
+    /// and its power grid (itself first, then every region that keeps books in the same money).
+    supply_own: Vec<Vec<u8>>,
+    supply_state: Vec<Vec<u8>>,
+    supply_grid: Vec<Vec<u8>>,
+    /// Whether any recipe names the product among its inputs, by product.
+    any_use: Vec<bool>,
+}
+
+impl RecipeTables {
+    fn build(
+        products: &[Product],
+        recipes: &[Recipe],
+        regions: &[Region],
+        region_currency: &[u8],
+    ) -> RecipeTables {
+        let n = recipes.len();
+        let mut tables = RecipeTables {
+            recipes: n,
+            input_lots: vec![0; products.len() * n],
+            uses: vec![false; products.len() * n],
+            makes: vec![false; products.len() * n],
+            primary: vec![false; products.len() * n],
+            inputs: Vec::with_capacity(n),
+            output_product: Vec::with_capacity(n),
+            industry: Vec::with_capacity(n),
+            industry_makes: vec![false; INDUSTRIES.len() * products.len()],
+            products: products.len(),
+            supply_own: Vec::new(),
+            supply_state: Vec::new(),
+            supply_grid: Vec::new(),
+            any_use: vec![false; products.len()],
+        };
+        for recipe in recipes {
+            tables.industry.push(
+                INDUSTRIES
+                    .iter()
+                    .position(|name| *name == recipe.industry)
+                    .map(|at| at as u8),
+            );
+            tables.inputs.push(
+                recipe
+                    .weekly_inputs_lots
+                    .iter()
+                    .filter_map(|(id, lots)| {
+                        let at = products.iter().position(|p| &p.id == id)?;
+                        Some((at as u16, *lots))
+                    })
+                    .collect(),
+            );
+            tables.output_product.push(
+                products
+                    .iter()
+                    .position(|p| p.id == recipe.output)
+                    .map(|at| at as u16),
+            );
+        }
+        for (p, product) in products.iter().enumerate() {
+            for (r, recipe) in recipes.iter().enumerate() {
+                let at = p * n + r;
+                if let Some(lots) = recipe.weekly_inputs_lots.get(&product.id) {
+                    tables.input_lots[at] = *lots;
+                    tables.uses[at] = true;
+                    tables.any_use[p] = true;
+                }
+                tables.makes[at] = recipe.makes(&product.id);
+                if tables.makes[at]
+                    && let Some(industry) = tables.industry[r]
+                {
+                    tables.industry_makes[industry as usize * products.len() + p] = true;
+                }
+                tables.primary[at] = recipe.output == product.id;
+            }
+        }
+        let currency = |r: usize| region_currency.get(r).copied().unwrap_or(0);
+        for (r, region) in regions.iter().enumerate() {
+            let me = r as u8;
+            tables.supply_own.push(vec![me]);
+            let mut state = vec![me];
+            state.extend(
+                regions
+                    .iter()
+                    .enumerate()
+                    .filter(|(o, other)| *o != r && other.state() == region.state())
+                    .map(|(o, _)| o as u8),
+            );
+            tables.supply_state.push(state);
+            let mut grid = vec![me];
+            grid.extend(
+                (0..regions.len())
+                    .filter(|o| *o != r && currency(*o) == currency(r))
+                    .map(|o| o as u8),
+            );
+            tables.supply_grid.push(grid);
+        }
+        tables
+    }
+
+    /// The recipe's weekly input lots of the product per block, None when it does not use it.
+    pub fn input_lots(&self, product: u16, recipe: u16) -> Option<i64> {
+        let at = product as usize * self.recipes + recipe as usize;
+        self.uses[at].then(|| self.input_lots[at])
+    }
+
+    /// The recipe's inputs that are products with their weekly lots per block, in id order.
+    pub fn inputs(&self, recipe: u16) -> &[(u16, i64)] {
+        &self.inputs[recipe as usize]
+    }
+
+    /// The region itself, as a one-region market.
+    pub fn supply_own(&self, region: u8) -> &[u8] {
+        &self.supply_own[region as usize]
+    }
+
+    /// The region's state, the region first.
+    pub fn supply_state(&self, region: u8) -> &[u8] {
+        &self.supply_state[region as usize]
+    }
+
+    /// The region's power grid, the region first.
+    pub fn supply_grid(&self, region: u8) -> &[u8] {
+        &self.supply_grid[region as usize]
+    }
+
+    /// Whether any recipe of the industry makes the product.
+    pub fn industry_makes(&self, industry: u8, product: u16) -> bool {
+        self.industry_makes
+            .get(industry as usize * self.products + product as usize)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// The recipe's industry as its position in `INDUSTRIES`.
+    pub fn industry(&self, recipe: u16) -> Option<u8> {
+        self.industry[recipe as usize]
+    }
+
+    /// The product index of the recipe's primary output.
+    pub fn output_product(&self, recipe: u16) -> Option<u16> {
+        self.output_product[recipe as usize]
+    }
+
+    /// Whether the product is the recipe's primary output.
+    pub fn primary(&self, product: u16, recipe: u16) -> bool {
+        self.primary[product as usize * self.recipes + recipe as usize]
+    }
+
+    /// Whether any recipe uses the product as an input.
+    pub fn any_use(&self, product: u16) -> bool {
+        self.any_use[product as usize]
+    }
+
+    /// Whether the recipe makes the product.
+    pub fn makes(&self, product: u16, recipe: u16) -> bool {
+        self.makes[product as usize * self.recipes + recipe as usize]
+    }
 }
 
 impl Dataset {
@@ -267,6 +463,15 @@ impl Dataset {
 }
 
 impl Dataset {
+    /// The blocks an authored opening plant starts with: the authored count scaled by the
+    /// scenario's `rival_blocks_bps`, rounded half up, never below one.
+    pub fn opening_blocks(&self, authored: u8) -> u8 {
+        if self.rival_blocks_bps == 10_000 {
+            return authored;
+        }
+        ((authored as i64 * self.rival_blocks_bps + 5_000) / 10_000).clamp(1, 255) as u8
+    }
+
     /// Load the default scenario's pinned in-repo dataset and validate it.
     pub fn load() -> Result<Dataset, Vec<String>> {
         Self::load_scenario(DEFAULT_SCENARIO)
@@ -277,7 +482,18 @@ impl Dataset {
         SCENARIO_CONTENT
             .iter()
             .filter_map(|content| Dataset::load_scenario(content.id).ok())
-            .find(|dataset| dataset.hash == hash || dataset.legacy_hash() == hash)
+            .find(|dataset| {
+                dataset.hash == hash
+                    || dataset.legacy_hash() == hash
+                    || dataset.pre_markets_hashes().iter().any(|old| old == hash)
+                    || dataset.pre_capacity_hash() == hash
+                    || dataset.pre_household_hash() == hash
+                    || dataset.pre_raid_warning_hash() == hash
+                    || dataset.pre_demand_hash() == hash
+                    || dataset.pre_prices_hash() == hash
+                    || dataset.pre_auction_hash() == hash
+                    || dataset.pre_balance_hash() == hash
+            })
     }
 
     /// The hash this dataset had before the 1.9 cast grew from twelve people to forty: the same
@@ -285,7 +501,7 @@ impl Dataset {
     /// never change, so a save written before the growth names this hash and still loads (the
     /// people are content, not part of a save).
     pub fn legacy_hash(&self) -> String {
-        self.hash_with_cast(CAST_BEFORE_1_9)
+        self.before_balance().hash_with_cast(CAST_BEFORE_1_9)
     }
 
     /// Load one scenario's pinned in-repo dataset and validate it. A scenario with no content
@@ -408,6 +624,10 @@ impl Dataset {
             baseline_weekly_wage_cents: balance.baseline_weekly_wage_cents,
             maintenance_annual_bps: balance.maintenance_annual_bps,
             fixture_land_rent_cents_weekly: balance.fixture_land_rent_cents_weekly,
+            markets: balance.markets.clone(),
+            capacity: balance.capacity.clone(),
+            demand: balance.demand.clone(),
+            texture: balance.texture.clone(),
             geometry_note,
             logistics,
             km_matrix,
@@ -417,13 +637,21 @@ impl Dataset {
             currencies,
             region_currency,
             opening_macro,
+            rival_blocks_bps: balance.rival_blocks_bps,
             hash: String::new(),
+            recipe_tables: RecipeTables::default(),
         };
         let errors = dataset.validate();
         if !errors.is_empty() {
             return Err(errors);
         }
         let mut dataset = dataset;
+        dataset.recipe_tables = RecipeTables::build(
+            &dataset.products,
+            &dataset.recipes,
+            &dataset.regions,
+            &dataset.region_currency,
+        );
         dataset.hash = dataset.compute_hash();
         Ok(dataset)
     }
@@ -915,6 +1143,115 @@ impl Dataset {
     }
 
     fn hash_with_cast(&self, cast_people: usize) -> String {
+        self.hash_with(cast_people, true)
+    }
+
+    /// The hash this dataset had before market rules joined it (2.0): a save written then names
+    /// it. It loads against the current dataset and plays on under the current rules, as a save
+    /// does after any rules change; its stored hash is kept as written.
+    pub fn pre_markets_hashes(&self) -> [String; 2] {
+        let plain = self.before_balance();
+        [
+            plain.hash_with(self.cast.len(), false),
+            plain.hash_with(CAST_BEFORE_1_9, false),
+        ]
+    }
+
+    /// The hash this dataset had before the capacity rules joined it (2.0, after the market
+    /// rules): a save written then names it and loads against the current dataset.
+    pub fn pre_capacity_hash(&self) -> String {
+        let mut plain = self.before_households();
+        plain.capacity = balance::CapacityRules::default();
+        plain.hash_with(self.cast.len(), true)
+    }
+
+    /// The hash this dataset had before households' opening demand was sized to the playable
+    /// market and local prices were given more room (2.0, after the capacity rules: services
+    /// then topped out at 110 percent of reference and sellers with no import at 130 percent): a
+    /// save written then names it and loads against the current dataset.
+    pub fn pre_household_hash(&self) -> String {
+        self.before_households().hash_with(self.cast.len(), true)
+    }
+
+    /// The hash this dataset had before the demand rules joined it (2.0, after raids were
+    /// announced ahead): a save written then names it and loads against the current dataset.
+    pub fn pre_demand_hash(&self) -> String {
+        self.before_demand().hash_with(self.cast.len(), true)
+    }
+
+    fn before_demand(&self) -> Dataset {
+        let mut plain = self.before_auctions();
+        plain.demand = balance::DemandRules::default();
+        plain
+    }
+
+    /// The hash this dataset had before the prices round (2.0, after the demand rules): no world
+    /// texture, shops pricing on their own shelves. A save written then names it and loads
+    /// against the current dataset.
+    pub fn pre_prices_hash(&self) -> String {
+        self.before_prices().hash_with(self.cast.len(), true)
+    }
+
+    /// The hash this dataset had before the 2.0 balance pass (rivals at their authored size):
+    /// a save written then names it and loads against the current dataset. Equal to the current
+    /// hash for a scenario the pass did not resize.
+    pub fn pre_balance_hash(&self) -> String {
+        self.before_balance().hash_with(self.cast.len(), true)
+    }
+
+    fn before_balance(&self) -> Dataset {
+        let mut plain = self.clone();
+        plain.rival_blocks_bps = 10_000;
+        plain
+    }
+
+    fn before_prices(&self) -> Dataset {
+        const PRE_PRICES_HOUSEHOLD_COVER_BPS: i64 = 8_500;
+        let mut plain = self.before_balance();
+        plain.texture = balance::TextureRules::default();
+        plain.demand.retail_reads_street = false;
+        plain.demand.street_short_bps = 0;
+        plain.capacity.household_cover_bps = PRE_PRICES_HOUSEHOLD_COVER_BPS;
+        plain
+    }
+
+    fn before_households(&self) -> Dataset {
+        let mut plain = self.before_raid_warning();
+        plain.capacity.household_cover_bps = 0;
+        plain.capacity.household_unmet_bps = 0;
+        plain.markets.service_max_bps = 11_000;
+        plain.markets.local_ceiling_bps = 13_000;
+        plain
+    }
+
+    /// The hash this dataset had before raids were announced ahead (2.0, after the household
+    /// demand round): the same content with no raid warning. A save written then names it and
+    /// loads against the current dataset, where its next raid is announced.
+    pub fn pre_raid_warning_hash(&self) -> String {
+        self.before_raid_warning().hash_with(self.cast.len(), true)
+    }
+
+    fn before_raid_warning(&self) -> Dataset {
+        let mut plain = self.before_demand();
+        plain.capacity.raid_warning_weeks = 0;
+        plain
+    }
+
+    /// The hash this dataset had before a failed company's plants went to auction (2.0, after
+    /// the demand rules joined the hash and before the prices round): the same content with no
+    /// auction weeks and no prices round. A save written then
+    /// names it and loads against the current dataset.
+    pub fn pre_auction_hash(&self) -> String {
+        self.before_auctions().hash_with(self.cast.len(), true)
+    }
+
+    fn before_auctions(&self) -> Dataset {
+        let mut plain = self.before_prices();
+        plain.capacity.plant_auction_weeks = 0;
+        plain
+    }
+
+    fn hash_with(&self, cast_people: usize, with_markets: bool) -> String {
         let mut hasher = CanonicalHasher::new(DOMAIN_STATE);
         hasher.string("cw-dataset-v1");
         for product in &self.products {
@@ -1023,6 +1360,11 @@ impl Dataset {
                 }
             }
         }
+        // The 2.0 balance pass's opening size of rivals joins the hash only where a scenario sets
+        // it, so every dataset at full size keeps the hash it had.
+        if self.rival_blocks_bps != 10_000 {
+            hasher.string("rival-blocks").i64(self.rival_blocks_bps);
+        }
         for person in self.cast.iter().take(cast_people) {
             hasher
                 .string(&person.id)
@@ -1056,6 +1398,110 @@ impl Dataset {
             }
             for region in self.region_currency.iter() {
                 hasher.u8(*region);
+            }
+        }
+        // Market rules change how every price and trade settles, so content that sets them is a
+        // different dataset. They join the hash only when they differ from the defaults (the rules
+        // before 2.0), so the content hash names the rules a career is played under.
+        if with_markets && self.markets != balance::MarketRules::default() {
+            let m = &self.markets;
+            hasher
+                .string("cw-markets-v1")
+                .i64(m.import_first_step_bps)
+                .i64(m.export_first_step_bps)
+                .i64(m.gateway_step_bps)
+                .i64(m.gateway_steps)
+                .i64(m.import_step_premium_bps)
+                .i64(m.export_step_discount_bps)
+                .i64(m.export_floor_bps)
+                .i64(m.trade_pressure_pass_bps)
+                .bool(m.anchor_to_outside)
+                .i64(m.anchor_pass_bps)
+                .i64(m.room_growth_bps)
+                .i64(m.room_shrink_bps)
+                .i64(m.room_shrink_below_bps)
+                .i32(m.plan_step_bps)
+                .i64(m.service_balance_bps)
+                .i64(m.service_slope_pct)
+                .i64(m.service_min_bps)
+                .i64(m.service_max_bps)
+                .bool(m.service_counts_unmet)
+                .i64(m.local_ceiling_bps);
+        }
+        // Capacity rules change what every plant costs and how rivals build, so they name the
+        // dataset too, again only when they differ from the rules before 2.0.
+        if with_markets && self.capacity != balance::CapacityRules::default() {
+            let c = &self.capacity;
+            hasher.string("cw-capacity-v1").i64(c.build_price_level_bps);
+            for (input, weight) in &c.build_inputs {
+                hasher.string(input).i64(*weight);
+            }
+            hasher
+                .i64(c.build_price_min_bps)
+                .i64(c.build_price_max_bps)
+                .bool(c.local_room)
+                .i64(c.opening_patient_tenths)
+                .i64(c.opening_keen_tenths)
+                .i64(c.opening_entry_tenths)
+                .i64(c.span_plants)
+                .i64(c.span_weeks_per_plant)
+                .i64(c.close_after_loss_weeks as i64)
+                .i64(c.payout_buffer_weeks)
+                .i64(c.payout_share_bps)
+                .i64(c.raid_warning_weeks as i64);
+            // Sizing households' opening demand to the playable market came later in 2.0; it
+            // names the dataset only when it is on, so a save written before it still loads.
+            if c.household_cover_bps != 0 {
+                hasher
+                    .string("cw-households-v1")
+                    .i64(c.household_cover_bps)
+                    .i64(c.household_unmet_bps);
+            }
+            // Plant auctions came after the household round; named only when on, so a save
+            // written before them still loads.
+            if c.plant_auction_weeks != 0 {
+                hasher
+                    .string("cw-auctions-v1")
+                    .i64(c.plant_auction_weeks as i64);
+            }
+        }
+        // Demand rules change what every household and plant asks for, so they name the dataset
+        // when they differ from the rules before them.
+        if with_markets && self.demand != balance::DemandRules::default() {
+            let d = &self.demand;
+            hasher
+                .string("cw-demand-v1")
+                .bool(d.sell_within_room)
+                .i64(d.latent_growth_bps)
+                .i64(d.latent_content_bps)
+                .i64(d.cycle_default_bps);
+            for (product, bps) in &d.cycle_elasticity {
+                hasher.string(product).i64(*bps);
+            }
+            hasher.string("investment");
+            for product in &d.investment_goods {
+                hasher.string(product);
+            }
+            hasher
+                .i64(d.credit_elasticity_bps)
+                .bool(d.retail_reads_street);
+            if d.street_short_bps != 0 {
+                hasher.string("street").i64(d.street_short_bps);
+            }
+        }
+        // The world's texture moves every traded good's outside price, so it names the dataset
+        // when it differs from the smooth paths before it.
+        if with_markets && self.texture != balance::TextureRules::default() {
+            let t = &self.texture;
+            hasher.string("cw-texture-v1").i64(t.named_bps);
+            for family in &t.families {
+                hasher
+                    .string(&family.family)
+                    .i64(family.swing_bps)
+                    .i64(family.half_life_weeks);
+                for cause in family.causes_up.iter().chain(&family.causes_down) {
+                    hasher.string(cause);
+                }
             }
         }
         // The opening macro data is deliberately outside the hash: it only sets where the cycle

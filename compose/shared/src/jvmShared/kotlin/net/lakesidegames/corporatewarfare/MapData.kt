@@ -296,9 +296,16 @@ data class MapCamera(val lon: Double, val lat: Double, val zoom: Double, val bea
 
     companion object {
         const val MIN_ZOOM = 0.8
-        const val MAX_ZOOM = 90.0
+        /** Close enough to see a plant's model: about 6 km across a phone, 10 km across a desktop map. */
+        const val MAX_ZOOM = 2400.0
         const val FLAT_START = 2.4
         const val FLAT_END = 6.0
+
+        /**
+         * Where the 3D map hands over to the globe: at this zoom and closer the 3D map draws (when the machine has one), below
+         * it the classic globe, which is fully round here, so one zoom point separates the two and no frame shows both.
+         */
+        const val GPU_FROM = FLAT_START
 
         /** The camera that frames the scenario's playable states. */
         fun scenario(size: Size, map: WorldMap): MapCamera {

@@ -1,15 +1,23 @@
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3, Vec4};
 use wgpu::util::DeviceExt;
 
+use crate::anim;
 use crate::camera::Camera;
 use crate::data::Scene;
 use crate::mesh::{self, Mesh, VERTEX_BYTES, Vertex};
 use crate::palette::{COLOURS, Palette, STEPS, ramp};
+use crate::props;
 
 const SHADER: &str = include_str!("shaders/scene.wgsl");
+/// Samples per pixel in the main pass. Every colour is still a flat palette colour; the samples
+/// only decide how much of a pixel an edge covers, so lines and building edges are clean instead
+/// of stepped and do not crawl when the map moves.
+const SAMPLES: u32 = 4;
+
 /// The offscreen target's format. A window surface uses its own (see `SurfaceState`).
 const COLOUR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -27,6 +35,8 @@ pub struct Style {
     /// The 1.8 cloud setting: off, thin, light (the default) or heavy.
     pub clouds: CloudLevel,
     pub buildings: bool,
+    /// Trees, farmsteads and suburban houses in the close-zoom band.
+    pub props: bool,
     pub roads: bool,
     /// Camera width in km below which the gold centre dashes and the sleepers show.
     pub road_detail_km: f32,
@@ -35,6 +45,10 @@ pub struct Style {
     /// pulls back and is gone (flat class colour) once the step would pass the largest texel.
     pub texel_km: (f32, f32),
     pub texel_min_px: f32,
+    /// A company's plant never draws narrower than this many pixels: it is enlarged about its
+    /// base as the camera pulls away (0 switches the rule off), up to `building_max_km` wide.
+    pub building_min_px: f32,
+    pub building_max_km: f32,
     pub cloud_altitude_km: f32,
     /// Half width in screen pixels of the dithered band between two ground classes.
     pub dither: f32,
@@ -44,6 +58,16 @@ pub struct Style {
     pub cloud_clear_km: (f32, f32),
     /// Palette ramp that map modes (region levels) are painted in.
     pub heat_ramp: usize,
+    /// Animation clock in seconds, wrapped by the renderer to stay precise. Only read when
+    /// `animate` is on.
+    pub time_s: f64,
+    /// Map animations on. Off is the still mode: time frozen at zero, so a frame is the same
+    /// every time it is drawn.
+    pub animate: bool,
+    /// The building under the pointer and the selected one, as indices into the scene's
+    /// buildings: each is drawn with a bright outline.
+    pub hover: Option<usize>,
+    pub selected: Option<usize>,
 }
 
 /// The 1.8 cloud setting levels. Each is a threshold on the cloud image: a higher one leaves
@@ -78,14 +102,21 @@ impl Default for Style {
             sun_elevation_deg: 34.0,
             clouds: CloudLevel::Light,
             buildings: true,
+            props: true,
             roads: true,
             road_detail_km: 450.0,
-            texel_km: (0.5, 4.0),
+            texel_km: (0.125, 4.0),
             texel_min_px: 2.0,
+            building_min_px: 38.0,
+            building_max_km: mesh::LANDMARK_KM,
             cloud_altitude_km: 18.0,
             dither: 2.5,
             cloud_clear_km: (600.0, 1800.0),
             heat_ramp: ramp::BRICK,
+            time_s: 0.0,
+            animate: false,
+            hover: None,
+            selected: None,
         }
     }
 }
@@ -202,6 +233,11 @@ pub struct FrameStats {
     /// A surface frame that was not drawn because the window could not take one (hidden,
     /// minimised, timed out). Always false for offscreen renders.
     pub skipped: bool,
+    /// Countryside and city chunks drawn, the band (stride) they belong to, and how many the view
+    /// wanted that were not built yet (drawn from the last complete band meanwhile).
+    pub prop_chunks: u32,
+    pub prop_stride: u8,
+    pub props_waiting: u32,
 }
 
 pub struct Frame {
@@ -230,6 +266,8 @@ struct Globals {
     ground_dim: [f32; 4],
     palette: [[f32; 4]; COLOURS],
     day: [[f32; 4]; COLOURS],
+    anim: [f32; 4],
+    grow: [f32; 4],
 }
 
 struct GpuMesh {
@@ -248,6 +286,25 @@ struct GpuRoads {
     mesh: mesh::RoadMesh,
 }
 
+/// The countryside props: one mesh per chunk, built when a camera first needs it and kept while
+/// it stays in use. A chunk depends only on the scene, so a change of season, buildings or
+/// migration trends drops them all.
+struct PropCache {
+    index: props::PropIndex,
+    rev: (u64, u64, u64),
+    chunks: HashMap<props::ChunkKey, (GpuMesh, u64)>,
+    frame: u64,
+    /// The band drawn last time every chunk of the view was ready: drawn whole while the chunks of
+    /// a new band are being built, so a zoom across a band edge never shows a gap.
+    drawn: Option<u8>,
+}
+
+/// Time a frame may spend building chunks the view does not need yet (the ring just past it and
+/// the neighbouring bands), so they are ready before the camera gets there.
+const PROP_AHEAD_BUDGET: Duration = Duration::from_millis(4);
+/// Time a frame may spend building the chunks of a new band while the last band stands in.
+const PROP_SWAP_BUDGET: Duration = Duration::from_millis(8);
+
 struct GpuScene {
     /// Address of the scene it was built from; identity only, never dereferenced.
     id: usize,
@@ -262,6 +319,10 @@ struct GpuScene {
     season_rev: u64,
     mask_rev: u64,
     buildings_rev: u64,
+    /// Buildings the static mesh leaves out because the animated layer draws them.
+    skip: Vec<bool>,
+    plan: anim::Plan,
+    props: PropCache,
     earth: wgpu::TextureView,
     cloud_tex: wgpu::TextureView,
     mask: wgpu::TextureView,
@@ -279,11 +340,14 @@ pub struct Renderer {
     shadow_pipeline: wgpu::RenderPipeline,
     main_pipeline: wgpu::RenderPipeline,
     road_pipeline: wgpu::RenderPipeline,
+    colour_format: wgpu::TextureFormat,
     dummy_shadow: wgpu::TextureView,
     uniforms: wgpu::Buffer,
     cache: Option<GpuScene>,
     targets: Option<Targets>,
     surface: Option<SurfaceState>,
+    /// The texture texel of the last frame, so the step has hysteresis while zooming.
+    texel_prev: f32,
 }
 
 /// A window surface the renderer presents to, with the linear format its pipelines were built for.
@@ -333,6 +397,8 @@ struct Targets {
     height: u32,
     shadow_size: u32,
     depth_view: wgpu::TextureView,
+    /// The multisampled colour the main pass draws into; it is resolved into the real target.
+    msaa_view: wgpu::TextureView,
     shadow_view: wgpu::TextureView,
     /// The offscreen colour target and its readback buffer; absent when drawing to a surface.
     offscreen: Option<Offscreen>,
@@ -534,7 +600,7 @@ impl Renderer {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
-        let attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x3, 4 => Float32x2];
+        let attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Unorm8x4, 3 => Float32x3, 4 => Float32x2, 5 => Float32x4];
         let vbl = wgpu::VertexBufferLayout {
             array_stride: VERTEX_BYTES as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -584,7 +650,10 @@ impl Renderer {
             },
             primitive,
             depth_stencil: Some(depth(wgpu::DepthBiasState::default())),
-            multisample: wgpu::MultisampleState::default(),
+            multisample: wgpu::MultisampleState {
+                count: SAMPLES,
+                ..Default::default()
+            },
             fragment: Some(wgpu::FragmentState {
                 module: &module,
                 entry_point: Some("fs_main"),
@@ -609,7 +678,10 @@ impl Renderer {
             },
             primitive,
             depth_stencil: Some(depth(wgpu::DepthBiasState::default())),
-            multisample: wgpu::MultisampleState::default(),
+            multisample: wgpu::MultisampleState {
+                count: SAMPLES,
+                ..Default::default()
+            },
             fragment: Some(wgpu::FragmentState {
                 module: &module,
                 entry_point: Some("fs_road"),
@@ -660,11 +732,13 @@ impl Renderer {
             shadow_pipeline,
             main_pipeline,
             road_pipeline,
+            colour_format,
             dummy_shadow,
             uniforms,
             cache: None,
             targets: None,
             surface,
+            texel_prev: 0.0,
         })
     }
 
@@ -763,9 +837,14 @@ impl Renderer {
             && c.id == id
             && (c.cloud_altitude - style.cloud_altitude_km).abs() < 1e-6
         {
-            if c.buildings_rev != scene.buildings_rev {
+            let skip = skip_of(scene, anim::clock(style.time_s, style.animate));
+            if c.buildings_rev != scene.buildings_rev || c.skip != skip {
+                if c.buildings_rev != scene.buildings_rev {
+                    c.plan = anim::Plan::build(scene);
+                }
                 c.buildings_rev = scene.buildings_rev;
-                let m = mesh::buildings(scene);
+                let m = mesh::buildings_where(scene, |i, _| !skip[i]);
+                c.skip = skip;
                 c.buildings = upload(&self.device, &m, "buildings");
             }
             if c.season_rev != scene.season_rev {
@@ -787,11 +866,22 @@ impl Renderer {
             }
             return;
         }
+        let skip = skip_of(scene, anim::clock(style.time_s, style.animate));
         let gpu = GpuScene {
             id,
             terrain: self.upload_mesh(&mesh::terrain(scene), "terrain"),
             apron: self.upload_mesh(&mesh::apron(scene), "apron"),
-            buildings: self.upload_mesh(&mesh::buildings(scene), "buildings"),
+            buildings: self
+                .upload_mesh(&mesh::buildings_where(scene, |i, _| !skip[i]), "buildings"),
+            skip,
+            plan: anim::Plan::build(scene),
+            props: PropCache {
+                index: props::PropIndex::build(scene),
+                rev: (scene.season_rev, scene.buildings_rev, scene.props_rev),
+                chunks: HashMap::new(),
+                frame: 0,
+                drawn: None,
+            },
             season_rev: scene.season_rev,
             mask_rev: scene.mask_rev,
             buildings_rev: scene.buildings_rev,
@@ -814,6 +904,115 @@ impl Renderer {
             ground: ground_texture(&self.device, &self.queue, scene),
         };
         self.cache = Some(gpu);
+    }
+
+    /// Build the prop chunks a camera needs that are not built yet, drop the ones that stopped
+    /// being used, and return the keys to draw with how many the view still waits for. Nothing here
+    /// depends on the camera but the choice of chunks, so a still camera costs a hash lookup.
+    ///
+    /// Never a hole: when the view enters a new band and the last band drawn is complete for this
+    /// view, that band is drawn whole while the new band's chunks are built a few at a time; the new
+    /// band takes over in one frame once all of its chunks are ready. Otherwise the missing chunks
+    /// are built now. Spare time then builds the chunks just past the view and those of the
+    /// neighbouring bands, so a pan or a zoom finds them ready.
+    fn prepare_props(
+        &mut self,
+        scene: &Scene,
+        target: (f32, f32),
+        width_km: f32,
+    ) -> (Vec<props::ChunkKey>, u32) {
+        let keys = props::visible_chunks(target, width_km);
+        let device = &self.device;
+        let Some(c) = &mut self.cache else {
+            return (Vec::new(), 0);
+        };
+        let rev = (scene.season_rev, scene.buildings_rev, scene.props_rev);
+        if c.props.rev != rev {
+            if c.props.rev.1 != rev.1 {
+                c.props.index = props::PropIndex::build(scene);
+            }
+            c.props.rev = rev;
+            c.props.chunks.clear();
+            c.props.drawn = None;
+        }
+        c.props.frame += 1;
+        let frame = c.props.frame;
+        let started = Instant::now();
+        let p = &mut c.props;
+        let build = |p: &mut PropCache, k: props::ChunkKey| {
+            let m = props::chunk_mesh(scene, &p.index, k);
+            p.chunks.insert(k, (upload(device, &m, "props"), frame));
+        };
+        let Some(stride) = keys.first().map(|k| k.stride) else {
+            p.chunks.retain(|_, e| frame - e.1 < 240);
+            return (keys, 0);
+        };
+        // Nearest the target first, so what is built first is what the eye is on.
+        let near = |k: &props::ChunkKey| {
+            let ck = 4.0 * k.stride as f32;
+            let (cx, cy) = ((k.ix as f32 + 0.5) * ck, (k.iy as f32 + 0.5) * ck);
+            (cx - target.0).hypot(cy - target.1)
+        };
+        let mut missing: Vec<props::ChunkKey> = keys
+            .iter()
+            .filter(|k| !p.chunks.contains_key(k))
+            .copied()
+            .collect();
+        missing.sort_by(|a, b| near(a).total_cmp(&near(b)));
+        let stand_in = p
+            .drawn
+            .filter(|&d| d != stride && !missing.is_empty())
+            .map(|d| props::chunks_around(target, 0.85 * width_km, d))
+            .filter(|ks| ks.iter().all(|k| p.chunks.contains_key(k)));
+        let mut waiting = 0u32;
+        let shown = if let Some(old) = stand_in {
+            for k in &missing {
+                if started.elapsed() >= PROP_SWAP_BUDGET {
+                    waiting += 1;
+                    continue;
+                }
+                build(p, *k);
+            }
+            if waiting == 0 { keys } else { old }
+        } else {
+            for k in &missing {
+                build(p, *k);
+            }
+            keys
+        };
+        for k in &shown {
+            if let Some(e) = p.chunks.get_mut(k) {
+                e.1 = frame;
+            }
+        }
+        if waiting == 0 {
+            p.drawn = Some(stride);
+        }
+        // Spare time: the ring just past the view, then the neighbouring bands.
+        let mut ahead = props::chunks_around(target, 1.3 * width_km, stride);
+        for d in [stride.saturating_sub(1), stride + 1] {
+            if d >= 1
+                && d != stride
+                && props::stride_for(width_km * d as f32 / stride as f32).is_some()
+            {
+                ahead.extend(props::chunks_around(
+                    target,
+                    0.85 * width_km * d as f32 / stride as f32,
+                    d,
+                ));
+            }
+        }
+        ahead.retain(|k| !p.chunks.contains_key(k));
+        ahead.sort_by(|a, b| near(a).total_cmp(&near(b)));
+        for k in ahead {
+            if started.elapsed() >= PROP_AHEAD_BUDGET {
+                break;
+            }
+            build(p, k);
+        }
+        // Keep a margin of chunks for panning back, drop what has been idle for a while.
+        p.chunks.retain(|_, e| frame - e.1 < 240);
+        (shown, waiting)
     }
 
     fn ensure_roads(&mut self, scene: &Scene, band: usize) {
@@ -970,7 +1169,10 @@ impl Renderer {
         self.prepare(scene, style);
         let road_band = mesh::road_band(camera.width_km);
         if style.roads {
-            self.ensure_roads(scene, road_band);
+            // Every band at once, the first time: a zoom across a band edge never waits on a build.
+            for band in 0..3 {
+                self.ensure_roads(scene, band);
+            }
         }
         let ps = if to_surface {
             1
@@ -1032,19 +1234,31 @@ impl Renderer {
         let target_dist = (view.eye - view.target).length();
         let px_km = px_per_dist * target_dist;
         let (tmin, tmax) = style.texel_km;
-        let mut texel = tmin;
-        while texel < style.texel_min_px * px_km && texel < tmax * 4.0 {
-            texel *= 2.0;
-        }
+        let texel = texel_step(tmin, tmax, style.texel_min_px, px_km, self.texel_prev);
+        self.texel_prev = texel;
         let tex_on = if texel <= tmax { 1.0 } else { 0.0 };
         // Road widths in render pixels, one set per zoom band (0 hides the class). Interstates
         // are always there, main roads and railways join as the camera closes in, and every
         // width is a whole number of pixels, odd so the line has a centre pixel.
-        let (inter_px, main_px, rail_px) = match camera.width_km {
-            w if w > 1500.0 => (1.0, 0.0, 0.0),
-            w if w > 900.0 => (3.0, 0.0, 0.0),
-            w if w > 450.0 => (3.0, 0.0, 1.0),
-            _ => (5.0, 1.0, 3.0),
+        // Widths follow the camera smoothly: a road has a (generous) real width and is never
+        // thinner than a readable line, so nothing pops as the camera moves in or out.
+        let scale_px =
+            |real_km: f32, min_px: f32, max_px: f32| (real_km / px_km).clamp(min_px, max_px);
+        let w = camera.width_km;
+        let inter_px = if w > 1500.0 {
+            1.0
+        } else {
+            scale_px(0.30, 2.0, 9.0)
+        };
+        let main_px = if w > 450.0 {
+            0.0
+        } else {
+            scale_px(0.14, 1.2, 5.0)
+        };
+        let rail_px = if w > 900.0 {
+            0.0
+        } else {
+            scale_px(0.10, 1.0, 3.0)
         };
         let detail = if camera.width_km <= style.road_detail_km {
             1.0
@@ -1052,6 +1266,13 @@ impl Renderer {
             0.0
         };
         let gb = scene.ground.bounds;
+        let clock = anim::clock(style.time_s, style.animate);
+        let cloud_drift = anim::cloud_drift_uv(
+            style.time_s,
+            style.animate,
+            [em.east - em.west, em.north - em.south],
+            [km_lon, crate::data::KM_PER_DEG_LAT],
+        );
         let globals = Globals {
             view_proj: view.view_proj.to_cols_array_2d(),
             light_vp: light_vp.to_cols_array_2d(),
@@ -1094,15 +1315,48 @@ impl Renderer {
                 scene.ground.w as f32,
                 scene.ground.h as f32,
                 scene.ground.ppd,
-                0.0,
+                season_of(scene.week),
             ],
             palette: palette.flat(),
             day: Palette::day().flat(),
+            anim: [clock, cloud_drift[0], cloud_drift[1], 0.0],
+            grow: [px_km, style.building_min_px, style.building_max_km, 0.0],
         };
         self.queue
             .write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&globals));
 
+        if style.buildings
+            && let Some(c) = &mut self.cache
+        {
+            c.plan.build_routes(scene);
+        }
+        let (prop_keys, props_waiting) = if style.props && style.buildings {
+            self.prepare_props(scene, (tx, ty), camera.width_km)
+        } else {
+            (Vec::new(), 0)
+        };
         let gpu = self.cache.as_ref().expect("prepared");
+        // Smoke, construction, growth, beacons and vehicles: built for this clock and camera.
+        let anim_gpu = (style.buildings
+            && (gpu.plan.has_motion(scene) || style.hover.is_some() || style.selected.is_some()))
+        .then(|| {
+            anim::frame_mesh(
+                scene,
+                &gpu.plan,
+                &anim::FrameView {
+                    target: (tx, ty),
+                    width_km: camera.width_km,
+                    px_km,
+                    night: style.night,
+                    t: clock,
+                    animated: style.animate,
+                    hover: style.hover,
+                    selected: style.selected,
+                },
+            )
+        })
+        .filter(|m| !m.vertices.is_empty())
+        .map(|m| upload(&self.device, &m, "anim"));
         // Road tiles in view: their indices are gathered into the band's index buffer.
         let mut visible_road_indices = 0u32;
         if style.roads
@@ -1163,6 +1417,23 @@ impl Renderer {
                 height: rh,
                 shadow_size: style.shadow_size,
                 depth_view: depth_texture_sized(&self.device, rw, rh, "depth")
+                    .create_view(&Default::default()),
+                msaa_view: self
+                    .device
+                    .create_texture(&wgpu::TextureDescriptor {
+                        label: Some("colour samples"),
+                        size: wgpu::Extent3d {
+                            width: rw,
+                            height: rh,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: SAMPLES,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: self.colour_format,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                        view_formats: &[],
+                    })
                     .create_view(&Default::default()),
                 shadow_view: depth_texture(&self.device, style.shadow_size, "shadow")
                     .create_view(&Default::default()),
@@ -1231,6 +1502,9 @@ impl Renderer {
         let mut stats = FrameStats {
             width: rw * ps,
             height: rh * ps,
+            prop_chunks: prop_keys.len() as u32,
+            prop_stride: prop_keys.first().map_or(0, |k| k.stride),
+            props_waiting,
             ..Default::default()
         };
         let mut enc = self.device.create_command_encoder(&Default::default());
@@ -1256,6 +1530,12 @@ impl Renderer {
             if style.buildings {
                 meshes.push(&gpu.buildings);
             }
+            meshes.extend(anim_gpu.as_ref());
+            meshes.extend(
+                prop_keys
+                    .iter()
+                    .filter_map(|k| gpu.props.chunks.get(k).map(|c| &c.0)),
+            );
             for m in meshes {
                 draw(&mut pass, m, &mut stats, false);
             }
@@ -1277,12 +1557,12 @@ impl Renderer {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("main"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: colour_view,
+                    view: &targets.msaa_view,
                     depth_slice: None,
-                    resolve_target: None,
+                    resolve_target: Some(colour_view),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(clear),
-                        store: wgpu::StoreOp::Store,
+                        store: wgpu::StoreOp::Discard,
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
@@ -1303,6 +1583,12 @@ impl Renderer {
             if style.buildings {
                 meshes.push(&gpu.buildings);
             }
+            meshes.extend(anim_gpu.as_ref());
+            meshes.extend(
+                prop_keys
+                    .iter()
+                    .filter_map(|k| gpu.props.chunks.get(k).map(|c| &c.0)),
+            );
             for m in meshes {
                 draw(&mut pass, m, &mut stats, true);
             }
@@ -1419,6 +1705,44 @@ impl Renderer {
     }
 }
 
+/// The ground texture texel for a pixel size in km: the smallest power of two times `tmin` that is
+/// at least `min_px` pixels wide. The step the last frame used is kept while its texel is still
+/// between 0.8 and 2.5 times `min_px` pixels wide, so a camera hovering at a boundary (or a
+/// zoom that reverses) does not flip the pattern back and forth; it changes only when a zoom
+/// has clearly crossed to the next step.
+pub fn texel_step(tmin: f32, tmax: f32, min_px: f32, px_km: f32, prev: f32) -> f32 {
+    if prev >= tmin && prev <= tmax * 4.0 {
+        let px = prev / px_km.max(1e-6);
+        if px >= min_px * 0.8 && px <= min_px * 2.5 {
+            return prev;
+        }
+    }
+    let mut texel = tmin;
+    while texel < min_px * px_km && texel < tmax * 4.0 {
+        texel *= 2.0;
+    }
+    texel
+}
+
+/// Farming season of a week for the field colours: 0 winter, 1 spring, 2 summer, 3 autumn.
+fn season_of(week: u32) -> f32 {
+    match week {
+        10..=21 => 1.0,
+        22..=36 => 2.0,
+        37..=46 => 3.0,
+        _ => 0.0,
+    }
+}
+
+/// Which buildings the animated layer draws at clock `t` (sites, and buildings still growing).
+fn skip_of(scene: &Scene, t: f32) -> Vec<bool> {
+    scene
+        .buildings
+        .iter()
+        .map(|p| anim::drawn_by_anim(p, t))
+        .collect()
+}
+
 /// Empty meshes still get a one-vertex buffer so buffers are never zero sized.
 fn upload(device: &wgpu::Device, m: &Mesh, label: &str) -> GpuMesh {
     let vertices = if m.vertices.is_empty() {
@@ -1505,7 +1829,7 @@ fn depth_texture_sized(device: &wgpu::Device, w: u32, h: u32, label: &str) -> wg
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
-        sample_count: 1,
+        sample_count: SAMPLES,
         dimension: wgpu::TextureDimension::D2,
         format: DEPTH_FORMAT,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

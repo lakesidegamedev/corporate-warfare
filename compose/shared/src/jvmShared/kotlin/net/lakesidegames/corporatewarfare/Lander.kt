@@ -48,10 +48,12 @@ private val LanderStars = StarField(300, 7)
  * scenario glows and is named as it turns to face the viewer.
  */
 @Composable
-fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
+fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f, calm: Boolean = false, focus: String? = null) {
     val map = WorldMap.shared ?: return
     val measurer = rememberTextMeasurer(cacheSize = 32)
-    val graphics = LocalAppSettings.current?.graphics ?: GraphicsConfig.Default
+    // Calm: the menu's globe without glare, halo, clouds or city lights, so nothing soft sits behind the menu.
+    val chosen = LocalAppSettings.current?.graphics ?: GraphicsConfig.Default
+    val graphics = if (calm) chosen.copy(lighting = 0, clouds = 0, cityLights = false) else chosen
     // The globe turns two degrees a second, smooth at 30 frames; only Unlimited asks for more.
     val clock = rememberFrameSeconds(graphics.animations, if (graphics.frameRate == 0) 0 else minOf(graphics.frameRate, 30))
     val world = remember { WorldCities() }
@@ -65,34 +67,39 @@ fun GlobeBackdrop(modifier: Modifier = Modifier, offsetX: Float = 0.22f) {
         val cinematic = graphics.lighting == 2
         val stars = when { graphics.preset == GraphicsPreset.Ultra -> 300; graphics.lighting == 2 -> 220; else -> 120 }
         LanderStars.draw(this, seconds, if (graphics.animations) 1f else 0f, cinematic, stars)
-        val lon = ((-82 + seconds * 2.2 + 540) % 360) - 180
-        val lat = 24 + 4 * sin(seconds / 23)
-        val camera = MapCamera(lon, lat, 1.25)
+        val camera = globeCamera(map, seconds, focus)
         translate(left = size.width * offsetX, top = size.height * 0.08f) {
             val p = MapProjection(camera, size)
             val sun = Sun.side(p)
             if (cinematic) drawGlare(p, sun)
             val globeGraphics = graphics.copy(detail = MapDetail.Low, extrude = false, buildings = 0, traffic = 0)
-            val offset = Offset(size.width * offsetX, size.height * 0.08f)
+            // One offset for every layer: paintGlobe and paintSky draw in this scope's translated space, where the
+            // outlines and labels are drawn too. A baked layer holds the same picture, so it is drawn clear of the offset.
             val paintGlobe: DrawScope.(MapGeometryCache) -> Unit = { geo ->
-                translate(left = offset.x, top = offset.y) {
-                    drawWorldMap(map, camera, Palette.gold, emptyMap(), null, emptyList(), measurer, space = false, geometry = geo, graphics = globeGraphics, sun = sun)
-                }
+                drawWorldMap(map, camera, Palette.gold, emptyMap(), null, emptyList(), measurer, space = false, geometry = geo, graphics = globeGraphics, sun = sun)
             }
+            val paintSky: DrawScope.(MapGeometryCache) -> Unit = {
+                with(Weather) { drawWeather(p, sun, seconds * 3, graphics.clouds, map.playBounds, 0.0, 1.0, false) }
+            }
+            val offset = Offset(size.width * offsetX, size.height * 0.08f)
             // The globe and its clouds are baked off the UI thread; the slow turn is all the moved bitmap needs to follow.
             if (MapBake.enabled) {
-                // Drawn clear of this scope's offset: the bitmap already holds the globe where it sits.
                 translate(left = -offset.x, top = -offset.y) {
-                    globeLayer.draw(this, camera, 0.0, listOf(globeGraphics, sun, offset), minGapMs = 0, fill = null, bake = paintGlobe, direct = { paintGlobe(geometry) })
+                    globeLayer.draw(
+                        this, camera, 0.0, listOf(globeGraphics, sun, offset), minGapMs = 0, fill = null,
+                        bake = { geo -> translate(left = offset.x, top = offset.y) { paintGlobe(geo) } },
+                        direct = { translate(left = offset.x, top = offset.y) { paintGlobe(geometry) } },
+                    )
                 }
             } else paintGlobe(geometry)
             if (graphics.cityLights && graphics.lighting > 0) drawHubLights(world, p, sun)
-            val paintSky: DrawScope.(MapGeometryCache) -> Unit = {
-                translate(left = offset.x, top = offset.y) { with(Weather) { drawWeather(p, sun, seconds * 3, graphics.clouds, map.playBounds, 0.0, 1.0, false) } }
-            }
             if (MapBake.enabled && graphics.clouds > 0) {
                 translate(left = -offset.x, top = -offset.y) {
-                    skyLayer.draw(this, camera, 0.0, listOf(graphics.clouds, sun, offset, seconds), minGapMs = 0, fill = null, bake = paintSky, direct = { paintSky(geometry) })
+                    skyLayer.draw(
+                        this, camera, 0.0, listOf(graphics.clouds, sun, offset, seconds), minGapMs = 0, fill = null,
+                        bake = { geo -> translate(left = offset.x, top = offset.y) { paintSky(geo) } },
+                        direct = { translate(left = offset.x, top = offset.y) { paintSky(geometry) } },
+                    )
                 }
             } else if (graphics.clouds > 0) paintSky(geometry)
             drawScenarioGlow(map, p, seconds, measurer)
@@ -172,6 +179,24 @@ private fun DrawScope.drawGlare(p: MapProjection, sun: Sun) {
     }
 }
 
+/** The scenario's own area as (longitude, latitude) in degrees: the centre of its largest ring. */
+internal fun scenarioCentre(rings: List<GeoRing>): Pair<Double, Double>? {
+    val anchor = rings.maxByOrNull { it.size } ?: return null
+    return Math.toDegrees(atan2(anchor.cy, anchor.cx)) to Math.toDegrees(asin(anchor.cz.coerceIn(-1.0, 1.0)))
+}
+
+/**
+ * The menu globe's camera. It drifts slowly round the Americas; given a [focus] scenario it holds still,
+ * facing that scenario's land (the one the player is about to continue), so its outline is always on the visible side.
+ */
+internal fun globeCamera(map: WorldMap, seconds: Double, focus: String?): MapCamera {
+    val at = focus?.let { id -> map.scenarioAreas.firstOrNull { it.first == id }?.second?.let(::scenarioCentre) }
+    if (at != null) return MapCamera(at.first, at.second.coerceIn(-40.0, 60.0), 1.25)
+    val lon = ((-82 + seconds * 2.2 + 540) % 360) - 180
+    val lat = 24 + 4 * sin(seconds / 23)
+    return MapCamera(lon, lat, 1.25)
+}
+
 /** Each scenario's area glows and is named as it turns to face the viewer. */
 private fun DrawScope.drawScenarioGlow(map: WorldMap, projection: MapProjection, seconds: Double, measurer: androidx.compose.ui.text.TextMeasurer) {
     for ((id, rings) in map.scenarioAreas) {
@@ -183,8 +208,8 @@ private fun DrawScope.drawScenarioGlow(map: WorldMap, projection: MapProjection,
         drawPath(path, tint.copy(alpha = 0.16f * glow), style = Stroke(6f))
         drawPath(path, tint.copy(alpha = 0.55f * glow))
         drawPath(path, Color.White.copy(alpha = 0.75f * glow), style = Stroke(1.6f))
-        val anchor = rings.maxByOrNull { it.size } ?: continue
-        val at = projection.project(GeoRing.point(Math.toDegrees(atan2(anchor.cy, anchor.cx)), Math.toDegrees(asin(anchor.cz.coerceIn(-1.0, 1.0)))))
+        val (aLon, aLat) = scenarioCentre(rings) ?: continue
+        val at = projection.project(GeoRing.point(aLon, aLat))
         if (at != null) {
             val name = landerScenarioNames[id] ?: continue
             val label = measurer.measure(name, TextStyle(color = Color.White.copy(alpha = glow.coerceAtMost(1f)), fontSize = 13.sp, fontWeight = FontWeight.Bold))

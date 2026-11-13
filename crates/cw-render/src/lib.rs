@@ -5,32 +5,52 @@
 //! Headless renders use whatever adapter wgpu finds; on a machine without a GPU that is the
 //! Mesa software Vulkan driver.
 
+mod anim;
 mod camera;
 mod data;
 mod far;
+mod fleet;
+mod freight;
 mod game;
 mod ground;
 mod mesh;
 mod palette;
 mod pick;
+mod props;
 mod renderer;
 
 pub use camera::Camera;
 pub use data::{
-    AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, KM_PER_DEG_LAT,
-    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, Line, Mask, Owner, PLANT_MODELS, PLAYER_REGIONS,
-    Placement, Projection, RegionInfo, SCENARIOS, ScenarioSpec, Scene, SceneOptions, TINT_HEAT,
-    TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel,
+    Activity, AssetDirs, Bounds, City, GREAT_LAKES_STATES, GeoImage, Heightmap, KM_PER_DEG_LAT,
+    LINE_INTERSTATE, LINE_MAIN, LINE_RAIL, LINE_RIVER, Lane, Line, Look, Mask, Owner, PLANT_MODELS,
+    PLAYER_REGIONS, Placement, Projection, RegionInfo, SCENARIOS, ScenarioSpec, Scene,
+    SceneOptions, Shape, TINT_HEAT, TINT_PLAY, TINT_PLAYER, VoxelBox, VoxelModel, WATER_LAKE,
+    WATER_OCEAN, downtown_tier,
 };
-pub use game::{PlantSite, SiteStatus, layout_plants, plant_size_km, ramp_by_name, region_tints};
+pub use game::{
+    PlantSite, SiteStatus, firm_colour, layout_plants, plant_size_km, ramp_by_name, region_tints,
+};
 pub use palette::{COLOURS as PALETTE_COLOURS, Palette};
 pub use pick::{pick_ground, project};
 pub use renderer::{
     AdapterSummary, CloudLevel, Frame, FrameStats, NoAdapter, Renderer, Style, SurfaceTarget,
 };
 
-pub use ground::snow_cover;
-pub use mesh::{
-    BuildingBox, ROAD_BANDS, RoadPoint, apron_extent_km, apron_land_boxes, apron_seam_steps,
-    building_boxes, ground_z, road_band, road_chains, road_chains_for_band,
+pub use anim::{
+    ANIM_MAX_KM, CLOCK_WRAP_S, CLOUD_SPEED_KM_S, WIND, clock as anim_clock, cloud_drift_uv,
+    route_counts, scene_animates,
 };
+pub use freight::{harbour_sites, summary as fleet_summary, vehicles_at};
+pub use ground::{G_CORE, G_URBAN, snow_cover};
+pub use mesh::{
+    BuildingBox, LANDMARK_KM, ROAD_BANDS, RoadPoint, apron_extent_km, apron_land_boxes,
+    apron_seam_steps, bridge_sites, building_boxes, ground_z, grow_k, river_chains, road_band,
+    road_chains, road_chains_for_band,
+};
+pub use props::{
+    CHUNK_MAX_CITY, CHUNK_MAX_PROPS, CITY_MAX_WIDTH_KM, ChunkKey, MAX_WIDTH_KM as PROPS_MAX_KM,
+    Placed, PropIndex, PropKind, chunk_mesh as prop_chunk_mesh, chunk_placed as prop_chunk_placed,
+    chunks_around as prop_chunks_around, city_street_at, stride_for as prop_stride,
+    visible_chunks as prop_chunks,
+};
+pub use renderer::texel_step;

@@ -34,6 +34,8 @@ data class GpuCamera(val lon: Double, val lat: Double, val widthKm: Double, val 
 class GpuBuilding(
     val lon: Double, val lat: Double, val owner: String, val kind: String, val colour: Int,
     val region: String? = null, val industry: String? = null, val firm: Long? = null, val plants: Int = 0,
+    /** Position in [GpuMapSession.buildings]: the id the renderer outlines when hovered or selected. */
+    val id: Int = -1,
 ) {
     val scenery get() = owner == "scenery"
     val player get() = owner == "player"
@@ -80,8 +82,20 @@ interface GpuMapSession {
     /** The newest frame and its camera as one read, so the two can never come from different frames. */
     val shown: GpuShown?
 
+    /**
+     * True once a finished frame can be put on screen (copied: a frame has landed; direct: a frame has been presented to the
+     * window). Until then the map keeps drawing what it drew before, so the screen never shows an undrawn window.
+     */
+    val ready: Boolean get() = shown != null
+
     /** Sends game state as JSON (plants, holdings, map mode, night, clouds). */
     fun update(json: String)
+
+    /**
+     * Turns the map's animations (smoke, cranes, beacons, vehicles, growth) on while the map is showing and the player has them
+     * on. While on and anything moves, frames are drawn every display refresh; off, the picture is still and the map idles.
+     */
+    fun setAnimation(on: Boolean) {}
 
     /** Asks the render thread for a frame of the view; only the newest request is drawn. [moving] tells it the camera is in motion (a smaller, quicker frame). */
     fun request(camera: GpuCamera, width: Int, height: Int, moving: Boolean)
@@ -208,17 +222,26 @@ internal fun MapLayer.gpuRamp(): String = when (this) {
 /** Game state as the GPU map's update JSON. */
 internal fun gpuUpdateJson(
     plants: List<uniffi.cw_ffi.MapPlantDto>, divisions: List<uniffi.cw_ffi.MapDivisionDto>, layer: MapLayer,
-    shaded: Map<String, Double>, night: Boolean, clouds: Int, week: Int = 28,
+    shaded: Map<String, Double>, night: Boolean, clouds: Int, week: Int = 28, migration: Map<String, Int> = emptyMap(),
+    lanes: List<uniffi.cw_ffi.LaneDto> = emptyList(),
 ): String {
     fun q(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
     val plantJson = plants.joinToString(",", "[", "]") {
-        """{"region":${q(it.region)},"industry":${q(it.industry)},"firm":${it.firm},"blocks":${it.blocks},"player":${it.player},"status":${q(it.status.lowercase())}}"""
+        """{"region":${q(it.region)},"industry":${q(it.industry)},"firm":${it.firm},"blocks":${it.blocks},"player":${it.player},"status":${q(it.status.lowercase())},"utilisation_bps":${it.utilisationBps},"progress_bps":${it.progressBps}}"""
     }
     val holdings = divisions.map { it.region }.distinct().joinToString(",", "[", "]") { q(it) }
     val heat = if (layer == MapLayer.Presence || layer == MapLayer.Freight) "{}"
     else shaded.entries.joinToString(",", "{", "}") { "${q(it.key)}:${(it.value * 3.999).toInt().coerceIn(0, 3)}" }
-    return """{"plants":$plantJson,"holdings":$holdings,"heat":$heat,"heat_ramp":${q(layer.gpuRamp())},"night":$night,"clouds":$clouds,"week":$week}"""
+    val migrationJson = migration.entries.joinToString(",", "{", "}") { "${q(it.key)}:${it.value}" }
+    val top = lanes.maxOfOrNull { it.capacityLots + it.outsideLots }?.coerceAtLeast(1) ?: 1
+    val laneJson = lanes.joinToString(",", "[", "]") {
+        """{"from":${q(it.a)},"to":${q(it.b)},"mode":${q(it.modeId)},"volume":${(it.usedLots + it.outsideLots).toFloat() / top}}"""
+    }
+    return """{"plants":$plantJson,"holdings":$holdings,"heat":$heat,"heat_ramp":${q(layer.gpuRamp())},"night":$night,"clouds":$clouds,"week":$week,"migration":$migrationJson,"lanes":$laneJson}"""
 }
+
+/** The hovered and selected building ids for the renderer's outline (-1 for none). */
+internal fun gpuHighlightJson(hover: Int, selected: Int) = """{"hover":$hover,"selected":$selected}"""
 
 /** The sea of the palette (water ramp, step 2): the ground under the picture, so nothing of the view is ever a void. */
 internal val GpuSea = Color(0xFF1E4772)
