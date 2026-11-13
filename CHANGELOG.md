@@ -11,6 +11,8 @@ heading.
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-11-13
+
 ### Added
 
 - The Mac game can update itself from inside the game. When a newer version is out, a calm banner on the main menu says "Version X is out" with "Sign in to Lakeside to download" (or "Download" once you are signed in). Sign in with your A House Divided login or Discord in your browser, and the game downloads the Mac disk image through your Lakeside library, checks it is the exact file Lakeside published, saves it to Downloads and opens it; drag the app into Applications and your saves are kept. If your account does not include Corporate Warfare it says so and offers Buy, and if Lakeside cannot be reached it says so and the game keeps working. Settings has a "Check for updates" button, and "Signed in to Lakeside as <name>" with "Sign out of Lakeside" once you are signed in. The sign-in is kept in the Mac Keychain (only for the session if the Keychain is not available) and lasts 30 days. iPhone and iPad are unchanged, and started from the Lakeside launcher the game leaves updates to the launcher.
@@ -2036,7 +2038,8 @@ Foundation, pull requests #8 to #69.
   `diagnose`, `report`, `sweep`, `replay`).
 - SwiftUI phone app over the engine with onboarding, save recovery and release workflows.
 
-[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/lakesidegamedev/corporate-warfare/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/lakesidegamedev/corporate-warfare/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/lakesidegamedev/corporate-warfare/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.9.0...v2.0.0
 [1.9.0]: https://github.com/lakesidegamedev/corporate-warfare/compare/v1.8.0...v1.9.0
