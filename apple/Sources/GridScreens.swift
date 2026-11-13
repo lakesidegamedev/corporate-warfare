@@ -419,7 +419,8 @@ struct RegionsGridScreen: View {
                     // What households go without: the engine's capacity openings, counted once per good.
                     var most: [UInt32: [String: Int64]] = [:]
                     for o in h.capacityOpenings(limit: 2000) {
-                        most[o.region, default: [:]][o.productId] = max(most[o.region]?[o.productId] ?? 0, o.unmetLots)
+                        let before = most[o.region]?[o.productId] ?? 0
+                        most[o.region, default: [:]][o.productId] = max(before, o.unmetLots)
                     }
                     return (ds, most.mapValues { $0.values.reduce(0, +) })
                 }
@@ -505,10 +506,10 @@ enum FinanceGrid {
     static let periods = (0..<8).map { "p\($0)" }
 
     static let views: [GridViewState] = [
-        GridViewState("Income statement", ["name"] + periods, filters: [GridFilter(op: .equals, column: "group", text: "Income")]),
-        GridViewState("Balance sheet", ["name"] + periods, filters: [GridFilter(op: .equals, column: "group", text: "Balance")]),
-        GridViewState("Cash flow", ["name"] + periods, filters: [GridFilter(op: .equals, column: "group", text: "Cash flow")]),
-        GridViewState("Ratios", ["name"] + periods, filters: [GridFilter(op: .equals, column: "group", text: "Ratios")]),
+        GridViewState("Income statement", ["name"] + FinanceGrid.periods, filters: [GridFilter(op: .equals, column: "group", text: "Income")]),
+        GridViewState("Balance sheet", ["name"] + FinanceGrid.periods, filters: [GridFilter(op: .equals, column: "group", text: "Balance")]),
+        GridViewState("Cash flow", ["name"] + FinanceGrid.periods, filters: [GridFilter(op: .equals, column: "group", text: "Cash flow")]),
+        GridViewState("Ratios", ["name"] + FinanceGrid.periods, filters: [GridFilter(op: .equals, column: "group", text: "Ratios")]),
         GridViewState("Trend", ["name", "p0", "p0.change", "p0.percent", "p0.trend"], filters: [GridFilter(op: .equals, column: "group", text: "Income")]),
     ]
 
