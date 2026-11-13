@@ -161,7 +161,7 @@ final class GpuMapSession: @unchecked Sendable {
 
     /// Starts building the scene for a career in the background while the GPU map is switched on.
     @MainActor static func prewarm(scenario: String?) {
-        guard UserDefaults.standard.bool(forKey: GraphicsKeys.newMap), let scenario, !scenario.isEmpty else { return }
+        guard GraphicsKeys.newMapOn, let scenario, !scenario.isEmpty else { return }
         if let kept = parked, kept.scenario == scenario, kept.failure == nil { return }
         parked?.close()
         parked = GpuMapSession(scenario: scenario)

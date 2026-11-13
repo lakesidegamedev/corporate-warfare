@@ -23,6 +23,7 @@ Corporate Warfare 2.0 is the biggest change since the first release. The company
 
 ### Added
 
+- The 3D map is the default on iPhone, iPad and Mac too, as it already was on desktop, and you can zoom in much further on every platform: down to about 6 km across a phone screen, close enough to see each plant's model. The classic flat map is still in Settings, Graphics, "3D map".
 - What's new after an update: the first time you open the main menu after the game updates, a small panel lists the top five changes of the new version, with Close and Full changelog (the whole changelog in a scrolling view). It shows once for each version and never on a first install.
 - Settings, Controls and keys: the clock keys (Space, N, 1, 2, 3) and the page keys (F1 to F9) can be changed. Click a key, press the new one, and a key that is already in use is refused with a message that says what it is used for. Reset section puts the original keys back. Esc, Ctrl K and Ctrl M stay fixed, and the version 1 page layout keeps its own F keys.
 - New career, founding your own company: the last step now has a company name field, filled with a suggestion you can change. The game checks it in plain words (not empty, no line breaks, at most 40 characters) and Start career waits until it is acceptable. The founding form on the first turn opens with that name. There is no company colour to pick yet, because the game has none.

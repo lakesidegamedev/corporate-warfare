@@ -1732,7 +1732,7 @@ struct WorldMapView: View {
     @AppStorage(GraphicsKeys.interstates) private var interstates = true
     @AppStorage(GraphicsKeys.seasons) private var seasons = true
     @AppStorage(GraphicsKeys.labels) private var labels = 2
-    @AppStorage(GraphicsKeys.newMap) private var newMap = false
+    @AppStorage(GraphicsKeys.newMap) private var newMap = true
     let shading: [String: Double]
     let layer: MapLayer
     let divisions: [DivisionMarker]
