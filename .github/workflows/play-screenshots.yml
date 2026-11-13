@@ -1,0 +1,67 @@
+name: Play screenshots
+# Real gameplay pictures for the Google Play listing, from the same career as the App Store set
+# (Great Lakes 2000, guided, seed 7, ten weeks). Manual only: never runs on a pull request or a push.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Google accepts 9:16 or 16:9 with every side 320 to 3840 px. The same emulator is resized for each
+          # set so the app sees a 411, 600 and 800 dp wide screen (all use the phone layout, under 1000 dp).
+          - { name: phone, size: "1080x1920", density: 420 }
+          - { name: tablet7, size: "1200x2134", density: 240 }
+          - { name: tablet10, size: "1600x2844", density: 240 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            compose/**/*.gradle*
+            compose/gradle/libs.versions.toml
+            compose/gradle/wrapper/gradle-wrapper.properties
+      - run: rustup show
+      - name: Engine for Android (x86_64 is enough for the emulator, both are built)
+        run: bash compose/scripts/build-engine.sh android
+      - name: Debug app and test APKs
+        working-directory: compose
+        run: scripts/retry.sh 3 ./gradlew --no-daemon :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Play the career and take the pictures
+        timeout-minutes: 30
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash compose/scripts/play-screenshots.sh ${{ matrix.name }} ${{ matrix.size }} ${{ matrix.density }}
+      - name: Flatten to RGB and check the sizes Google accepts
+        if: always()
+        run: |
+          pip install --quiet pillow
+          python3 tools/play_screens_check.py compose/build/play-screenshots/${{ matrix.name }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: play-screenshots-${{ matrix.name }}
+          path: compose/build/play-screenshots/
+          retention-days: 30

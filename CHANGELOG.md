@@ -25,6 +25,10 @@ heading.
 
 - Tables on iPad and Mac. Plants and Finance (beside the Office) and Goods, Rivals and Regions (under Markets) are now sortable tables like the desktop game: tap a heading to sort and tap it again to reverse, pick columns by topic and show a figure as its change, change in percent or trend, search, and filter by owner (you, rivals or all), sector, region or state, or a figure above or below a number (type `price>10` in the search and press Return for the same). A Week, Quarter, Year or Career choice sets how far back every change and trend looks. Each table has the desktop's built-in views (Overview, Prices, Supply and so on), and you can save your own under a name; views are kept on the device, never in your saves. On a Mac the arrow keys move through the rows, Return opens one and Command F jumps to the search. Tapping a row opens the same detail as before (the market, the region dossier, the company page or the division). The region boards are still under Markets as Boards. The iPhone keeps its current screens.
 
+### Store listing
+
+- Added the Google Play listing copy, a feature graphic built from the game's own art, and a manual workflow that plays the App Store career on an Android emulator and saves phone and tablet screenshots. Nothing changes in the game itself.
+
 ## [2.0.1] - 2026-11-13
 
 ### Added

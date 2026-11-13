@@ -51,7 +51,7 @@ stamp "instrumented run"
 TESTAPK=$(ls androidApp/build/outputs/apk/androidTest/release/*.apk | head -1)
 timeout 180 adb install -r -t "$TESTAPK" || { echo "::error::test APK did not install"; fail=1; }
 # Driven with adb, not Gradle: Gradle waits forever when the instrumentation process dies on start.
-timeout 600 adb shell am instrument -w -r "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee "$OUT/instrument.txt"
+timeout 600 adb shell am instrument -w -r -e class "$PKG.ShrunkEngineTest" "$PKG.test/androidx.test.runner.AndroidJUnitRunner" | tee "$OUT/instrument.txt"
 R="$OUT/instrument.txt"
 if grep -q "INSTRUMENTATION_STATUS_CODE: 0" "$R" && grep -q "INSTRUMENTATION_CODE: -1" "$R" \
   && ! grep -q "INSTRUMENTATION_STATUS_CODE: -[12]" "$R" && ! grep -q "Process crashed" "$R"; then
