@@ -486,6 +486,21 @@ struct MapCamera: Equatable {
         return next
     }
 
+    /// Zoomed by `factor` with the ground under `point` (a screen position) kept under it, so a
+    /// double-tap zooms in on what was tapped. The zoom is clamped once; the pan is for the factor
+    /// actually applied.
+    func zoomed(by factor: Double, around point: CGPoint, in size: CGSize, pitch: Double = 0) -> MapCamera {
+        let zoomedCamera = zoomed(by: factor)
+        let applied = zoomedCamera.zoom / zoom
+        let offset = CGSize(width: point.x - size.width / 2, height: point.y - size.height / 2)
+        let shift = CGSize(width: -(applied - 1) * Double(offset.width), height: -(applied - 1) * Double(offset.height))
+        return zoomedCamera.panned(by: shift, in: size, pitch: pitch)
+    }
+
+    /// The zoom at which a plant's model is shown at its readable size on a phone: about 12 km
+    /// across a portrait iPhone, so a plant fills a good part of the screen.
+    static let modelZoom = 1200.0
+
     /// Turned by `degrees`, clockwise on screen.
     func rotated(by degrees: Double) -> MapCamera {
         var next = self

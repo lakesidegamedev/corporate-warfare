@@ -1918,10 +1918,14 @@ struct WorldMapView: View {
                 }
             }
             // A right drag (a Mac, or an iPad with a mouse) turns the map.
-            .background(SecondaryDrag { dx in
+            .background(SecondaryDrag(onTurn: { dx in
                 flight?.cancel()
                 camera = (camera ?? current).rotated(by: Double(dx) * 0.4)
-            })
+            }, onTwoFingerTap: { location in
+                let base = camera ?? current
+                let pitch = MapProjection(camera: base, size: size, tilt: look.tilt).pitch
+                fly(from: base, to: base.zoomed(by: 1 / 3, around: location, in: size, pitch: pitch), frames: 15)
+            }))
             .contentShape(Rectangle())
             .gesture(
                 SimultaneousGesture(
@@ -1957,11 +1961,17 @@ struct WorldMapView: View {
                         .onEnded { _ in lastDrag = .zero }
                 )
             )
-            .onTapGesture(count: 2) {
-                let target = current.zoom > MapCamera.flatStart
-                    ? MapCamera(lon: current.lon, lat: current.lat, zoom: 1, tilt: current.tilt)
-                    : MapCamera.scenario(in: size, map: map)
-                fly(from: current, to: target)
+            .onTapGesture(count: 2, coordinateSpace: .local) { location in
+                // A double-tap zooms in about 3x on the tapped ground. On a region that is already
+                // selected it flies to the zoom where plant models are readable.
+                let base = camera ?? current
+                let pitch = MapProjection(camera: base, size: size, tilt: look.tilt).pitch
+                var factor = 3.0
+                if let selected, tappedRegion(at: location, current: base, size: size) == selected {
+                    factor = max(MapCamera.modelZoom / base.zoom, 3)
+                }
+                guard base.zoom < MapCamera.maxZoom else { return }
+                fly(from: base, to: base.zoomed(by: factor, around: location, in: size, pitch: pitch), frames: 15)
             }
             .onTapGesture(coordinateSpace: .local) { location in
                 if gpuOn, let gpu {
@@ -2109,7 +2119,8 @@ struct WorldMapView: View {
         guard let gpu else { return }
         let night = gpuNight()
         gpu.update(GpuMapUpdate.json(plants: plants, divisions: divisions, layer: layer, shading: shading,
-                                     night: night, clouds: clouds, week: seasonWeek, settlement: settlement))
+                                     night: night, clouds: clouds, week: seasonWeek, settlement: settlement,
+                                     uiScale: UIDevice.current.userInterfaceIdiom == .pad || UIDevice.current.userInterfaceIdiom == .phone ? min(max(displayScale, 1), 2) : 1))
     }
 
     private func gpuLine(on: Bool) -> String {
@@ -2219,15 +2230,25 @@ struct WorldMapView: View {
         .accessibilityLabel(label)
     }
 
+    /// The region under a screen point, as a tap would pick it.
+    private func tappedRegion(at location: CGPoint, current: MapCamera, size: CGSize) -> String? {
+        if gpu != nil, let gpu, gpu.isReady {
+            let live = GpuCamera(current, size: size, tilt: GraphicsSettings.pitch(forTilt: tiltSetting))
+            return gpu.pick(camera: gpu.shown?.camera ?? live, size: gpu.shown?.size ?? size, at: location)
+        }
+        let g = geometry.of(map: map, camera: current, size: size, tilt: look.tilt, detail: look.detail)
+        return map.regions.first { g.projection.contains($0.rings, location) }?.code
+    }
+
     /// Animates the camera to a target, easing in and out, about 60 frames a second.
-    private func fly(from start: MapCamera, to target: MapCamera) {
+    private func fly(from start: MapCamera, to target: MapCamera, frames flightFrames: Int = 42) {
         flight?.cancel()
         if reduceMotion || !animations {
             camera = target
             return
         }
         flight = Task { @MainActor in
-            let frames = 42
+            let frames = flightFrames
             for frame in 1...frames {
                 if Task.isCancelled { return }
                 let x = Double(frame) / Double(frames)
@@ -2258,8 +2279,10 @@ struct WorldMapView: View {
 /// SwiftUI gestures keep every other touch, and it answers only drags that start over this view.
 private struct SecondaryDrag: UIViewRepresentable {
     let onTurn: (CGFloat) -> Void
+    /// A two-finger tap on the map, at its position in the map's own space.
+    var onTwoFingerTap: (CGPoint) -> Void = { _ in }
 
-    func makeCoordinator() -> Coordinator { Coordinator(onTurn: onTurn) }
+    func makeCoordinator() -> Coordinator { Coordinator(onTurn: onTurn, onTwoFingerTap: onTwoFingerTap) }
 
     func makeUIView(context: Context) -> Host {
         let view = Host()
@@ -2271,6 +2294,7 @@ private struct SecondaryDrag: UIViewRepresentable {
 
     func updateUIView(_ view: Host, context: Context) {
         context.coordinator.onTurn = onTurn
+        context.coordinator.onTwoFingerTap = onTwoFingerTap
     }
 
     static func dismantleUIView(_ view: Host, coordinator: Coordinator) {
@@ -2288,12 +2312,15 @@ private struct SecondaryDrag: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var onTurn: (CGFloat) -> Void
+        var onTwoFingerTap: (CGPoint) -> Void
         private weak var area: UIView?
         private var pan: UIPanGestureRecognizer?
+        private var tap: UITapGestureRecognizer?
         private var last: CGFloat = 0
 
-        init(onTurn: @escaping (CGFloat) -> Void) {
+        init(onTurn: @escaping (CGFloat) -> Void, onTwoFingerTap: @escaping (CGPoint) -> Void) {
             self.onTurn = onTurn
+            self.onTwoFingerTap = onTwoFingerTap
         }
 
         func attach(to window: UIWindow?, over view: UIView) {
@@ -2305,12 +2332,27 @@ private struct SecondaryDrag: UIViewRepresentable {
             pan.delegate = self
             window.addGestureRecognizer(pan)
             self.pan = pan
+            // Two fingers tapped together zoom out. It does not claim the touches, so pinch and
+            // twist still work.
+            let tap = UITapGestureRecognizer(target: self, action: #selector(twoFingerTapped(_:)))
+            tap.numberOfTouchesRequired = 2
+            tap.cancelsTouchesInView = false
+            tap.delegate = self
+            window.addGestureRecognizer(tap)
+            self.tap = tap
             area = view
         }
 
         func detach() {
             if let pan { pan.view?.removeGestureRecognizer(pan) }
+            if let tap { tap.view?.removeGestureRecognizer(tap) }
             pan = nil
+            tap = nil
+        }
+
+        @objc private func twoFingerTapped(_ tap: UITapGestureRecognizer) {
+            guard tap.state == .ended, let area else { return }
+            onTwoFingerTap(tap.location(in: area))
         }
 
         @objc private func dragged(_ pan: UIPanGestureRecognizer) {
@@ -2328,7 +2370,7 @@ private struct SecondaryDrag: UIViewRepresentable {
 
         /// Only drags with the secondary button down.
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive event: UIEvent) -> Bool {
-            event.type != .touches || event.buttonMask.contains(.secondary)
+            gestureRecognizer === tap || event.type != .touches || event.buttonMask.contains(.secondary)
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {

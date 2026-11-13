@@ -291,6 +291,17 @@ data class MapCamera(val lon: Double, val lat: Double, val zoom: Double, val bea
 
     fun zoomed(factor: Double): MapCamera = copy(zoom = (zoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM))
 
+    /**
+     * Zoomed by [factor] with the ground under [point] (a screen position) kept under it, so a double-tap zooms in on what was
+     * tapped. The zoom is clamped once; the pan is for the factor actually applied.
+     */
+    fun zoomedAround(factor: Double, point: Offset, size: Size, pitch: Double = 0.0): MapCamera {
+        val zoomedCamera = zoomed(factor)
+        val applied = zoomedCamera.zoom / zoom
+        val shift = Offset(-(applied - 1).toFloat() * (point.x - size.width / 2f), -(applied - 1).toFloat() * (point.y - size.height / 2f))
+        return zoomedCamera.panned(shift, size, pitch)
+    }
+
     /** Turned by [degrees], clockwise on screen. */
     fun rotated(degrees: Double): MapCamera = copy(bearing = (((bearing + degrees) % 360) + 360) % 360)
 
@@ -298,6 +309,8 @@ data class MapCamera(val lon: Double, val lat: Double, val zoom: Double, val bea
         const val MIN_ZOOM = 0.8
         /** Close enough to see a plant's model: about 6 km across a phone, 10 km across a desktop map. */
         const val MAX_ZOOM = 2400.0
+        /** The zoom at which a plant's model is shown at its readable size on a phone. */
+        const val MODEL_ZOOM = 1200.0
         const val FLAT_START = 2.4
         const val FLAT_END = 6.0
 
