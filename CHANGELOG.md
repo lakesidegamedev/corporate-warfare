@@ -11,6 +11,10 @@ heading.
 
 ## [Unreleased]
 
+### Fixed
+
+- When a new version is out but is not a public download, the updater now says where to get it and has a Get it button that opens the Corporate Warfare page in your Lakeside library, instead of only saying it is delivered elsewhere.
+
 ### Changed
 
 - Tester previews no longer put their installers on the public GitHub page; testers get them through the Lakeside signed-in download, like the full game.
