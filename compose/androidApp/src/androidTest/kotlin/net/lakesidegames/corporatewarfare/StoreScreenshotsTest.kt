@@ -68,7 +68,12 @@ class StoreScreenshotsTest {
         }
         store.overview?.primaryFirm?.let { store.selectFirm(it) }
 
-        val settings = AppSettings(File(context.cacheDir, "shots-settings.properties").apply { delete() })
+        // A returning player's settings: setup finished, this version's notes seen, tutorial hidden and no
+        // telemetry from the emulator, so every shot shows the game rather than a first-run panel.
+        val settingsFile = File(context.cacheDir, "shots-settings.properties").apply {
+            writeText("setupDone=true\nwhatsNewSeen=${BuildInfo.VERSION}\ntutorial.hidden=true\nanalytics=false\n")
+        }
+        val settings = AppSettings(settingsFile)
         val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val activity = instrumentation.startActivitySync(intent) as ComponentActivity
         instrumentation.runOnMainSync { activity.setContent { CorporateWarfareApp(store, settings) } }
