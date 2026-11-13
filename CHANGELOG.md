@@ -13,6 +13,8 @@ heading.
 
 ### Added
 
+- The Mac game can update itself from inside the game. When a newer version is out, a calm banner on the main menu says "Version X is out" with "Sign in to Lakeside to download" (or "Download" once you are signed in). Sign in with your A House Divided login or Discord in your browser, and the game downloads the Mac disk image through your Lakeside library, checks it is the exact file Lakeside published, saves it to Downloads and opens it; drag the app into Applications and your saves are kept. If your account does not include Corporate Warfare it says so and offers Buy, and if Lakeside cannot be reached it says so and the game keeps working. Settings has a "Check for updates" button, and "Signed in to Lakeside as <name>" with "Sign out of Lakeside" once you are signed in. The sign-in is kept in the Mac Keychain (only for the session if the Keychain is not available) and lasts 30 days. iPhone and iPad are unchanged, and started from the Lakeside launcher the game leaves updates to the launcher.
+
 - Double-tap the map to zoom in about three times on the spot you tapped, and tap with two fingers to zoom back out. Double-tap a region that is already selected to fly straight to the zoom where plant models are easy to see. A single tap still selects.
 
 ### Fixed

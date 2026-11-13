@@ -8,5 +8,11 @@
 	<!-- Anonymous market snapshots to the Lakeside ops ingest, as on iPhone. -->
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- The Lakeside sign-in: the browser hands its one-time code back to 127.0.0.1. -->
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<!-- The in-game update saves the verified disk image to Downloads. -->
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
 </dict>
 </plist>
