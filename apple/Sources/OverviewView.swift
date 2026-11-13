@@ -628,6 +628,13 @@ struct SettingsView: View {
                     }
                     PauseSettingsPanel()
                     GraphicsSettingsPanel()
+                    #if targetEnvironment(macCatalyst)
+                    if MacUpdater.enabled {
+                        MacUpdateSettingsPanel()
+                    } else if LauncherSession.current.managed {
+                        LauncherManagedPanel()
+                    }
+                    #endif
                     Panel(padding: 12) {
                         VStack(alignment: .leading, spacing: 10) {
                             Eyebrow(text: "Help")

@@ -59,6 +59,10 @@ struct CorporateWarfareApp: App {
             .task {
                 // The app opens on the main menu; Continue there resumes the latest save.
                 store.refreshSaves()
+                #if targetEnvironment(macCatalyst)
+                // The Mac game updates through a Lakeside sign-in; iPhone and iPad are store apps.
+                Task { await MacUpdater.shared.start() }
+                #endif
                 // Behind the menu, so the map's first frame does not pay for the renderer's setup.
                 try? await Task.sleep(nanoseconds: 400_000_000)
                 RenderWarmup.run()
